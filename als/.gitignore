@@ -1,0 +1,169 @@
+# Alif Language Server - Git Ignore Configuration
+
+# Build directories
+build/
+build-*/
+out/
+cmake-build-*/
+.cmake/
+
+# CMake generated files
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+*.cmake
+!CMakeLists.txt
+!*.cmake.in
+
+# Compiled binaries
+*.exe
+*.dll
+*.so
+*.dylib
+*.a
+*.lib
+*.pdb
+*.ilk
+*.exp
+
+# Object files
+*.o
+*.obj
+*.lo
+*.slo
+*.ko
+
+# Debug files
+*.dSYM/
+*.su
+*.idb
+*.pdb
+
+# Temporary files
+*.tmp
+*.temp
+*~
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# IDE and Editor files
+.vscode/
+.vs/
+.idea/
+*.vcxproj*
+*.sln
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.code-workspace
+
+# Visual Studio Code
+.vscode/settings.json
+.vscode/tasks.json
+.vscode/launch.json
+.vscode/extensions.json
+.vscode/c_cpp_properties.json
+
+# CLion
+.idea/
+cmake-build-*/
+
+# Qt Creator
+CMakeLists.txt.user*
+
+# Conan
+conandata.yml
+conanfile.py
+conaninfo.txt
+conanbuildinfo.*
+conan.lock
+
+# vcpkg
+vcpkg_installed/
+.vcpkg-root
+
+# Package managers
+node_modules/
+.npm/
+.yarn/
+
+# Testing
+Testing/
+CTestTestfile.cmake
+*.gcov
+*.gcda
+*.gcno
+coverage/
+*.coverage
+
+# Documentation
+docs/html/
+docs/latex/
+*.pdf
+*.aux
+*.log
+*.toc
+
+# Third-party downloads (will be downloaded automatically)
+third_party/nlohmann_json/
+third_party/spdlog/
+third_party/fmt/
+third_party/temp_*/
+
+# Logs
+*.log
+logs/
+*.log.*
+
+# Cache files
+.cache/
+*.cache
+
+# Profiling
+*.prof
+*.gprof
+callgrind.out.*
+perf.data*
+
+# Static analysis
+*.sarif
+cppcheck-report.*
+clang-tidy-report.*
+
+# Packaging
+*.zip
+*.tar.gz
+*.tar.bz2
+*.deb
+*.rpm
+*.msi
+*.dmg
+
+# Local configuration
+.env
+.env.local
+local.properties
+config.local.*
+
+# Backup files
+*.bak
+*.backup
+*.orig
+
+# System files
+.fuse_hidden*
+.nfs*
+
+# Language Server specific
+*.als-cache
+workspace-index/
+symbol-cache/
+
+# Performance profiling
+*.perf
+*.trace
+*.flamegraph

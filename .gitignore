@@ -11,3 +11,4 @@ DerivedData
 *.DS_Store
 /Spectrum/build
 *.pro.user
+build
