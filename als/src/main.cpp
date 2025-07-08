@@ -109,21 +109,16 @@ int main(int argc, char* argv[]) {
         
         // TODO: Initialize logging system
         std::cout << "Initializing Alif Language Server..." << std::endl;
-        
-        // TODO: Load configuration
+
+        // TODO: Initialize logging system
+        std::cout << "Log level: " << args.logLevel << std::endl;
+
+        // Load configuration
         if (!args.configFile.empty()) {
             std::cout << "Loading configuration from: " << args.configFile << std::endl;
         }
-        
-        // TODO: Initialize server components
+
         std::cout << "Setting up server components..." << std::endl;
-        
-        // TODO: Start server
-        if (args.useStdio) {
-            std::cout << "Starting LSP server with stdio communication..." << std::endl;
-        } else {
-            std::cout << "Starting LSP server on port " << args.socketPort << "..." << std::endl;
-        }
         
         // Initialize server components
         auto config = std::make_shared<als::core::ServerConfig>();
@@ -133,14 +128,22 @@ int main(int argc, char* argv[]) {
 
         auto server = std::make_unique<als::core::LspServer>(config);
 
+        // Start server
         if (args.useStdio) {
+            std::cout << "Starting LSP server with stdio communication..." << std::endl;
             server->startStdio();
         } else {
+            std::cout << "Starting LSP server on port " << args.socketPort << "..." << std::endl;
             server->startSocket(args.socketPort);
         }
 
         // Run server main loop
-        return server->run();
+        std::cout << "Entering main server loop..." << std::endl;
+        int exitCode = server->run();
+
+        std::cout << "Server shutting down with exit code: " << exitCode << std::endl;
+
+        return exitCode;
         
     } catch (const std::exception& e) {
         std::cerr << "Error: " << e.what() << std::endl;

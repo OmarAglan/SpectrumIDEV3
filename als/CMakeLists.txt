@@ -120,7 +120,6 @@ set(ALS_SOURCES
     src/core/RequestDispatcher.cpp
     src/core/ThreadPool.cpp
     src/core/ServerConfig.cpp
-    src/core/Logger.cpp
     src/core/Utils.cpp
 )
 
