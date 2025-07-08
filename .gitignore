@@ -12,3 +12,4 @@ DerivedData
 /Spectrum/build
 *.pro.user
 build
+.vscode/settings.json
