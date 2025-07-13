@@ -234,17 +234,14 @@ void testMiddleware() {
     });
     
     // Create and dispatch request
-    JsonRpcRequest request;
-    request.raw = {
+    nlohmann::json request_json = {
         {"jsonrpc", "2.0"},
         {"id", 999},
         {"method", "middleware/test"},
         {"params", {}}
     };
-    request.id = 999;
-    request.method = "middleware/test";
-    request.params = {};
-    
+
+    JsonRpcRequest request(request_json);
     JsonRpcMessage message(JsonRpcMessageType::Request, request.raw);
     test.dispatcher.dispatch(message);
     
@@ -280,31 +277,26 @@ void testStatistics() {
     
     // Send some requests and notifications
     for (int i = 0; i < 3; ++i) {
-        JsonRpcRequest request;
-        request.raw = {
+        nlohmann::json request_json = {
             {"jsonrpc", "2.0"},
             {"id", i},
             {"method", "stats/test"},
             {"params", {}}
         };
-        request.id = i;
-        request.method = "stats/test";
-        request.params = {};
-        
+
+        JsonRpcRequest request(request_json);
         JsonRpcMessage message(JsonRpcMessageType::Request, request.raw);
         test.dispatcher.dispatch(message);
     }
-    
+
     for (int i = 0; i < 2; ++i) {
-        JsonRpcNotification notification;
-        notification.raw = {
+        nlohmann::json notification_json = {
             {"jsonrpc", "2.0"},
             {"method", "stats/notification"},
             {"params", {}}
         };
-        notification.method = "stats/notification";
-        notification.params = {};
-        
+
+        JsonRpcNotification notification(notification_json);
         JsonRpcMessage message(JsonRpcMessageType::Notification, notification.raw);
         test.dispatcher.dispatch(message);
     }
