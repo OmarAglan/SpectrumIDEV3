@@ -4,6 +4,7 @@
  */
 
 #include "als/core/RequestDispatcher.h"
+#include "als/logging/Logger.h"
 #include <iostream>
 #include <algorithm>
 
@@ -12,26 +13,26 @@ namespace core {
 
 RequestDispatcher::RequestDispatcher(JsonRpcProtocol& protocol, ThreadPool& thread_pool)
     : protocol_(protocol), thread_pool_(thread_pool) {
-    std::cout << "[RequestDispatcher] Initialized" << std::endl;
+    ALS_LOG_INFO("RequestDispatcher initialized");
 }
 
 RequestDispatcher::~RequestDispatcher() {
-    std::cout << "[RequestDispatcher] Shutting down" << std::endl;
+    ALS_LOG_INFO("RequestDispatcher shutting down");
     cancelAllRequests();
 }
 
 void RequestDispatcher::registerRequestHandler(const std::string& method, RequestHandler handler) {
-    std::cout << "[RequestDispatcher] Registering request handler for: " << method << std::endl;
+    ALS_LOG_DEBUG("Registering request handler for method: ", method);
     request_handlers_[method] = std::move(handler);
 }
 
 void RequestDispatcher::registerNotificationHandler(const std::string& method, NotificationHandler handler) {
-    std::cout << "[RequestDispatcher] Registering notification handler for: " << method << std::endl;
+    ALS_LOG_DEBUG("Registering notification handler for method: ", method);
     notification_handlers_[method] = std::move(handler);
 }
 
 void RequestDispatcher::addMiddleware(std::unique_ptr<RequestMiddleware> middleware) {
-    std::cout << "[RequestDispatcher] Adding middleware" << std::endl;
+    ALS_LOG_DEBUG("Adding middleware to RequestDispatcher");
     middleware_.push_back(std::move(middleware));
 }
 
@@ -43,12 +44,12 @@ void RequestDispatcher::dispatch(const JsonRpcMessage& message) {
         JsonRpcNotification notification(message.raw);
         dispatchNotification(notification);
     } else {
-        std::cout << "[RequestDispatcher] Ignoring response/error message" << std::endl;
+        ALS_LOG_DEBUG("Ignoring response/error message");
     }
 }
 
 void RequestDispatcher::dispatchRequest(const JsonRpcRequest& request) {
-    std::cout << "[RequestDispatcher] Dispatching request: " << request.method << std::endl;
+    ALS_LOG_DEBUG("Dispatching request: ", request.method);
 
     // Check if handler exists
     auto handler_it = request_handlers_.find(request.method);
@@ -89,12 +90,12 @@ void RequestDispatcher::dispatchRequest(const JsonRpcRequest& request) {
 }
 
 void RequestDispatcher::dispatchNotification(const JsonRpcNotification& notification) {
-    std::cout << "[RequestDispatcher] Dispatching notification: " << notification.method << std::endl;
+    ALS_LOG_DEBUG("Dispatching notification: ", notification.method);
 
     // Check if handler exists
     auto handler_it = notification_handlers_.find(notification.method);
     if (handler_it == notification_handlers_.end()) {
-        std::cout << "[RequestDispatcher] No handler for notification: " << notification.method << std::endl;
+        ALS_LOG_WARN("No handler registered for notification: ", notification.method);
         return;
     }
 
@@ -111,7 +112,7 @@ void RequestDispatcher::executeRequestHandler(const RequestContext& context, con
     try {
         // Check for cancellation before processing
         if (context.cancellation_token && context.cancellation_token->load()) {
-            std::cout << "[RequestDispatcher] Request cancelled before execution: " << context.method << std::endl;
+            ALS_LOG_DEBUG("Request cancelled before execution: ", context.method);
             {
                 std::lock_guard<std::mutex> lock(stats_mutex_);
                 stats_.cancelled_requests++;
@@ -121,7 +122,7 @@ void RequestDispatcher::executeRequestHandler(const RequestContext& context, con
 
         // Run pre-processing middleware
         if (!runMiddlewarePreProcess(context)) {
-            std::cout << "[RequestDispatcher] Request blocked by middleware: " << context.method << std::endl;
+            ALS_LOG_WARN("Request blocked by middleware: ", context.method);
             return;
         }
 
@@ -185,7 +186,7 @@ void RequestDispatcher::cancelRequest(const JsonRpcId& request_id) {
     auto it = active_requests_.find(request_id);
     if (it != active_requests_.end()) {
         it->second->store(true);
-        std::cout << "[RequestDispatcher] Cancelled request: " << request_id.dump() << std::endl;
+        ALS_LOG_DEBUG("Cancelled request: ", request_id.dump());
     }
 }
 
@@ -194,7 +195,7 @@ void RequestDispatcher::cancelAllRequests() {
     for (auto& [id, token] : active_requests_) {
         token->store(true);
     }
-    std::cout << "[RequestDispatcher] Cancelled " << active_requests_.size() << " active requests" << std::endl;
+    ALS_LOG_INFO("Cancelled ", active_requests_.size(), " active requests");
     active_requests_.clear();
 }
 
@@ -264,8 +265,7 @@ bool RequestDispatcher::hasNotificationHandler(const std::string& method) const 
 
 // LoggingMiddleware implementation
 bool LoggingMiddleware::preProcess(const RequestContext& context) {
-    std::cout << "[LoggingMiddleware] Processing request: " << context.method
-              << " (ID: " << context.request_id.dump() << ")" << std::endl;
+    ALS_LOG_DEBUG("Processing request: ", context.method, " (ID: ", context.request_id.dump(), ")");
     return true;
 }
 
@@ -273,10 +273,10 @@ void LoggingMiddleware::postProcess(const RequestContext& context, bool success)
     auto duration = std::chrono::steady_clock::now() - context.start_time;
     auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(duration);
 
-    std::cout << "[LoggingMiddleware] Completed request: " << context.method
-              << " (ID: " << context.request_id.dump() << ") "
-              << "Success: " << (success ? "true" : "false")
-              << " Duration: " << ms.count() << "ms" << std::endl;
+    ALS_LOG_DEBUG("Completed request: ", context.method,
+                  " (ID: ", context.request_id.dump(), ") ",
+                  "Success: ", (success ? "true" : "false"),
+                  " Duration: ", ms.count(), "ms");
 }
 
 // MetricsMiddleware implementation

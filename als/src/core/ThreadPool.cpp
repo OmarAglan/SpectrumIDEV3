@@ -4,6 +4,7 @@
  */
 
 #include "als/core/ThreadPool.h"
+#include "als/logging/Logger.h"
 #include <iostream>
 #include <algorithm>
 
@@ -25,7 +26,7 @@ ThreadPool::ThreadPool(size_t num_threads, size_t max_queue_size)
     // Clamp to reasonable limits
     num_threads = std::min(num_threads, size_t(16));
 
-    std::cout << "[ThreadPool] Creating thread pool with " << num_threads << " threads" << std::endl;
+    ALS_LOG_INFO("Creating ThreadPool with ", num_threads, " worker threads");
 
     workers_.reserve(num_threads);
     for (size_t i = 0; i < num_threads; ++i) {
@@ -34,7 +35,7 @@ ThreadPool::ThreadPool(size_t num_threads, size_t max_queue_size)
 }
 
 ThreadPool::~ThreadPool() {
-    std::cout << "[ThreadPool] Shutting down thread pool" << std::endl;
+    ALS_LOG_INFO("Shutting down ThreadPool");
 
     {
         std::unique_lock<std::mutex> lock(queue_mutex_);
@@ -49,7 +50,7 @@ ThreadPool::~ThreadPool() {
         }
     }
 
-    std::cout << "[ThreadPool] Thread pool shutdown complete" << std::endl;
+    ALS_LOG_INFO("ThreadPool shutdown complete");
 }
 
 std::shared_ptr<std::atomic<bool>> ThreadPool::createCancellationToken() {
@@ -70,7 +71,7 @@ void ThreadPool::cancelAllTasks() {
         stats_.cancelled += cancelled_count;
     }
 
-    std::cout << "[ThreadPool] Cancelled " << cancelled_count << " pending tasks" << std::endl;
+    ALS_LOG_INFO("Cancelled ", cancelled_count, " pending tasks");
 }
 
 bool ThreadPool::waitForCompletion(std::chrono::milliseconds timeout) {
@@ -100,8 +101,7 @@ void ThreadPool::resize(size_t num_threads) {
         return;
     }
 
-    std::cout << "[ThreadPool] Resizing from " << workers_.size()
-              << " to " << num_threads << " threads" << std::endl;
+    ALS_LOG_INFO("Resizing ThreadPool from ", workers_.size(), " to ", num_threads, " threads");
 
     if (num_threads < workers_.size()) {
         // Shrink pool - this is complex, so let's use a simpler approach

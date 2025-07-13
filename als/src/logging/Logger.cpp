@@ -44,7 +44,9 @@ const char* LogLevelToString(LogLevel level) {
 
 LogLevel StringToLogLevel(const std::string& str) {
     std::string lower = str;
-    std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+    std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c) {
+        return static_cast<char>(std::tolower(c));
+    });
 
     if (lower == "trace") return LogLevel::Trace;
     if (lower == "debug") return LogLevel::Debug;
@@ -317,7 +319,15 @@ std::string Logger::GetTimestamp(const std::chrono::system_clock::time_point& ti
                   time.time_since_epoch()) % 1000;
 
     std::ostringstream oss;
+
+#ifdef _WIN32
+    struct tm timeInfo;
+    localtime_s(&timeInfo, &timeT);
+    oss << std::put_time(&timeInfo, m_config.timestampFormat.c_str());
+#else
     oss << std::put_time(std::localtime(&timeT), m_config.timestampFormat.c_str());
+#endif
+
     oss << "." << std::setfill('0') << std::setw(3) << ms.count();
 
     return oss.str();

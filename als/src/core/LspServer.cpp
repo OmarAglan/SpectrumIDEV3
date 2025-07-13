@@ -7,6 +7,7 @@
 #include "als/core/JsonRpcProtocol.h"
 #include "als/core/ThreadPool.h"
 #include "als/core/RequestDispatcher.h"
+#include "als/logging/Logger.h"
 #include <iostream>
 #include <nlohmann/json.hpp>
 #include <sstream>
@@ -23,7 +24,7 @@ public:
         : config_(config), running_(false), protocol_(std::cin, std::cout) {
         // Initialize ThreadPool
         threadPool_ = std::make_unique<ThreadPool>(4, 1000); // 4 threads, max 1000 queued tasks
-        std::cout << "[LspServer] ThreadPool initialized" << std::endl;
+        ALS_LOG_INFO("ThreadPool initialized with 4 threads and max 1000 queued tasks");
 
         // Initialize RequestDispatcher
         dispatcher_ = std::make_unique<RequestDispatcher>(protocol_, *threadPool_);
@@ -35,7 +36,7 @@ public:
         // Register LSP handlers
         registerLspHandlers();
 
-        std::cout << "[LspServer] RequestDispatcher initialized" << std::endl;
+        ALS_LOG_INFO("RequestDispatcher initialized with middleware");
     }
     
     ~Impl() {
@@ -43,46 +44,46 @@ public:
     }
     
     bool startStdio() {
-        std::cout << "[LspServer] Starting with stdio communication" << std::endl;
+        ALS_LOG_INFO("Starting LSP server with stdio communication");
         running_ = true;
         return true;
     }
 
     bool startSocket(int port) {
-        std::cout << "[LspServer] Starting with socket on port " << port << std::endl;
+        ALS_LOG_INFO("Starting LSP server with socket on port ", port);
         running_ = true;
         return true;
     }
     
     int run() {
-        std::cout << "[LspServer] Entering main loop" << std::endl;
+        ALS_LOG_INFO("Entering LSP server main loop");
 
         while (running_ && protocol_.isConnected()) {
             try {
                 // Read and process one LSP message using JsonRpcProtocol
                 auto message = protocol_.readMessage();
                 if (!message.has_value()) {
-                    std::cout << "[LspServer] No message received or EOF, exiting" << std::endl;
+                    ALS_LOG_INFO("No message received or EOF, exiting main loop");
                     break;
                 }
 
                 if (!handleMessage(message.value())) {
-                    std::cout << "[LspServer] Message handling requested exit" << std::endl;
+                    ALS_LOG_INFO("Message handling requested exit");
                     break;
                 }
 
             } catch (const std::exception& e) {
-                std::cerr << "[LspServer] Error processing message: " << e.what() << std::endl;
+                ALS_LOG_ERROR("Error processing message: ", e.what());
                 // Continue processing other messages
             }
         }
 
-        std::cout << "[LspServer] Main loop exited" << std::endl;
+        ALS_LOG_INFO("LSP server main loop exited");
         return 0;
     }
 
     bool handleMessage(const JsonRpcMessage& message) {
-        std::cout << "[LspServer] Processing message type: " << static_cast<int>(message.type) << std::endl;
+        ALS_LOG_DEBUG("Processing message type: ", static_cast<int>(message.type));
 
         // Use RequestDispatcher for all message handling
         dispatcher_->dispatch(message);
@@ -105,18 +106,18 @@ public:
 
     void stop() {
         if (running_) {
-            std::cout << "[LspServer] Stopping server" << std::endl;
+            ALS_LOG_INFO("Stopping LSP server");
             running_ = false;
 
             // Wait for ThreadPool to complete current tasks
             if (threadPool_) {
-                std::cout << "[LspServer] Waiting for ThreadPool to complete tasks..." << std::endl;
+                ALS_LOG_INFO("Waiting for ThreadPool to complete tasks...");
                 threadPool_->waitForCompletion(std::chrono::seconds(5));
                 auto stats = threadPool_->getStats();
-                std::cout << "[LspServer] ThreadPool stats - Submitted: " << stats.submitted
-                         << ", Completed: " << stats.completed
-                         << ", Cancelled: " << stats.cancelled
-                         << ", Failed: " << stats.failed << std::endl;
+                ALS_LOG_INFO("ThreadPool final stats - Submitted: ", stats.submitted,
+                           ", Completed: ", stats.completed,
+                           ", Cancelled: ", stats.cancelled,
+                           ", Failed: ", stats.failed);
             }
         }
     }
@@ -208,11 +209,11 @@ void LspServer::Impl::registerLspHandlers() {
         handleExitNotification(notification);
     });
 
-    std::cout << "[LspServer] LSP handlers registered" << std::endl;
+    ALS_LOG_INFO("LSP handlers registered successfully");
 }
 
 void LspServer::Impl::handleInitializeRequest(const RequestContext& context) {
-    std::cout << "[LspServer] Handling initialize request" << std::endl;
+    ALS_LOG_INFO("Handling LSP initialize request");
 
     // Create initialize response with server capabilities
     auto result = nlohmann::json{
@@ -235,32 +236,32 @@ void LspServer::Impl::handleInitializeRequest(const RequestContext& context) {
 }
 
 void LspServer::Impl::handleShutdownRequest(const RequestContext& context) {
-    std::cout << "[LspServer] Handling shutdown request" << std::endl;
+    ALS_LOG_INFO("Handling LSP shutdown request");
     running_ = false;
     context.respond(nlohmann::json{});
 }
 
 void LspServer::Impl::handleDidOpenNotification(const JsonRpcNotification& notification) {
     (void)notification; // Mark as intentionally unused
-    std::cout << "[LspServer] Handling textDocument/didOpen notification" << std::endl;
+    ALS_LOG_DEBUG("Handling textDocument/didOpen notification");
     // TODO: Parse and store document
 }
 
 void LspServer::Impl::handleDidChangeNotification(const JsonRpcNotification& notification) {
     (void)notification; // Mark as intentionally unused
-    std::cout << "[LspServer] Handling textDocument/didChange notification" << std::endl;
+    ALS_LOG_DEBUG("Handling textDocument/didChange notification");
     // TODO: Update document content
 }
 
 void LspServer::Impl::handleDidCloseNotification(const JsonRpcNotification& notification) {
     (void)notification; // Mark as intentionally unused
-    std::cout << "[LspServer] Handling textDocument/didClose notification" << std::endl;
+    ALS_LOG_DEBUG("Handling textDocument/didClose notification");
     // TODO: Remove document from memory
 }
 
 void LspServer::Impl::handleExitNotification(const JsonRpcNotification& notification) {
     (void)notification; // Mark as intentionally unused
-    std::cout << "[LspServer] Handling exit notification" << std::endl;
+    ALS_LOG_INFO("Handling LSP exit notification");
     running_ = false;
 }
 

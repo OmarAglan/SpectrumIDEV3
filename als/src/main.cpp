@@ -13,8 +13,7 @@
 
 #include "als/core/LspServer.h"
 #include "als/core/ServerConfig.h"
-// TODO: Include Logger when implemented
-// #include "als/core/Logger.h"
+#include "als/logging/Logger.h"
 
 /**
  * @brief Print usage information
@@ -107,18 +106,29 @@ int main(int argc, char* argv[]) {
             return 0;
         }
         
-        // TODO: Initialize logging system
-        std::cout << "Initializing Alif Language Server..." << std::endl;
+        // Initialize logging system
+        als::logging::LoggerConfig logConfig;
+        logConfig.consoleLevel = als::logging::StringToLogLevel(args.logLevel);
+        logConfig.fileLevel = als::logging::LogLevel::Debug;
 
-        // TODO: Initialize logging system
-        std::cout << "Log level: " << args.logLevel << std::endl;
+        if (!args.logFile.empty()) {
+            logConfig.logFilePath = args.logFile;
+            logConfig.enableFile = true;
+        } else {
+            logConfig.enableFile = false;
+        }
+
+        als::logging::Logger::GetInstance().Configure(logConfig);
+
+        ALS_LOG_INFO("Initializing Alif Language Server v1.0.0");
+        ALS_LOG_INFO("Log level set to: ", args.logLevel);
 
         // Load configuration
         if (!args.configFile.empty()) {
-            std::cout << "Loading configuration from: " << args.configFile << std::endl;
+            ALS_LOG_INFO("Loading configuration from: ", args.configFile);
         }
 
-        std::cout << "Setting up server components..." << std::endl;
+        ALS_LOG_INFO("Setting up server components...");
         
         // Initialize server components
         auto config = std::make_shared<als::core::ServerConfig>();
@@ -130,26 +140,26 @@ int main(int argc, char* argv[]) {
 
         // Start server
         if (args.useStdio) {
-            std::cout << "Starting LSP server with stdio communication..." << std::endl;
+            ALS_LOG_INFO("Starting LSP server with stdio communication");
             server->startStdio();
         } else {
-            std::cout << "Starting LSP server on port " << args.socketPort << "..." << std::endl;
+            ALS_LOG_INFO("Starting LSP server on port ", args.socketPort);
             server->startSocket(args.socketPort);
         }
 
         // Run server main loop
-        std::cout << "Entering main server loop..." << std::endl;
+        ALS_LOG_INFO("Entering main server loop");
         int exitCode = server->run();
 
-        std::cout << "Server shutting down with exit code: " << exitCode << std::endl;
+        ALS_LOG_INFO("Server shutting down with exit code: ", exitCode);
 
         return exitCode;
-        
+
     } catch (const std::exception& e) {
-        std::cerr << "Error: " << e.what() << std::endl;
+        ALS_LOG_CRITICAL("Fatal error: ", e.what());
         return 1;
     } catch (...) {
-        std::cerr << "Unknown error occurred" << std::endl;
+        ALS_LOG_CRITICAL("Unknown fatal error occurred");
         return 1;
     }
 }
