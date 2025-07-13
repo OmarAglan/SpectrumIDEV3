@@ -47,6 +47,7 @@ set(THREADPOOL_TEST_SOURCES
 # Add source files that tests depend on
 set(ALS_CORE_SOURCES
     ${CMAKE_SOURCE_DIR}/src/core/JsonRpcProtocol.cpp
+    ${CMAKE_SOURCE_DIR}/src/core/RequestDispatcher.cpp
     ${CMAKE_SOURCE_DIR}/src/core/ServerConfig.cpp
     ${CMAKE_SOURCE_DIR}/src/core/ThreadPool.cpp
     ${CMAKE_SOURCE_DIR}/src/core/Utils.cpp
