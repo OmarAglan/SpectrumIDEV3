@@ -121,11 +121,13 @@ set(ALS_SOURCES
     src/core/ThreadPool.cpp
     src/core/ServerConfig.cpp
     src/core/Utils.cpp
+    src/logging/Logger.cpp
 )
 
 set(ALS_HEADERS
     include/als/core/LspServer.h
     include/als/core/ServerConfig.h
+    include/als/logging/Logger.h
 )
 
 # Create main executable

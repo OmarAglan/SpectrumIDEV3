@@ -55,6 +55,7 @@ set(ALS_CORE_SOURCES
     ${CMAKE_SOURCE_DIR}/src/core/ServerConfig.cpp
     ${CMAKE_SOURCE_DIR}/src/core/ThreadPool.cpp
     ${CMAKE_SOURCE_DIR}/src/core/Utils.cpp
+    ${CMAKE_SOURCE_DIR}/src/logging/Logger.cpp
 )
 
 # Create test executables

@@ -72,15 +72,18 @@ private:
 };
 ```
 
-### RequestDispatcher Class
+### RequestDispatcher Class ✅ **IMPLEMENTED**
 
 Routes LSP requests to appropriate handlers and manages request lifecycle.
 
 ```cpp
 class RequestDispatcher {
 public:
-    using RequestHandler = std::function<void(const JsonRpcRequest&, ResponseCallback)>;
+    using RequestHandler = std::function<void(const RequestContext& context)>;
     using NotificationHandler = std::function<void(const JsonRpcNotification&)>;
+
+    // Constructor
+    RequestDispatcher(JsonRpcProtocol& protocol, ThreadPool& thread_pool);
 
     // Handler registration
     void registerRequestHandler(const std::string& method, RequestHandler handler);
@@ -89,21 +92,30 @@ public:
     // Request processing
     void dispatch(const JsonRpcMessage& message);
     void cancelRequest(const JsonRpcId& request_id);
+    void cancelAllRequests();
 
     // Middleware support
     void addMiddleware(std::unique_ptr<RequestMiddleware> middleware);
 
+    // Statistics and monitoring
+    DispatcherStats getStats() const;
+    void resetStats();
+    bool hasRequestHandler(const std::string& method) const;
+    bool hasNotificationHandler(const std::string& method) const;
+
 private:
+    JsonRpcProtocol& protocol_;
+    ThreadPool& thread_pool_;
     std::unordered_map<std::string, RequestHandler> request_handlers_;
     std::unordered_map<std::string, NotificationHandler> notification_handlers_;
     std::vector<std::unique_ptr<RequestMiddleware>> middleware_;
-    std::unordered_map<JsonRpcId, std::atomic<bool>> cancellation_flags_;
+    std::unordered_map<JsonRpcId, std::shared_ptr<std::atomic<bool>>> active_requests_;
 };
 ```
 
 ## Threading & Task Management
 
-### ThreadPool Class
+### ThreadPool Class ✅ **IMPLEMENTED**
 
 Manages worker threads and task execution with prioritization and cancellation support.
 
@@ -111,21 +123,54 @@ Manages worker threads and task execution with prioritization and cancellation s
 class ThreadPool {
 public:
     enum class TaskPriority {
-        LOW = 0,
-        NORMAL = 1,
-        HIGH = 2,
-        URGENT = 3
+        LOW = 0,      // Background tasks (indexing, cleanup)
+        NORMAL = 1,   // Regular LSP requests
+        HIGH = 2,     // User-interactive requests (completion, hover)
+        URGENT = 3    // Critical requests (shutdown, cancellation)
     };
 
-    explicit ThreadPool(size_t num_threads = std::thread::hardware_concurrency());
+    struct TaskStats {
+        size_t submitted = 0;
+        size_t completed = 0;
+        size_t cancelled = 0;
+        size_t failed = 0;
+        std::chrono::milliseconds total_execution_time{0};
+        std::chrono::milliseconds average_execution_time{0};
+    };
+
+    explicit ThreadPool(size_t num_threads = std::thread::hardware_concurrency(),
+                       size_t max_queue_size = 1000);
     ~ThreadPool();
 
     // Task submission
     template<typename F, typename... Args>
-    auto submit(TaskPriority priority, F&& f, Args&&... args) 
-        -> std::future<typename std::result_of<F(Args...)>::type>;
+    auto submit(TaskPriority priority, F&& f, Args&&... args)
+        -> std::future<typename std::invoke_result_t<F, Args...>>;
 
     template<typename F, typename... Args>
+    auto submit(F&& f, Args&&... args)
+        -> std::future<typename std::invoke_result_t<F, Args...>>;
+
+    template<typename F, typename... Args>
+    auto submitCancellable(TaskPriority priority,
+                          std::shared_ptr<std::atomic<bool>> cancellation_token,
+                          F&& f, Args&&... args)
+        -> std::future<typename std::invoke_result_t<F, Args...>>;
+
+    // Cancellation support
+    std::shared_ptr<std::atomic<bool>> createCancellationToken();
+    void cancelAllTasks();
+
+    // Pool management
+    bool waitForCompletion(std::chrono::milliseconds timeout = std::chrono::milliseconds::max());
+    void resize(size_t num_threads);
+
+    // Status and monitoring
+    size_t size() const;
+    size_t activeThreads() const;
+    size_t queuedTasks() const;
+    TaskStats getStats() const;
+    void resetStats();
     auto submit(F&& f, Args&&... args) 
         -> std::future<typename std::result_of<F(Args...)>::type>;
 
