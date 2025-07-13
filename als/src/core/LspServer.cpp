@@ -5,6 +5,7 @@
 
 #include "als/core/LspServer.h"
 #include "als/core/JsonRpcProtocol.h"
+#include "als/core/ThreadPool.h"
 #include <iostream>
 #include <nlohmann/json.hpp>
 #include <sstream>
@@ -19,7 +20,9 @@ class LspServer::Impl {
 public:
     explicit Impl(std::shared_ptr<ServerConfig> config)
         : config_(config), running_(false), protocol_(std::cin, std::cout) {
-        // TODO: Initialize other components
+        // Initialize ThreadPool
+        threadPool_ = std::make_unique<ThreadPool>(4, 1000); // 4 threads, max 1000 queued tasks
+        std::cout << "[LspServer] ThreadPool initialized" << std::endl;
     }
     
     ~Impl() {
@@ -170,6 +173,17 @@ public:
         if (running_) {
             std::cout << "[LspServer] Stopping server" << std::endl;
             running_ = false;
+
+            // Wait for ThreadPool to complete current tasks
+            if (threadPool_) {
+                std::cout << "[LspServer] Waiting for ThreadPool to complete tasks..." << std::endl;
+                threadPool_->waitForCompletion(std::chrono::seconds(5));
+                auto stats = threadPool_->getStats();
+                std::cout << "[LspServer] ThreadPool stats - Submitted: " << stats.submitted
+                         << ", Completed: " << stats.completed
+                         << ", Cancelled: " << stats.cancelled
+                         << ", Failed: " << stats.failed << std::endl;
+            }
         }
     }
     
@@ -181,10 +195,10 @@ private:
     std::shared_ptr<ServerConfig> config_;
     bool running_;
     JsonRpcProtocol protocol_;
+    std::unique_ptr<ThreadPool> threadPool_;
 
     // TODO: Add other server components
     // std::unique_ptr<RequestDispatcher> dispatcher_;
-    // std::unique_ptr<ThreadPool> threadPool_;
 };
 
 // LspServer implementation
