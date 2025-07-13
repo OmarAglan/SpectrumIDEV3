@@ -40,10 +40,15 @@ set(DEBUG_SOURCES
     debug_stream.cpp
 )
 
+set(THREADPOOL_TEST_SOURCES
+    test_threadpool.cpp
+)
+
 # Add source files that tests depend on
 set(ALS_CORE_SOURCES
     ${CMAKE_SOURCE_DIR}/src/core/JsonRpcProtocol.cpp
     ${CMAKE_SOURCE_DIR}/src/core/ServerConfig.cpp
+    ${CMAKE_SOURCE_DIR}/src/core/ThreadPool.cpp
     ${CMAKE_SOURCE_DIR}/src/core/Utils.cpp
 )
 
@@ -52,6 +57,7 @@ add_executable(als_tests ${BASIC_TEST_SOURCES})
 add_executable(als_jsonrpc_tests ${JSONRPC_TEST_SOURCES} ${ALS_CORE_SOURCES})
 add_executable(als_lsp_tests ${LSP_TEST_SOURCES} ${ALS_CORE_SOURCES})
 add_executable(als_protocol_tests ${PROTOCOL_TEST_SOURCES} ${ALS_CORE_SOURCES})
+add_executable(als_threadpool_tests ${THREADPOOL_TEST_SOURCES} ${ALS_CORE_SOURCES})
 add_executable(debug_stream ${DEBUG_SOURCES})
 
 # Function to link libraries to test targets
@@ -79,6 +85,7 @@ endfunction()
 link_test_libraries(als_jsonrpc_tests)
 link_test_libraries(als_lsp_tests)
 link_test_libraries(als_protocol_tests)
+link_test_libraries(als_threadpool_tests)
 
 # Configure for Google Test if available
 if(USE_GTEST)
@@ -115,6 +122,7 @@ else()
     add_test(NAME JsonRpcProtocolTests COMMAND als_jsonrpc_tests)
     add_test(NAME LspMessageTests COMMAND als_lsp_tests)
     add_test(NAME ProtocolComplianceTests COMMAND als_protocol_tests)
+    add_test(NAME ThreadPoolTests COMMAND als_threadpool_tests)
 
     set_tests_properties(BasicTestRunner PROPERTIES
         TIMEOUT 30
@@ -134,6 +142,11 @@ else()
     set_tests_properties(ProtocolComplianceTests PROPERTIES
         TIMEOUT 30
         LABELS "compliance"
+    )
+
+    set_tests_properties(ThreadPoolTests PROPERTIES
+        TIMEOUT 30
+        LABELS "threading"
     )
 endif()
 
@@ -166,6 +179,7 @@ configure_test_target(als_tests)
 configure_test_target(als_jsonrpc_tests)
 configure_test_target(als_lsp_tests)
 configure_test_target(als_protocol_tests)
+configure_test_target(als_threadpool_tests)
 configure_test_target(debug_stream)
 
 # Add test data directory
