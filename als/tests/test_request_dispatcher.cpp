@@ -105,15 +105,13 @@ void testNotificationHandling() {
     });
     
     // Create and dispatch a test notification
-    JsonRpcNotification notification;
-    notification.raw = {
+    nlohmann::json notification_json = {
         {"jsonrpc", "2.0"},
         {"method", "test/notification"},
         {"params", {{"data", "test"}}}
     };
-    notification.method = "test/notification";
-    notification.params = {{"data", "test"}};
-    
+
+    JsonRpcNotification notification(notification_json);
     JsonRpcMessage message(JsonRpcMessageType::Notification, notification.raw);
     test.dispatcher.dispatch(message);
     
@@ -136,17 +134,14 @@ void testMethodNotFound() {
     DispatcherTestHelper test;
     
     // Create request for unknown method
-    JsonRpcRequest request;
-    request.raw = {
+    nlohmann::json request_json = {
         {"jsonrpc", "2.0"},
         {"id", 456},
         {"method", "unknown/method"},
         {"params", {}}
     };
-    request.id = 456;
-    request.method = "unknown/method";
-    request.params = {};
-    
+
+    JsonRpcRequest request(request_json);
     JsonRpcMessage message(JsonRpcMessageType::Request, request.raw);
     test.dispatcher.dispatch(message);
     
@@ -190,17 +185,14 @@ void testRequestCancellation() {
     });
     
     // Create and dispatch request
-    JsonRpcRequest request;
-    request.raw = {
+    nlohmann::json request_json = {
         {"jsonrpc", "2.0"},
         {"id", 789},
         {"method", "slow/method"},
         {"params", {}}
     };
-    request.id = 789;
-    request.method = "slow/method";
-    request.params = {};
-    
+
+    JsonRpcRequest request(request_json);
     JsonRpcMessage message(JsonRpcMessageType::Request, request.raw);
     test.dispatcher.dispatch(message);
     
