@@ -125,88 +125,7 @@ public:
         return running_;
     }
 
-    void registerLspHandlers() {
-        // Register initialize request handler
-        dispatcher_->registerRequestHandler("initialize", [this](const RequestContext& context) {
-            handleInitializeRequest(context);
-        });
 
-        // Register shutdown request handler
-        dispatcher_->registerRequestHandler("shutdown", [this](const RequestContext& context) {
-            handleShutdownRequest(context);
-        });
-
-        // Register textDocument/didOpen notification handler
-        dispatcher_->registerNotificationHandler("textDocument/didOpen", [this](const JsonRpcNotification& notification) {
-            handleDidOpenNotification(notification);
-        });
-
-        // Register textDocument/didChange notification handler
-        dispatcher_->registerNotificationHandler("textDocument/didChange", [this](const JsonRpcNotification& notification) {
-            handleDidChangeNotification(notification);
-        });
-
-        // Register textDocument/didClose notification handler
-        dispatcher_->registerNotificationHandler("textDocument/didClose", [this](const JsonRpcNotification& notification) {
-            handleDidCloseNotification(notification);
-        });
-
-        // Register exit notification handler
-        dispatcher_->registerNotificationHandler("exit", [this](const JsonRpcNotification& notification) {
-            handleExitNotification(notification);
-        });
-
-        std::cout << "[LspServer] LSP handlers registered" << std::endl;
-    }
-
-    void handleInitializeRequest(const RequestContext& context) {
-        std::cout << "[LspServer] Handling initialize request" << std::endl;
-
-        // Create initialize response with server capabilities
-        auto result = nlohmann::json{
-            {"capabilities", nlohmann::json{
-                {"textDocumentSync", 1}, // Full document sync
-                {"hoverProvider", false},
-                {"completionProvider", nlohmann::json{
-                    {"triggerCharacters", nlohmann::json::array()}
-                }},
-                {"definitionProvider", false},
-                {"referencesProvider", false}
-            }},
-            {"serverInfo", nlohmann::json{
-                {"name", "Alif Language Server"},
-                {"version", "1.0.0"}
-            }}
-        };
-
-        context.respond(result);
-    }
-
-    void handleShutdownRequest(const RequestContext& context) {
-        std::cout << "[LspServer] Handling shutdown request" << std::endl;
-        running_ = false;
-        context.respond(nlohmann::json{});
-    }
-
-    void handleDidOpenNotification(const JsonRpcNotification& notification) {
-        std::cout << "[LspServer] Handling textDocument/didOpen notification" << std::endl;
-        // TODO: Parse and store document
-    }
-
-    void handleDidChangeNotification(const JsonRpcNotification& notification) {
-        std::cout << "[LspServer] Handling textDocument/didChange notification" << std::endl;
-        // TODO: Update document content
-    }
-
-    void handleDidCloseNotification(const JsonRpcNotification& notification) {
-        std::cout << "[LspServer] Handling textDocument/didClose notification" << std::endl;
-        // TODO: Remove document from memory
-    }
-
-    void handleExitNotification(const JsonRpcNotification& notification) {
-        std::cout << "[LspServer] Handling exit notification" << std::endl;
-        running_ = false;
-    }
 
 private:
     std::shared_ptr<ServerConfig> config_;
@@ -217,6 +136,16 @@ private:
 
     // LSP handler registration
     void registerLspHandlers();
+
+    // LSP request handlers
+    void handleInitializeRequest(const RequestContext& context);
+    void handleShutdownRequest(const RequestContext& context);
+
+    // LSP notification handlers
+    void handleDidOpenNotification(const JsonRpcNotification& notification);
+    void handleDidChangeNotification(const JsonRpcNotification& notification);
+    void handleDidCloseNotification(const JsonRpcNotification& notification);
+    void handleExitNotification(const JsonRpcNotification& notification);
 };
 
 // LspServer implementation
@@ -245,6 +174,94 @@ void LspServer::stop() {
 
 bool LspServer::isRunning() const {
     return pImpl->isRunning();
+}
+
+// Implementation of Impl methods
+void LspServer::Impl::registerLspHandlers() {
+    // Register initialize request handler
+    dispatcher_->registerRequestHandler("initialize", [this](const RequestContext& context) {
+        handleInitializeRequest(context);
+    });
+
+    // Register shutdown request handler
+    dispatcher_->registerRequestHandler("shutdown", [this](const RequestContext& context) {
+        handleShutdownRequest(context);
+    });
+
+    // Register textDocument/didOpen notification handler
+    dispatcher_->registerNotificationHandler("textDocument/didOpen", [this](const JsonRpcNotification& notification) {
+        handleDidOpenNotification(notification);
+    });
+
+    // Register textDocument/didChange notification handler
+    dispatcher_->registerNotificationHandler("textDocument/didChange", [this](const JsonRpcNotification& notification) {
+        handleDidChangeNotification(notification);
+    });
+
+    // Register textDocument/didClose notification handler
+    dispatcher_->registerNotificationHandler("textDocument/didClose", [this](const JsonRpcNotification& notification) {
+        handleDidCloseNotification(notification);
+    });
+
+    // Register exit notification handler
+    dispatcher_->registerNotificationHandler("exit", [this](const JsonRpcNotification& notification) {
+        handleExitNotification(notification);
+    });
+
+    std::cout << "[LspServer] LSP handlers registered" << std::endl;
+}
+
+void LspServer::Impl::handleInitializeRequest(const RequestContext& context) {
+    std::cout << "[LspServer] Handling initialize request" << std::endl;
+
+    // Create initialize response with server capabilities
+    auto result = nlohmann::json{
+        {"capabilities", nlohmann::json{
+            {"textDocumentSync", 1}, // Full document sync
+            {"hoverProvider", false},
+            {"completionProvider", nlohmann::json{
+                {"triggerCharacters", nlohmann::json::array()}
+            }},
+            {"definitionProvider", false},
+            {"referencesProvider", false}
+        }},
+        {"serverInfo", nlohmann::json{
+            {"name", "Alif Language Server"},
+            {"version", "1.0.0"}
+        }}
+    };
+
+    context.respond(result);
+}
+
+void LspServer::Impl::handleShutdownRequest(const RequestContext& context) {
+    std::cout << "[LspServer] Handling shutdown request" << std::endl;
+    running_ = false;
+    context.respond(nlohmann::json{});
+}
+
+void LspServer::Impl::handleDidOpenNotification(const JsonRpcNotification& notification) {
+    (void)notification; // Mark as intentionally unused
+    std::cout << "[LspServer] Handling textDocument/didOpen notification" << std::endl;
+    // TODO: Parse and store document
+}
+
+void LspServer::Impl::handleDidChangeNotification(const JsonRpcNotification& notification) {
+    (void)notification; // Mark as intentionally unused
+    std::cout << "[LspServer] Handling textDocument/didChange notification" << std::endl;
+    // TODO: Update document content
+}
+
+void LspServer::Impl::handleDidCloseNotification(const JsonRpcNotification& notification) {
+    (void)notification; // Mark as intentionally unused
+    std::cout << "[LspServer] Handling textDocument/didClose notification" << std::endl;
+    // TODO: Remove document from memory
+}
+
+void LspServer::Impl::handleExitNotification(const JsonRpcNotification& notification) {
+    (void)notification; // Mark as intentionally unused
+    std::cout << "[LspServer] Handling exit notification" << std::endl;
+    running_ = false;
 }
 
 } // namespace core

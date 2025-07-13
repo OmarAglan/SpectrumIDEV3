@@ -288,6 +288,7 @@ bool MetricsMiddleware::preProcess(const RequestContext& context) {
 }
 
 void MetricsMiddleware::postProcess(const RequestContext& context, bool success) {
+    (void)success; // Mark as intentionally unused
     auto duration = std::chrono::steady_clock::now() - context.start_time;
     auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(duration);
 
@@ -304,3 +305,6 @@ void MetricsMiddleware::resetMetrics() {
     std::lock_guard<std::mutex> lock(metrics_mutex_);
     metrics_ = Metrics{};
 }
+
+} // namespace core
+} // namespace als
