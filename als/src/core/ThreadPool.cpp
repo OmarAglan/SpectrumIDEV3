@@ -104,22 +104,29 @@ void ThreadPool::resize(size_t num_threads) {
               << " to " << num_threads << " threads" << std::endl;
 
     if (num_threads < workers_.size()) {
-        // Shrink pool
+        // Shrink pool - this is complex, so let's use a simpler approach
+        // Stop all threads and recreate the pool
         {
             std::unique_lock<std::mutex> lock(queue_mutex_);
             stop_ = true;
         }
         condition_.notify_all();
 
-        // Join excess threads
-        for (size_t i = num_threads; i < workers_.size(); ++i) {
-            if (workers_[i].joinable()) {
-                workers_[i].join();
+        // Join all threads
+        for (auto& worker : workers_) {
+            if (worker.joinable()) {
+                worker.join();
             }
         }
 
-        workers_.resize(num_threads);
+        // Clear and recreate with new size
+        workers_.clear();
         stop_ = false;
+
+        workers_.reserve(num_threads);
+        for (size_t i = 0; i < num_threads; ++i) {
+            workers_.emplace_back([this] { workerLoop(); });
+        }
     } else {
         // Grow pool
         workers_.reserve(num_threads);
