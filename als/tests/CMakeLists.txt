@@ -44,6 +44,10 @@ set(THREADPOOL_TEST_SOURCES
     test_threadpool.cpp
 )
 
+set(DISPATCHER_TEST_SOURCES
+    test_request_dispatcher.cpp
+)
+
 # Add source files that tests depend on
 set(ALS_CORE_SOURCES
     ${CMAKE_SOURCE_DIR}/src/core/JsonRpcProtocol.cpp
@@ -59,6 +63,7 @@ add_executable(als_jsonrpc_tests ${JSONRPC_TEST_SOURCES} ${ALS_CORE_SOURCES})
 add_executable(als_lsp_tests ${LSP_TEST_SOURCES} ${ALS_CORE_SOURCES})
 add_executable(als_protocol_tests ${PROTOCOL_TEST_SOURCES} ${ALS_CORE_SOURCES})
 add_executable(als_threadpool_tests ${THREADPOOL_TEST_SOURCES} ${ALS_CORE_SOURCES})
+add_executable(als_dispatcher_tests ${DISPATCHER_TEST_SOURCES} ${ALS_CORE_SOURCES})
 add_executable(debug_stream ${DEBUG_SOURCES})
 
 # Function to link libraries to test targets
@@ -87,6 +92,7 @@ link_test_libraries(als_jsonrpc_tests)
 link_test_libraries(als_lsp_tests)
 link_test_libraries(als_protocol_tests)
 link_test_libraries(als_threadpool_tests)
+link_test_libraries(als_dispatcher_tests)
 
 # Configure for Google Test if available
 if(USE_GTEST)
@@ -124,6 +130,7 @@ else()
     add_test(NAME LspMessageTests COMMAND als_lsp_tests)
     add_test(NAME ProtocolComplianceTests COMMAND als_protocol_tests)
     add_test(NAME ThreadPoolTests COMMAND als_threadpool_tests)
+    add_test(NAME RequestDispatcherTests COMMAND als_dispatcher_tests)
 
     set_tests_properties(BasicTestRunner PROPERTIES
         TIMEOUT 30
@@ -148,6 +155,11 @@ else()
     set_tests_properties(ThreadPoolTests PROPERTIES
         TIMEOUT 30
         LABELS "threading"
+    )
+
+    set_tests_properties(RequestDispatcherTests PROPERTIES
+        TIMEOUT 30
+        LABELS "dispatcher"
     )
 endif()
 
@@ -181,6 +193,7 @@ configure_test_target(als_jsonrpc_tests)
 configure_test_target(als_lsp_tests)
 configure_test_target(als_protocol_tests)
 configure_test_target(als_threadpool_tests)
+configure_test_target(als_dispatcher_tests)
 configure_test_target(debug_stream)
 
 # Add test data directory
