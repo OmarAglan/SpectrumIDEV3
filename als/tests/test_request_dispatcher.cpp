@@ -272,6 +272,7 @@ void testStatistics() {
     });
     
     test.dispatcher.registerNotificationHandler("stats/notification", [](const JsonRpcNotification& notification) {
+        (void)notification; // Mark as intentionally unused
         // Just process the notification
     });
     
