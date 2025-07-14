@@ -3,6 +3,7 @@
 #include <QMutexLocker>
 #include <QUuid>
 #include <QJsonDocument>
+#include <QJsonArray>
 
 ErrorManager::ErrorManager(QObject* parent)
     : QObject(parent)

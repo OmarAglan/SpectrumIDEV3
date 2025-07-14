@@ -249,3 +249,184 @@ bool DocumentManager::applyChange(const QString& uri, int startLine, int startCh
     emit documentModified(uri, state.version);
     return true;
 }
+
+void DocumentManager::onAutoSyncTimer()
+{
+    qDebug() << "DocumentManager: Auto-sync timer triggered";
+
+    // Sync all documents with pending changes
+    QMutexLocker locker(&m_documentsMutex);
+
+    for (auto it = m_documents.begin(); it != m_documents.end(); ++it) {
+        DocumentState& state = it.value();
+        if (!state.pendingChanges.isEmpty()) {
+            locker.unlock();
+            sendChangesToServer(state.uri, state.pendingChanges);
+            locker.relock();
+        }
+    }
+}
+
+void DocumentManager::onTextDocumentChanged()
+{
+    QTextDocument* document = qobject_cast<QTextDocument*>(sender());
+    if (!document) {
+        return;
+    }
+
+    // Find the document URI for this QTextDocument
+    QMutexLocker locker(&m_documentsMutex);
+
+    for (auto it = m_documents.begin(); it != m_documents.end(); ++it) {
+        DocumentState& state = it.value();
+        if (state.textDocument == document) {
+            // Document content changed - update our state
+            QString newContent = document->toPlainText();
+
+            if (newContent != state.content) {
+                qDebug() << "DocumentManager: Text document changed for" << state.uri;
+
+                // Calculate incremental changes if enabled
+                if (m_incrementalSyncEnabled) {
+                    QList<TextChange> changes = calculateIncrementalChanges(state.content, newContent);
+                    if (!changes.isEmpty()) {
+                        state.pendingChanges.append(changes);
+                    }
+                } else {
+                    // Mark for full sync
+                    state.isDirty = true;
+                }
+
+                state.content = newContent;
+                state.version++;
+                state.lastModified = QDateTime::currentDateTime();
+
+                emit documentModified(state.uri, state.version);
+            }
+            break;
+        }
+    }
+}
+
+TextChange DocumentManager::createTextChange(ChangeType type, int startLine, int startChar,
+                                           int endLine, int endChar, const QString& text)
+{
+    TextChange change;
+    change.type = type;
+    change.startLine = startLine;
+    change.startCharacter = startChar;
+    change.endLine = endLine;
+    change.endCharacter = endChar;
+    change.text = text;
+    change.timestamp = QDateTime::currentMSecsSinceEpoch();
+    return change;
+}
+
+QList<TextChange> DocumentManager::calculateIncrementalChanges(const QString& oldText,
+                                                              const QString& newText)
+{
+    QList<TextChange> changes;
+
+    // Simple implementation - for a production system, you'd want a more sophisticated diff algorithm
+    if (oldText != newText) {
+        // For now, create a single change that replaces the entire content
+        // In a real implementation, you'd use algorithms like Myers' diff or similar
+        TextChange change;
+        change.type = ChangeType::Replace;
+        change.startLine = 0;
+        change.startCharacter = 0;
+        change.endLine = oldText.split('\n').size() - 1;
+        change.endCharacter = 0;
+        change.text = newText;
+        change.timestamp = QDateTime::currentMSecsSinceEpoch();
+
+        changes.append(change);
+    }
+
+    return changes;
+}
+
+void DocumentManager::applyChangesToState(DocumentState& state, const QList<TextChange>& changes)
+{
+    // Apply changes to the document state
+    for (const TextChange& change : changes) {
+        // For this simple implementation, we just update the content
+        // In a real implementation, you'd apply the specific changes
+        if (change.type == ChangeType::Replace) {
+            state.content = change.text;
+        }
+        // Add more change types as needed
+    }
+
+    state.lastModified = QDateTime::currentDateTime();
+}
+
+void DocumentManager::sendChangesToServer(const QString& uri, const QList<TextChange>& changes)
+{
+    if (!m_protocol || !m_protocol->isReady() || changes.isEmpty()) {
+        return;
+    }
+
+    qDebug() << "DocumentManager: Sending" << changes.size() << "changes for" << uri;
+
+    QMutexLocker locker(&m_documentsMutex);
+
+    auto it = m_documents.find(uri);
+    if (it == m_documents.end()) {
+        return;
+    }
+
+    DocumentState& state = it.value();
+
+    // Convert changes to LSP format
+    QJsonArray lspChanges = convertChangesToLsp(changes);
+
+    // Send didChange notification
+    m_protocol->sendTextDocumentDidChange(uri, state.version, lspChanges);
+
+    // Update state
+    state.lastSynced = QDateTime::currentDateTime();
+    state.isDirty = false;
+    state.pendingChanges.clear();
+
+    // Update statistics
+    m_totalChangesSent += changes.size();
+    m_totalBytesSynced += state.content.toUtf8().size();
+
+    emit documentSynced(uri);
+}
+
+QJsonArray DocumentManager::convertChangesToLsp(const QList<TextChange>& changes)
+{
+    QJsonArray lspChanges;
+
+    for (const TextChange& change : changes) {
+        QJsonObject lspChange;
+
+        if (change.type == ChangeType::Replace) {
+            // Full document change
+            lspChange["text"] = change.text;
+        } else {
+            // Incremental change
+            QJsonObject range;
+
+            QJsonObject start;
+            start["line"] = change.startLine;
+            start["character"] = change.startCharacter;
+
+            QJsonObject end;
+            end["line"] = change.endLine;
+            end["character"] = change.endCharacter;
+
+            range["start"] = start;
+            range["end"] = end;
+
+            lspChange["range"] = range;
+            lspChange["text"] = change.text;
+        }
+
+        lspChanges.append(lspChange);
+    }
+
+    return lspChanges;
+}

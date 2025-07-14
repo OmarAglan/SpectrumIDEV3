@@ -37,6 +37,8 @@ SOURCES += \
     ../Source/LspClient/LspProtocol.cpp \
     ../Source/LspClient/LspFeatureManager.cpp \
     ../Source/LspClient/DocumentManager.cpp \
+    ../Source/LspClient/ErrorManager.cpp \
+    
 
 HEADERS += \
     Spectrum.h  \
@@ -52,6 +54,7 @@ HEADERS += \
     ../Source/LspClient/LspProtocol.h \
     ../Source/LspClient/LspFeatureManager.h \
     ../Source/LspClient/DocumentManager.h \
+    ../Source/LspClient/ErrorManager.h \
 
 
 

@@ -379,13 +379,15 @@ QJsonObject SpectrumLspClient::getSystemHealth() const
 
     // Server capabilities
     QJsonObject capabilities;
-    capabilities["completion"] = m_serverCapabilities.completion;
-    capabilities["hover"] = m_serverCapabilities.hover;
-    capabilities["definition"] = m_serverCapabilities.definition;
-    capabilities["references"] = m_serverCapabilities.references;
-    capabilities["documentSymbol"] = m_serverCapabilities.documentSymbol;
-    capabilities["workspaceSymbol"] = m_serverCapabilities.workspaceSymbol;
-    capabilities["diagnostics"] = m_serverCapabilities.diagnostics;
+    capabilities["textDocumentSync"] = m_serverCapabilities.textDocumentSync;
+    capabilities["completionProvider"] = m_serverCapabilities.completionProvider;
+    capabilities["hoverProvider"] = m_serverCapabilities.hoverProvider;
+    capabilities["definitionProvider"] = m_serverCapabilities.definitionProvider;
+    capabilities["referencesProvider"] = m_serverCapabilities.referencesProvider;
+    capabilities["documentSymbolProvider"] = m_serverCapabilities.documentSymbolProvider;
+    capabilities["workspaceSymbolProvider"] = m_serverCapabilities.workspaceSymbolProvider;
+    capabilities["codeActionProvider"] = m_serverCapabilities.codeActionProvider;
+    capabilities["documentFormattingProvider"] = m_serverCapabilities.documentFormattingProvider;
     health["serverCapabilities"] = capabilities;
 
     return health;
