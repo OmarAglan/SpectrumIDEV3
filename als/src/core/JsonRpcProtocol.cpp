@@ -7,6 +7,13 @@
 #include <iostream>
 #include <sstream>
 #include <algorithm>
+#include <iomanip>
+
+#ifdef _WIN32
+#include <io.h>
+#include <fcntl.h>
+#include <windows.h>
+#endif
 
 namespace als {
 namespace core {
@@ -15,6 +22,93 @@ JsonRpcProtocol::JsonRpcProtocol(std::istream& input, std::ostream& output)
     : input_stream_(input)
     , output_stream_(output)
     , connected_(true) {
+    configureInputStreamForWindows();
+}
+
+void JsonRpcProtocol::configureInputStreamForWindows() {
+#ifdef _WIN32
+    // Set stdin to binary mode to prevent CRLF translation
+    if (&input_stream_ == &std::cin) {
+        _setmode(_fileno(stdin), _O_BINARY);
+
+        // Disable input buffering
+        std::cin.tie(nullptr);
+        std::ios::sync_with_stdio(false);
+
+        // Set console input to UTF-8 if available
+        SetConsoleCP(CP_UTF8);
+        SetConsoleOutputCP(CP_UTF8);
+    }
+#endif
+}
+
+std::string JsonRpcProtocol::readLine() {
+    std::string line;
+    char ch;
+
+    while (input_stream_.get(ch)) {
+        if (ch == '\r') {
+            // Check if next char is \n
+            if (input_stream_.peek() == '\n') {
+                input_stream_.get(); // consume the \n
+            }
+            break;
+        } else if (ch == '\n') {
+            break;
+        } else {
+            line += ch;
+        }
+    }
+
+    return line;
+}
+
+size_t JsonRpcProtocol::parseContentLength(const std::string& header) {
+    const std::string prefix = "Content-Length: ";
+    if (header.find(prefix) == 0) {
+        std::string length_str = header.substr(prefix.length());
+        // Remove any trailing whitespace
+        length_str.erase(length_str.find_last_not_of(" \t\r\n") + 1);
+
+        try {
+            return std::stoull(length_str);
+        } catch (const std::exception&) {
+            std::cerr << "[JsonRpcProtocol] Invalid Content-Length: "
+                     << length_str << std::endl;
+            return 0;
+        }
+    }
+    return 0;
+}
+
+bool JsonRpcProtocol::isJsonComplete(const std::string& json) {
+    int brace_count = 0;
+    bool in_string = false;
+    bool escaped = false;
+
+    for (char ch : json) {
+        if (escaped) {
+            escaped = false;
+            continue;
+        }
+
+        if (ch == '\\' && in_string) {
+            escaped = true;
+            continue;
+        }
+
+        if (ch == '"') {
+            in_string = !in_string;
+            continue;
+        }
+
+        if (!in_string) {
+            if (ch == '{') brace_count++;
+            else if (ch == '}') brace_count--;
+        }
+    }
+
+    return brace_count == 0 && !in_string;
 }
 
 std::optional<JsonRpcMessage> JsonRpcProtocol::readMessage() {
@@ -126,52 +220,67 @@ void JsonRpcProtocol::disconnect() {
 
 std::optional<std::string> JsonRpcProtocol::readContentLengthHeader() {
     std::string line;
+    size_t content_length = 0;
 
-    // Read headers until we find Content-Length or empty line
-    while (std::getline(input_stream_, line)) {
-        // Remove \r if present (Windows line endings)
-        if (!line.empty() && line.back() == '\r') {
-            line.pop_back();
-        }
+    // Read headers until empty line using enhanced readLine()
+    while (true) {
+        line = readLine();
 
-        // Empty line indicates end of headers
         if (line.empty()) {
-            break;
+            break; // Empty line indicates end of headers
         }
 
-        // Look for Content-Length header
-        if (line.find("Content-Length:") == 0) {
-            std::string length_str = line.substr(15); // Skip "Content-Length:"
-
-            // Trim whitespace
-            size_t start = length_str.find_first_not_of(" \t");
-            if (start != std::string::npos) {
-                length_str = length_str.substr(start);
-                size_t end = length_str.find_last_not_of(" \t\r\n");
-                if (end != std::string::npos) {
-                    length_str = length_str.substr(0, end + 1);
-                }
-                return length_str;
-            }
+        // Parse Content-Length header using enhanced parser
+        size_t length = parseContentLength(line);
+        if (length > 0) {
+            content_length = length;
         }
     }
 
-    // Check if we hit EOF
-    if (input_stream_.eof()) {
+    if (content_length == 0) {
+        std::cerr << "[JsonRpcProtocol] No valid Content-Length found" << std::endl;
         return std::nullopt;
     }
 
-    // No Content-Length header found
-    std::cerr << "[JsonRpcProtocol] No Content-Length header found" << std::endl;
-    return std::nullopt;
+    // Return the content length as a string (this is what the calling code expects)
+    return std::to_string(content_length);
 }
 
 std::string JsonRpcProtocol::readJsonPayload(size_t content_length) {
-    std::string payload(content_length, '\0');
-    input_stream_.read(&payload[0], content_length);
+    // Enhanced payload reading with character-by-character approach
+    std::string payload;
+    payload.reserve(content_length);
 
-    if (input_stream_.gcount() != static_cast<std::streamsize>(content_length)) {
-        std::cerr << "[JsonRpcProtocol] Failed to read complete JSON payload" << std::endl;
+    char ch;
+    size_t bytes_read = 0;
+
+    while (bytes_read < content_length && input_stream_.get(ch)) {
+        payload += ch;
+        bytes_read++;
+    }
+
+    if (bytes_read != content_length) {
+        std::cerr << "[JsonRpcProtocol] Failed to read complete JSON payload. "
+                 << "Expected: " << content_length << " bytes, "
+                 << "Read: " << bytes_read << " bytes" << std::endl;
+
+        // Debug: show what we actually read
+        std::cerr << "[JsonRpcProtocol] Partial payload: " << payload << std::endl;
+
+        // For debugging: show hex dump of what we read
+        std::cerr << "[JsonRpcProtocol] Hex dump: ";
+        for (size_t i = 0; i < payload.length(); ++i) {
+            std::cerr << std::hex << std::setw(2) << std::setfill('0')
+                     << (unsigned char)payload[i] << " ";
+        }
+        std::cerr << std::dec << std::endl;
+
+        return "";
+    }
+
+    // Validate JSON completeness
+    if (!isJsonComplete(payload)) {
+        std::cerr << "[JsonRpcProtocol] JSON appears incomplete: " << payload << std::endl;
         return "";
     }
 

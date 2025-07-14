@@ -176,7 +176,15 @@ private:
     std::optional<std::string> readContentLengthHeader();
     std::string readJsonPayload(size_t content_length);
     void writeRawMessage(const std::string& json_content);
-    
+
+    // Windows-specific input stream configuration
+    void configureInputStreamForWindows();
+
+    // Enhanced reading methods for Windows compatibility
+    std::string readLine();
+    size_t parseContentLength(const std::string& header);
+    bool isJsonComplete(const std::string& json);
+
     // Message validation
     bool validateJsonRpcMessage(const nlohmann::json& json) const;
     JsonRpcMessageType determineMessageType(const nlohmann::json& json) const;
