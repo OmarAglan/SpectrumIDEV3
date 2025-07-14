@@ -19,7 +19,8 @@ RESOURCES += \
 INCLUDEPATH +=  ../Source/TextEditor \
                 ../Source/MenuBar   \
                 ../Source/Settings  \
-                ../source/Components    \
+                ../Source/Components    \
+                ../Source/LspClient    \
 
 SOURCES += \
     Spectrum.cpp \
@@ -31,6 +32,11 @@ SOURCES += \
     ../Source/MenuBar/SPMenu.cpp    \
     ../Source/Settings/SPSettings.cpp   \
     ../Source/Components/FlatButton.cpp \
+    ../Source/LspClient/SpectrumLspClient.cpp \
+    ../Source/LspClient/LspProcess.cpp \
+    ../Source/LspClient/LspProtocol.cpp \
+    ../Source/LspClient/LspFeatureManager.cpp \
+    ../Source/LspClient/DocumentManager.cpp \
 
 HEADERS += \
     Spectrum.h  \
@@ -41,6 +47,11 @@ HEADERS += \
     ../Source/MenuBar/SPMenu.h  \
     ../Source/Settings/SPSettings.h \
     ../Source/Components/FlatButton.h \
+    ../Source/LspClient/SpectrumLspClient.h \
+    ../Source/LspClient/LspProcess.h \
+    ../Source/LspClient/LspProtocol.h \
+    ../Source/LspClient/LspFeatureManager.h \
+    ../Source/LspClient/DocumentManager.h \
 
 
 
