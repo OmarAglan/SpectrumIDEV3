@@ -294,9 +294,9 @@ void LspServer::Impl::handleCompletionRequest(const RequestContext& context) {
             return;
         }
 
-        std::string uri = textDocument["uri"];
-        size_t line = position["line"];
-        size_t character = position["character"];
+        std::string uri = textDocument["uri"].get<std::string>();
+        size_t line = position["line"].get<size_t>();
+        size_t character = position["character"].get<size_t>();
 
         ALS_LOG_DEBUG("Completion request for ", uri, " at ", line, ":", character);
 

@@ -222,8 +222,8 @@ Token Lexer::tokenizeString(char quote) {
         if (prevPos < source_.length()) {
             // Simple check for Arabic 'م' (U+0645)
             // This is a simplified check - full UTF-8 handling would be more complex
-            if (static_cast<unsigned char>(source_[prevPos]) == 0xD9 && prevPos + 1 < source_.length() &&
-                static_cast<unsigned char>(source_[prevPos + 1]) == 0x85) {
+            if (static_cast<unsigned char>(source_[prevPos]) == 0xD9U && prevPos + 1 < source_.length() &&
+                static_cast<unsigned char>(source_[prevPos + 1]) == 0x85U) {
                 isFStringToken = true;
                 isFString_ = true;
                 quoteCount_++;
@@ -243,7 +243,7 @@ Token Lexer::tokenizeString(char quote) {
                 text += utf32ToString(getCurrentChar());
                 advance();
             }
-        } else if (ch == quote) {
+        } else if (ch == static_cast<char32_t>(quote)) {
             // Found closing quote
             text += utf32ToString(ch);
             advance();
