@@ -207,12 +207,8 @@ void Logger::EnableFile(bool enable) {
 void Logger::WriteToConsole(const LogEntry& entry) {
     std::string formatted = FormatLogEntry(entry, true); // Enable colors for console
 
-    // Write to stderr for warnings and errors, stdout for others
-    if (entry.level >= LogLevel::Warn) {
-        std::cerr << formatted << std::endl;
-    } else {
-        std::cout << formatted << std::endl;
-    }
+    // Write all logs to stderr to avoid interfering with LSP protocol on stdout
+    std::cerr << formatted << std::endl;
 }
 
 void Logger::WriteToFile(const LogEntry& entry) {
