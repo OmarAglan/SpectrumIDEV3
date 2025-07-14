@@ -3,6 +3,18 @@
 #include <QMutexLocker>
 #include <QStandardPaths>
 #include <QDir>
+#include <QDateTime>
+#include <QFileInfo>
+#include <QTextStream>
+#include <QRegularExpression>
+
+#ifdef Q_OS_WIN
+#include <windows.h>
+#include <psapi.h>
+#elif defined(Q_OS_MACOS)
+#include <mach/mach.h>
+#include <mach/task.h>
+#endif
 
 LspProcess::LspProcess(QObject* parent)
     : QObject(parent)
@@ -191,6 +203,141 @@ bool LspProcess::isAutoRestartEnabled() const
     return m_autoRestart;
 }
 
+int LspProcess::getRestartAttempts() const
+{
+    QMutexLocker locker(&m_stateMutex);
+    return m_restartAttempts;
+}
+
+void LspProcess::resetRestartAttempts()
+{
+    QMutexLocker locker(&m_stateMutex);
+    m_restartAttempts = 0;
+    qDebug() << "LspProcess: Restart attempts reset";
+}
+
+void LspProcess::setMaxRestartAttempts(int maxAttempts)
+{
+    QMutexLocker locker(&m_stateMutex);
+    m_maxRestartAttempts = maxAttempts;
+    qDebug() << "LspProcess: Max restart attempts set to" << maxAttempts;
+}
+
+qint64 LspProcess::getUptimeSeconds() const
+{
+    QMutexLocker locker(&m_stateMutex);
+    if (m_state != ProcessState::Running || !m_startTime.isValid()) {
+        return -1;
+    }
+    return m_startTime.secsTo(QDateTime::currentDateTime());
+}
+
+qint64 LspProcess::getMemoryUsageKB() const
+{
+    if (!isRunning()) {
+        return -1;
+    }
+
+    qint64 pid = processId();
+    if (pid == -1) {
+        return -1;
+    }
+
+#ifdef Q_OS_WIN
+    // Windows implementation using Windows API
+    HANDLE hProcess = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, pid);
+    if (hProcess == NULL) {
+        return -1;
+    }
+
+    PROCESS_MEMORY_COUNTERS pmc;
+    if (GetProcessMemoryInfo(hProcess, &pmc, sizeof(pmc))) {
+        CloseHandle(hProcess);
+        return pmc.WorkingSetSize / 1024; // Convert to KB
+    }
+    CloseHandle(hProcess);
+    return -1;
+#elif defined(Q_OS_LINUX)
+    // Linux implementation using /proc/[pid]/status
+    QFile statusFile(QString("/proc/%1/status").arg(pid));
+    if (!statusFile.open(QIODevice::ReadOnly)) {
+        return -1;
+    }
+
+    QTextStream stream(&statusFile);
+    QString line;
+    while (stream.readLineInto(&line)) {
+        if (line.startsWith("VmRSS:")) {
+            QStringList parts = line.split(QRegularExpression("\\s+"));
+            if (parts.size() >= 2) {
+                return parts[1].toLongLong();
+            }
+        }
+    }
+    return -1;
+#elif defined(Q_OS_MACOS)
+    // macOS implementation using task_info
+    task_t task;
+    if (task_for_pid(mach_task_self(), pid, &task) != KERN_SUCCESS) {
+        return -1;
+    }
+
+    task_basic_info_data_t info;
+    mach_msg_type_number_t count = TASK_BASIC_INFO_COUNT;
+    if (task_info(task, TASK_BASIC_INFO, (task_info_t)&info, &count) == KERN_SUCCESS) {
+        return info.resident_size / 1024; // Convert to KB
+    }
+    return -1;
+#else
+    // Fallback: not implemented for this platform
+    return -1;
+#endif
+}
+
+bool LspProcess::isResponsive() const
+{
+    QMutexLocker locker(&m_stateMutex);
+    return m_isResponsive;
+}
+
+bool LspProcess::sendHealthCheck()
+{
+    if (!isRunning()) {
+        return false;
+    }
+
+    // For now, we'll just check if the process is still running
+    // In a more advanced implementation, we could send a specific LSP request
+    return m_process->state() == QProcess::Running;
+}
+
+QString LspProcess::getLastError() const
+{
+    QMutexLocker locker(&m_stateMutex);
+    return m_lastError;
+}
+
+void LspProcess::setEnvironment(const QProcessEnvironment& environment)
+{
+    QMutexLocker locker(&m_stateMutex);
+    m_environment = environment;
+    qDebug() << "LspProcess: Environment updated";
+}
+
+void LspProcess::setWorkingDirectory(const QString& workingDir)
+{
+    QMutexLocker locker(&m_stateMutex);
+    m_workingDirectory = workingDir;
+    qDebug() << "LspProcess: Working directory set to" << workingDir;
+}
+
+void LspProcess::setArguments(const QStringList& arguments)
+{
+    QMutexLocker locker(&m_stateMutex);
+    m_arguments = arguments;
+    qDebug() << "LspProcess: Arguments set to" << arguments;
+}
+
 void LspProcess::onProcessStarted()
 {
     qDebug() << "LspProcess: Process started successfully";
@@ -255,10 +402,17 @@ void LspProcess::onProcessError(QProcess::ProcessError error)
             errorString = "Unknown error";
             break;
     }
-    
+
+    // Store last error
+    {
+        QMutexLocker locker(&m_stateMutex);
+        m_lastError = errorString;
+        m_isResponsive = false;
+    }
+
     qCritical() << "LspProcess: Process error:" << errorString;
     emit errorOccurred(errorString);
-    
+
     if (error == QProcess::FailedToStart || error == QProcess::Crashed) {
         setState(ProcessState::Crashed);
     }
@@ -273,14 +427,75 @@ void LspProcess::onProcessStateChanged(QProcess::ProcessState state)
 void LspProcess::onRestartTimer()
 {
     qDebug() << "LspProcess: Attempting restart" << (m_restartAttempts + 1);
-    
+
     m_restartAttempts++;
-    
+    emit restartAttempted(m_restartAttempts);
+
     if (!m_serverPath.isEmpty()) {
         start(m_serverPath);
     } else {
         qCritical() << "LspProcess: Cannot restart - no server path";
         emit errorOccurred("Cannot restart server - no server path");
+    }
+}
+
+void LspProcess::onHealthCheckTimer()
+{
+    if (!isRunning()) {
+        return;
+    }
+
+    qDebug() << "LspProcess: Performing health check";
+
+    bool responsive = sendHealthCheck();
+
+    {
+        QMutexLocker locker(&m_stateMutex);
+        if (!responsive) {
+            m_healthCheckFailures++;
+            m_isResponsive = false;
+
+            qWarning() << "LspProcess: Health check failed" << m_healthCheckFailures
+                      << "of" << MAX_HEALTH_CHECK_FAILURES;
+
+            if (m_healthCheckFailures >= MAX_HEALTH_CHECK_FAILURES) {
+                qCritical() << "LspProcess: Process unresponsive after"
+                           << MAX_HEALTH_CHECK_FAILURES << "failed health checks";
+                emit processUnresponsive();
+
+                // Trigger restart if auto-restart is enabled
+                if (m_autoRestart && m_restartAttempts < m_maxRestartAttempts) {
+                    qDebug() << "LspProcess: Triggering restart due to unresponsiveness";
+                    setState(ProcessState::Crashed);
+                    scheduleRestart();
+                }
+            }
+        } else {
+            // Reset failure count on successful health check
+            if (m_healthCheckFailures > 0) {
+                qDebug() << "LspProcess: Health check recovered";
+            }
+            m_healthCheckFailures = 0;
+            m_isResponsive = true;
+        }
+    }
+}
+
+void LspProcess::onMemoryCheckTimer()
+{
+    if (!isRunning()) {
+        return;
+    }
+
+    qint64 memoryKB = getMemoryUsageKB();
+    if (memoryKB > 0) {
+        qDebug() << "LspProcess: Memory usage:" << memoryKB << "KB";
+
+        if (memoryKB > m_memoryThresholdKB) {
+            qWarning() << "LspProcess: Memory usage" << memoryKB
+                      << "KB exceeds threshold" << m_memoryThresholdKB << "KB";
+            emit memoryThresholdExceeded(memoryKB);
+        }
     }
 }
 
@@ -312,6 +527,18 @@ void LspProcess::setupConnections()
 
 void LspProcess::cleanup()
 {
+    // Stop all timers
+    if (m_restartTimer) {
+        m_restartTimer->stop();
+    }
+    if (m_healthCheckTimer) {
+        m_healthCheckTimer->stop();
+    }
+    if (m_memoryCheckTimer) {
+        m_memoryCheckTimer->stop();
+    }
+
+    // Cleanup process
     if (m_process) {
         m_process->disconnect();
         if (m_process->state() != QProcess::NotRunning) {
@@ -319,14 +546,29 @@ void LspProcess::cleanup()
             m_process->waitForFinished(2000);
         }
     }
+
+    // Reset state
+    {
+        QMutexLocker locker(&m_stateMutex);
+        m_isResponsive = false;
+        m_healthCheckFailures = 0;
+        m_startTime = QDateTime();
+    }
 }
 
 void LspProcess::scheduleRestart()
 {
+    if (m_restartAttempts >= m_maxRestartAttempts) {
+        qCritical() << "LspProcess: Maximum restart attempts" << m_maxRestartAttempts << "reached";
+        emit maxRestartsReached();
+        return;
+    }
+
     if (m_restartTimer && !m_restartTimer->isActive()) {
         int delay = RESTART_DELAY_MS * (m_restartAttempts + 1); // Exponential backoff
         m_restartTimer->setInterval(delay);
         m_restartTimer->start();
-        qDebug() << "LspProcess: Restart scheduled in" << delay << "ms";
+        qDebug() << "LspProcess: Restart scheduled in" << delay << "ms (attempt"
+                 << (m_restartAttempts + 1) << "of" << m_maxRestartAttempts << ")";
     }
 }
