@@ -103,6 +103,71 @@ public:
      */
     bool isAutoRestartEnabled() const;
 
+    /**
+     * @brief Get restart attempt count
+     * @return Number of restart attempts made
+     */
+    int getRestartAttempts() const;
+
+    /**
+     * @brief Reset restart attempt counter
+     */
+    void resetRestartAttempts();
+
+    /**
+     * @brief Set maximum restart attempts
+     * @param maxAttempts Maximum number of restart attempts
+     */
+    void setMaxRestartAttempts(int maxAttempts);
+
+    /**
+     * @brief Get process uptime in seconds
+     * @return Process uptime or -1 if not running
+     */
+    qint64 getUptimeSeconds() const;
+
+    /**
+     * @brief Get process memory usage in KB
+     * @return Memory usage or -1 if unavailable
+     */
+    qint64 getMemoryUsageKB() const;
+
+    /**
+     * @brief Check if process is responsive
+     * @return true if process is responding to signals
+     */
+    bool isResponsive() const;
+
+    /**
+     * @brief Send signal to process for health check
+     * @return true if signal was sent successfully
+     */
+    bool sendHealthCheck();
+
+    /**
+     * @brief Get last error message
+     * @return Last error that occurred
+     */
+    QString getLastError() const;
+
+    /**
+     * @brief Set process environment variables
+     * @param environment Environment variables to set
+     */
+    void setEnvironment(const QProcessEnvironment& environment);
+
+    /**
+     * @brief Set process working directory
+     * @param workingDir Working directory path
+     */
+    void setWorkingDirectory(const QString& workingDir);
+
+    /**
+     * @brief Set process arguments
+     * @param arguments Command line arguments
+     */
+    void setArguments(const QStringList& arguments);
+
 signals:
     /**
      * @brief Emitted when process state changes
@@ -133,6 +198,28 @@ signals:
      */
     void finished(int exitCode, QProcess::ExitStatus exitStatus);
 
+    /**
+     * @brief Emitted when process becomes unresponsive
+     */
+    void processUnresponsive();
+
+    /**
+     * @brief Emitted when process memory usage exceeds threshold
+     * @param memoryKB Current memory usage in KB
+     */
+    void memoryThresholdExceeded(qint64 memoryKB);
+
+    /**
+     * @brief Emitted when restart attempt is made
+     * @param attemptNumber Current attempt number
+     */
+    void restartAttempted(int attemptNumber);
+
+    /**
+     * @brief Emitted when maximum restart attempts reached
+     */
+    void maxRestartsReached();
+
 private slots:
     /**
      * @brief Handle process started signal
@@ -158,6 +245,16 @@ private slots:
      * @brief Handle restart timer timeout
      */
     void onRestartTimer();
+
+    /**
+     * @brief Handle health check timer timeout
+     */
+    void onHealthCheckTimer();
+
+    /**
+     * @brief Handle memory monitoring timer timeout
+     */
+    void onMemoryCheckTimer();
 
 private:
     /**
@@ -189,10 +286,29 @@ private:
     int m_restartAttempts;
     int m_maxRestartAttempts;
     QTimer* m_restartTimer;
+    QTimer* m_healthCheckTimer;
+    QTimer* m_memoryCheckTimer;
     mutable QMutex m_stateMutex;
 
+    // Process configuration
+    QProcessEnvironment m_environment;
+    QString m_workingDirectory;
+    QStringList m_arguments;
+
+    // Monitoring data
+    QDateTime m_startTime;
+    QString m_lastError;
+    qint64 m_memoryThresholdKB;
+    bool m_isResponsive;
+    int m_healthCheckFailures;
+
+    // Constants
     static const int RESTART_DELAY_MS = 2000;
     static const int MAX_RESTART_ATTEMPTS = 3;
+    static const int HEALTH_CHECK_INTERVAL_MS = 30000;  // 30 seconds
+    static const int MEMORY_CHECK_INTERVAL_MS = 60000;  // 60 seconds
+    static const qint64 DEFAULT_MEMORY_THRESHOLD_KB = 512 * 1024;  // 512 MB
+    static const int MAX_HEALTH_CHECK_FAILURES = 3;
 };
 
 Q_DECLARE_METATYPE(LspProcess::ProcessState)

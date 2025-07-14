@@ -91,7 +91,7 @@ void SPEditor::updateLineNumberAreaWidth() {
     setViewportMargins(0, 0, width + 10, 0);
 }
 
-inline void SPEditor::updateLineNumberArea(const QRect &rect, int dy) {
+void SPEditor::updateLineNumberArea(const QRect &rect, int dy) {
     // Trigger a repaint of the line number area
     if (dy)
         lineNumberArea->scroll(0, dy);

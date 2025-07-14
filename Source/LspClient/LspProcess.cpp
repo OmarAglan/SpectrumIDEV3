@@ -12,14 +12,31 @@ LspProcess::LspProcess(QObject* parent)
     , m_restartAttempts(0)
     , m_maxRestartAttempts(MAX_RESTART_ATTEMPTS)
     , m_restartTimer(new QTimer(this))
+    , m_healthCheckTimer(new QTimer(this))
+    , m_memoryCheckTimer(new QTimer(this))
+    , m_memoryThresholdKB(DEFAULT_MEMORY_THRESHOLD_KB)
+    , m_isResponsive(true)
+    , m_healthCheckFailures(0)
 {
-    qDebug() << "LspProcess: Initializing process manager";
-    
+    qDebug() << "LspProcess: Initializing enhanced process manager";
+
     setupConnections();
-    
+
+    // Setup restart timer
     m_restartTimer->setSingleShot(true);
     m_restartTimer->setInterval(RESTART_DELAY_MS);
     connect(m_restartTimer, &QTimer::timeout, this, &LspProcess::onRestartTimer);
+
+    // Setup health check timer
+    m_healthCheckTimer->setInterval(HEALTH_CHECK_INTERVAL_MS);
+    connect(m_healthCheckTimer, &QTimer::timeout, this, &LspProcess::onHealthCheckTimer);
+
+    // Setup memory monitoring timer
+    m_memoryCheckTimer->setInterval(MEMORY_CHECK_INTERVAL_MS);
+    connect(m_memoryCheckTimer, &QTimer::timeout, this, &LspProcess::onMemoryCheckTimer);
+
+    // Set default environment
+    m_environment = QProcessEnvironment::systemEnvironment();
 }
 
 LspProcess::~LspProcess()
@@ -50,16 +67,18 @@ bool LspProcess::start(const QString& serverPath)
     setState(ProcessState::Starting);
     
     // Set up process environment
-    QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
-    m_process->setProcessEnvironment(env);
-    
-    // Set working directory to server directory
-    QFileInfo serverInfo(serverPath);
-    m_process->setWorkingDirectory(serverInfo.absolutePath());
-    
-    // Start the process with stdio communication
-    QStringList arguments;
-    arguments << "--stdio";  // Use stdio for LSP communication
+    m_process->setProcessEnvironment(m_environment);
+
+    // Set working directory
+    QString workingDir = m_workingDirectory.isEmpty() ?
+        QFileInfo(serverPath).absolutePath() : m_workingDirectory;
+    m_process->setWorkingDirectory(workingDir);
+
+    // Prepare arguments
+    QStringList arguments = m_arguments;
+    if (arguments.isEmpty()) {
+        arguments << "--stdio";  // Default to stdio for LSP communication
+    }
     
     qDebug() << "LspProcess: Starting process with arguments:" << arguments;
     m_process->start(serverPath, arguments);
@@ -87,7 +106,11 @@ void LspProcess::stop(int timeout)
     }
     
     setState(ProcessState::Stopping);
+
+    // Stop all monitoring timers
     m_restartTimer->stop();
+    m_healthCheckTimer->stop();
+    m_memoryCheckTimer->stop();
     
     if (m_process->state() == QProcess::Running) {
         // Try graceful shutdown first
@@ -173,6 +196,16 @@ void LspProcess::onProcessStarted()
     qDebug() << "LspProcess: Process started successfully";
     setState(ProcessState::Running);
     m_restartAttempts = 0; // Reset restart attempts on successful start
+    m_startTime = QDateTime::currentDateTime();
+    m_isResponsive = true;
+    m_healthCheckFailures = 0;
+    m_lastError.clear();
+
+    // Start monitoring timers
+    m_healthCheckTimer->start();
+    m_memoryCheckTimer->start();
+
+    qDebug() << "LspProcess: Monitoring started for PID:" << m_process->processId();
 }
 
 void LspProcess::onProcessFinished(int exitCode, QProcess::ExitStatus exitStatus)

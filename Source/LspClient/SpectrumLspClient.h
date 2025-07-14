@@ -164,16 +164,17 @@ signals:
      */
     void serverUnavailable();
 
+public:
+    /**
+     * @brief Destructor
+     */
+    ~SpectrumLspClient();
+
 protected:
     /**
      * @brief Protected constructor for singleton pattern
      */
     explicit SpectrumLspClient(QObject* parent = nullptr);
-
-    /**
-     * @brief Destructor
-     */
-    ~SpectrumLspClient();
 
 private slots:
     /**

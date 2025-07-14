@@ -9,6 +9,8 @@
 #include <QDir>
 #include <QCoreApplication>
 #include <QMutexLocker>
+#include <QJsonArray>
+#include <QFile>
 
 // Static member definitions
 std::unique_ptr<SpectrumLspClient> SpectrumLspClient::s_instance = nullptr;
@@ -292,6 +294,11 @@ void SpectrumLspClient::onServerProcessStateChanged()
             }
             break;
             
+        case LspProcess::ProcessState::Stopping:
+            // Process is being stopped gracefully
+            qDebug() << "SpectrumLspClient: Server process is stopping";
+            break;
+
         case LspProcess::ProcessState::Crashed:
         case LspProcess::ProcessState::Stopped:
             // Process stopped or crashed
@@ -299,7 +306,7 @@ void SpectrumLspClient::onServerProcessStateChanged()
                 qWarning() << "SpectrumLspClient: Server process unexpectedly stopped";
                 setConnectionState(ConnectionState::Reconnecting);
                 emit errorOccurred("ALS server process stopped unexpectedly");
-                
+
                 // Attempt restart after delay
                 QTimer::singleShot(2000, this, &SpectrumLspClient::restartServer);
             }

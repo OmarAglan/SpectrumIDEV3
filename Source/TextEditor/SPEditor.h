@@ -38,7 +38,7 @@ private:
 private slots:
     void updateLineNumberAreaWidth();
     void highlightCurrentLine();
-    inline void updateLineNumberArea(const QRect &rect, int dy);
+    void updateLineNumberArea(const QRect &rect, int dy);
 
 signals:
     void openRequest(QString filePath);
