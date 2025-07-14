@@ -12,6 +12,7 @@
 #include <QFutureWatcher>
 #include <QPromise>
 #include <functional>
+#include <queue>
 
 // Forward declaration
 class LspProcess;
@@ -380,8 +381,8 @@ private:
     LspProcess* m_process;
     QByteArray m_buffer;
     int m_requestIdCounter;
-    QMutex m_sendMutex;
-    QMutex m_requestMutex;
+    mutable QMutex m_sendMutex;
+    mutable QMutex m_requestMutex;
     bool m_initialized;
     bool m_ready;
     int m_defaultTimeoutMs;
