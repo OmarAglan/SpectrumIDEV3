@@ -3,6 +3,7 @@
 #include "LspProtocol.h"
 #include "LspFeatureManager.h"
 #include "DocumentManager.h"
+#include "ErrorManager.h"
 
 #include <QDebug>
 #include <QStandardPaths>
@@ -28,10 +29,14 @@ SpectrumLspClient& SpectrumLspClient::instance()
 SpectrumLspClient::SpectrumLspClient(QObject* parent)
     : QObject(parent)
     , m_connectionState(ConnectionState::Disconnected)
+    , m_gracefulDegradationEnabled(true)
     , m_connectionTimer(new QTimer(this))
     , m_healthTimer(new QTimer(this))
 {
-    qDebug() << "SpectrumLspClient: Initializing LSP client";
+    qDebug() << "SpectrumLspClient: Initializing enhanced LSP client with error management";
+
+    // Initialize error manager first
+    m_errorManager = std::make_unique<ErrorManager>(this);
 
     // Initialize default feature states
     m_enabledFeatures["completion"] = true;
@@ -48,6 +53,12 @@ SpectrumLspClient::SpectrumLspClient(QObject* parent)
 
     m_healthTimer->setInterval(30000); // 30 second health check
     connect(m_healthTimer, &QTimer::timeout, this, &SpectrumLspClient::onHealthCheck);
+
+    // Connect error manager signals
+    connect(m_errorManager.get(), &ErrorManager::criticalErrorOccurred,
+            this, &SpectrumLspClient::onCriticalError);
+    connect(m_errorManager.get(), &ErrorManager::componentDegraded,
+            this, &SpectrumLspClient::onComponentDegraded);
 
     qDebug() << "SpectrumLspClient: Initialization complete";
 }
@@ -73,8 +84,16 @@ bool SpectrumLspClient::initialize(const QString& alsServerPath, const QString& 
 
     // Validate server path
     if (alsServerPath.isEmpty() || !QFile::exists(alsServerPath)) {
-        qCritical() << "SpectrumLspClient: ALS server not found at:" << alsServerPath;
-        emit errorOccurred(QString("ALS server not found: %1").arg(alsServerPath));
+        QString error = QString("ALS server not found: %1").arg(alsServerPath);
+        qCritical() << "SpectrumLspClient:" << error;
+
+        if (m_errorManager) {
+            m_errorManager->reportError(ErrorSeverity::Critical, ErrorCategory::ConfigurationError,
+                                       "SpectrumLspClient", error,
+                                       QString("Server path: %1").arg(alsServerPath));
+        }
+
+        emit errorOccurred(error);
         return false;
     }
 
@@ -309,6 +328,69 @@ bool SpectrumLspClient::isServerResponsive() const
     return m_process->isResponsive() && isConnected();
 }
 
+ErrorManager* SpectrumLspClient::getErrorManager() const
+{
+    return m_errorManager.get();
+}
+
+void SpectrumLspClient::setGracefulDegradationEnabled(bool enabled)
+{
+    m_gracefulDegradationEnabled = enabled;
+    qDebug() << "SpectrumLspClient: Graceful degradation" << (enabled ? "enabled" : "disabled");
+}
+
+bool SpectrumLspClient::isComponentDegraded(const QString& component) const
+{
+    if (!m_errorManager) {
+        return false;
+    }
+    return m_errorManager->isComponentDegraded(component);
+}
+
+QJsonObject SpectrumLspClient::getSystemHealth() const
+{
+    QJsonObject health;
+
+    // Connection status
+    health["connected"] = isConnected();
+    health["connectionState"] = static_cast<int>(m_connectionState);
+    health["serverResponsive"] = isServerResponsive();
+
+    // Process status
+    if (m_process) {
+        health["processRunning"] = m_process->isRunning();
+        health["processState"] = static_cast<int>(m_process->getState());
+        health["processUptime"] = m_process->getUptimeSeconds();
+        health["processMemoryKB"] = m_process->getMemoryUsageKB();
+        health["restartAttempts"] = m_process->getRestartAttempts();
+    }
+
+    // Error statistics
+    if (m_errorManager) {
+        health["errorStatistics"] = m_errorManager->getErrorStatistics();
+    }
+
+    // Feature status
+    QJsonObject features;
+    for (auto it = m_enabledFeatures.begin(); it != m_enabledFeatures.end(); ++it) {
+        features[it.key()] = it.value();
+    }
+    health["features"] = features;
+
+    // Server capabilities
+    QJsonObject capabilities;
+    capabilities["completion"] = m_serverCapabilities.completion;
+    capabilities["hover"] = m_serverCapabilities.hover;
+    capabilities["definition"] = m_serverCapabilities.definition;
+    capabilities["references"] = m_serverCapabilities.references;
+    capabilities["documentSymbol"] = m_serverCapabilities.documentSymbol;
+    capabilities["workspaceSymbol"] = m_serverCapabilities.workspaceSymbol;
+    capabilities["diagnostics"] = m_serverCapabilities.diagnostics;
+    health["serverCapabilities"] = capabilities;
+
+    return health;
+}
+
 void SpectrumLspClient::setConnectionState(ConnectionState state)
 {
     if (m_connectionState != state) {
@@ -408,6 +490,13 @@ void SpectrumLspClient::onConnectionTimeout()
 
     if (m_connectionState == ConnectionState::Connecting ||
         m_connectionState == ConnectionState::Initializing) {
+
+        // Report timeout error
+        if (m_errorManager) {
+            m_errorManager->reportError(ErrorSeverity::Error, ErrorCategory::TimeoutError,
+                                       "SpectrumLspClient", "Connection to ALS server timed out",
+                                       QString("Connection state: %1").arg(static_cast<int>(m_connectionState)));
+        }
 
         emit errorOccurred("Connection to ALS server timed out");
         setConnectionState(ConnectionState::Disconnected);
@@ -516,6 +605,13 @@ void SpectrumLspClient::onMaxRestartsReached()
 {
     qCritical() << "SpectrumLspClient: Maximum restart attempts reached for ALS server";
 
+    // Report to error manager
+    if (m_errorManager) {
+        m_errorManager->reportError(ErrorSeverity::Critical, ErrorCategory::ProcessError,
+                                   "LspProcess", "Maximum restart attempts reached",
+                                   "ALS server failed to restart after maximum attempts");
+    }
+
     setConnectionState(ConnectionState::Disconnected);
     emit errorOccurred("ALS server failed to restart after maximum attempts");
     emit serverUnavailable();
@@ -523,6 +619,51 @@ void SpectrumLspClient::onMaxRestartsReached()
     // Disable auto-restart to prevent infinite restart loops
     if (m_process) {
         m_process->setAutoRestart(false);
+    }
+}
+
+void SpectrumLspClient::onCriticalError(const ErrorInfo& errorInfo)
+{
+    qCritical() << "SpectrumLspClient: Critical error in" << errorInfo.component
+                << ":" << errorInfo.message;
+
+    // Handle critical errors based on component
+    if (errorInfo.component == "LspProcess") {
+        // Process-related critical error
+        if (m_gracefulDegradationEnabled) {
+            qDebug() << "SpectrumLspClient: Entering graceful degradation mode";
+            setConnectionState(ConnectionState::Disconnected);
+        }
+    } else if (errorInfo.component == "LspProtocol") {
+        // Protocol-related critical error
+        if (m_gracefulDegradationEnabled) {
+            qDebug() << "SpectrumLspClient: Protocol error - attempting reconnection";
+            QTimer::singleShot(5000, this, &SpectrumLspClient::restartServer);
+        }
+    }
+
+    // Emit error to UI
+    emit errorOccurred(QString("Critical error in %1: %2")
+                      .arg(errorInfo.component, errorInfo.message));
+}
+
+void SpectrumLspClient::onComponentDegraded(const QString& component, const QString& reason)
+{
+    qWarning() << "SpectrumLspClient: Component" << component << "degraded:" << reason;
+
+    // Handle component degradation
+    if (component == "LspProcess") {
+        // Disable features that require the process
+        if (m_gracefulDegradationEnabled) {
+            setFeatureEnabled("completion", false);
+            setFeatureEnabled("hover", false);
+            setFeatureEnabled("diagnostics", false);
+
+            emit errorOccurred(QString("ALS server unavailable - language features disabled"));
+        }
+    } else if (component == "DocumentManager") {
+        // Document sync issues - warn user but continue
+        emit errorOccurred(QString("Document synchronization issues detected"));
     }
 }
 

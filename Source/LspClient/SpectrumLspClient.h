@@ -17,6 +17,8 @@ class LspProcess;
 class LspProtocol;
 class LspFeatureManager;
 class DocumentManager;
+class ErrorManager;
+struct ErrorInfo;
 
 /**
  * @brief Main LSP client orchestrator for SpectrumIDE
@@ -143,6 +145,31 @@ public:
      */
     bool isServerResponsive() const;
 
+    /**
+     * @brief Get error manager instance
+     * @return Error manager reference
+     */
+    ErrorManager* getErrorManager() const;
+
+    /**
+     * @brief Enable/disable graceful degradation
+     * @param enabled Whether to enable graceful degradation
+     */
+    void setGracefulDegradationEnabled(bool enabled);
+
+    /**
+     * @brief Check if component is in degraded mode
+     * @param component Component name
+     * @return true if component is degraded
+     */
+    bool isComponentDegraded(const QString& component) const;
+
+    /**
+     * @brief Get system health status
+     * @return JSON object with health information
+     */
+    QJsonObject getSystemHealth() const;
+
 public slots:
     /**
      * @brief Request server restart (e.g., after configuration changes)
@@ -232,6 +259,19 @@ private slots:
      */
     void onMaxRestartsReached();
 
+    /**
+     * @brief Handle critical error from error manager
+     * @param errorInfo Error information
+     */
+    void onCriticalError(const ErrorInfo& errorInfo);
+
+    /**
+     * @brief Handle component degradation
+     * @param component Component name
+     * @param reason Degradation reason
+     */
+    void onComponentDegraded(const QString& component, const QString& reason);
+
 private:
     /**
      * @brief Set connection state and emit signal
@@ -261,6 +301,7 @@ private:
     std::unique_ptr<LspProtocol> m_protocol;
     std::unique_ptr<LspFeatureManager> m_featureManager;
     std::unique_ptr<DocumentManager> m_documentManager;
+    std::unique_ptr<ErrorManager> m_errorManager;
 
     // State management
     ConnectionState m_connectionState;
@@ -268,6 +309,7 @@ private:
     QString m_alsServerPath;
     QString m_workspaceRoot;
     QMap<QString, bool> m_enabledFeatures;
+    bool m_gracefulDegradationEnabled;
 
     // Timers and monitoring
     QTimer* m_connectionTimer;
