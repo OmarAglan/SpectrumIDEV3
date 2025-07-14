@@ -4,6 +4,9 @@
 #include <QProcess>
 #include <QTimer>
 #include <QMutex>
+#include <QDateTime>
+#include <QProcessEnvironment>
+#include <QStringList>
 
 /**
  * @brief Manages the ALS server process lifecycle
