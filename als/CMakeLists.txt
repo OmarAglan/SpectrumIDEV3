@@ -122,12 +122,18 @@ set(ALS_SOURCES
     src/core/ServerConfig.cpp
     src/core/Utils.cpp
     src/logging/Logger.cpp
+    src/analysis/Token.cpp
+    src/analysis/Lexer.cpp
+    src/features/CompletionProvider.cpp
 )
 
 set(ALS_HEADERS
     include/als/core/LspServer.h
     include/als/core/ServerConfig.h
     include/als/logging/Logger.h
+    src/analysis/Token.h
+    src/analysis/Lexer.h
+    src/features/CompletionProvider.h
 )
 
 # Create main executable

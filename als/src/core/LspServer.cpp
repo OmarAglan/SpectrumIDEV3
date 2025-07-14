@@ -7,6 +7,7 @@
 #include "als/core/JsonRpcProtocol.h"
 #include "als/core/ThreadPool.h"
 #include "als/core/RequestDispatcher.h"
+#include "als/features/CompletionProvider.h"
 #include "als/logging/Logger.h"
 #include <iostream>
 #include <nlohmann/json.hpp>
@@ -29,6 +30,9 @@ public:
         // Initialize RequestDispatcher
         dispatcher_ = std::make_unique<RequestDispatcher>(protocol_, *threadPool_);
 
+        // Initialize CompletionProvider
+        completionProvider_ = std::make_unique<features::CompletionProvider>();
+
         // Add middleware
         dispatcher_->addMiddleware(std::make_unique<LoggingMiddleware>());
         dispatcher_->addMiddleware(std::make_unique<MetricsMiddleware>());
@@ -36,7 +40,7 @@ public:
         // Register LSP handlers
         registerLspHandlers();
 
-        ALS_LOG_INFO("RequestDispatcher initialized with middleware");
+        ALS_LOG_INFO("RequestDispatcher initialized with middleware and completion provider");
     }
     
     ~Impl() {
@@ -134,6 +138,7 @@ private:
     JsonRpcProtocol protocol_;
     std::unique_ptr<ThreadPool> threadPool_;
     std::unique_ptr<RequestDispatcher> dispatcher_;
+    std::unique_ptr<features::CompletionProvider> completionProvider_;
 
     // LSP handler registration
     void registerLspHandlers();
@@ -141,6 +146,7 @@ private:
     // LSP request handlers
     void handleInitializeRequest(const RequestContext& context);
     void handleShutdownRequest(const RequestContext& context);
+    void handleCompletionRequest(const RequestContext& context);
 
     // LSP notification handlers
     void handleDidOpenNotification(const JsonRpcNotification& notification);
@@ -189,6 +195,11 @@ void LspServer::Impl::registerLspHandlers() {
         handleShutdownRequest(context);
     });
 
+    // Register completion request handler
+    dispatcher_->registerRequestHandler("textDocument/completion", [this](const RequestContext& context) {
+        handleCompletionRequest(context);
+    });
+
     // Register textDocument/didOpen notification handler
     dispatcher_->registerNotificationHandler("textDocument/didOpen", [this](const JsonRpcNotification& notification) {
         handleDidOpenNotification(notification);
@@ -221,7 +232,7 @@ void LspServer::Impl::handleInitializeRequest(const RequestContext& context) {
             {"textDocumentSync", 1}, // Full document sync
             {"hoverProvider", false},
             {"completionProvider", nlohmann::json{
-                {"triggerCharacters", nlohmann::json::array()}
+                {"triggerCharacters", nlohmann::json::array({".", " ", "(", "[", "{"})}
             }},
             {"definitionProvider", false},
             {"referencesProvider", false}
@@ -263,6 +274,52 @@ void LspServer::Impl::handleExitNotification(const JsonRpcNotification& notifica
     (void)notification; // Mark as intentionally unused
     ALS_LOG_INFO("Handling LSP exit notification");
     running_ = false;
+}
+
+void LspServer::Impl::handleCompletionRequest(const RequestContext& context) {
+    ALS_LOG_INFO("Handling textDocument/completion request");
+
+    try {
+        // Extract parameters from request
+        if (!context.params.contains("textDocument") || !context.params.contains("position")) {
+            context.error(-32602, "Invalid params: missing textDocument or position", nlohmann::json{});
+            return;
+        }
+
+        auto textDocument = context.params["textDocument"];
+        auto position = context.params["position"];
+
+        if (!textDocument.contains("uri") || !position.contains("line") || !position.contains("character")) {
+            context.error(-32602, "Invalid params: missing uri, line, or character", nlohmann::json{});
+            return;
+        }
+
+        std::string uri = textDocument["uri"];
+        size_t line = position["line"];
+        size_t character = position["character"];
+
+        ALS_LOG_DEBUG("Completion request for ", uri, " at ", line, ":", character);
+
+        // For now, provide basic completion without document content
+        // In a full implementation, we would retrieve document content from a document manager
+        std::string documentContent = ""; // TODO: Get actual document content
+
+        // Create completion context
+        auto completionContext = completionProvider_->createContext(uri, documentContent, line, character);
+
+        // Get completions
+        auto completions = completionProvider_->provideCompletions(completionContext);
+
+        // Convert to JSON and respond
+        auto result = completionProvider_->toJson(completions);
+        context.respond(result);
+
+        ALS_LOG_DEBUG("Provided ", completions.size(), " completion items");
+
+    } catch (const std::exception& e) {
+        ALS_LOG_ERROR("Error in completion request: ", e.what());
+        context.error(-32603, "Internal error", nlohmann::json{{"details", e.what()}});
+    }
 }
 
 } // namespace core
