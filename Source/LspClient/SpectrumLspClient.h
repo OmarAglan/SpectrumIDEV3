@@ -124,6 +124,25 @@ public:
      */
     bool isFeatureEnabled(const QString& feature) const;
 
+    /**
+     * @brief Configure process management settings
+     * @param maxRestartAttempts Maximum number of restart attempts
+     * @param autoRestart Whether to enable automatic restart
+     */
+    void configureProcessManagement(int maxRestartAttempts = 3, bool autoRestart = true);
+
+    /**
+     * @brief Get process management statistics
+     * @return JSON object with process stats
+     */
+    QJsonObject getProcessStatistics() const;
+
+    /**
+     * @brief Check if ALS server process is responsive
+     * @return true if process is responsive
+     */
+    bool isServerResponsive() const;
+
 public slots:
     /**
      * @brief Request server restart (e.g., after configuration changes)
@@ -196,6 +215,22 @@ private slots:
      * @brief Handle periodic health check
      */
     void onHealthCheck();
+
+    /**
+     * @brief Handle process becoming unresponsive
+     */
+    void onProcessUnresponsive();
+
+    /**
+     * @brief Handle memory threshold exceeded
+     * @param memoryKB Current memory usage in KB
+     */
+    void onMemoryThresholdExceeded(qint64 memoryKB);
+
+    /**
+     * @brief Handle maximum restart attempts reached
+     */
+    void onMaxRestartsReached();
 
 private:
     /**

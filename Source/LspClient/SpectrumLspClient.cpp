@@ -98,6 +98,14 @@ bool SpectrumLspClient::initialize(const QString& alsServerPath, const QString& 
         // Connect component signals
         connect(m_process.get(), &LspProcess::stateChanged,
                 this, &SpectrumLspClient::onServerProcessStateChanged);
+        connect(m_process.get(), &LspProcess::errorOccurred,
+                this, &SpectrumLspClient::errorOccurred);
+        connect(m_process.get(), &LspProcess::processUnresponsive,
+                this, &SpectrumLspClient::onProcessUnresponsive);
+        connect(m_process.get(), &LspProcess::memoryThresholdExceeded,
+                this, &SpectrumLspClient::onMemoryThresholdExceeded);
+        connect(m_process.get(), &LspProcess::maxRestartsReached,
+                this, &SpectrumLspClient::onMaxRestartsReached);
 
         connect(m_protocol.get(), &LspProtocol::initializeResponseReceived,
                 this, &SpectrumLspClient::onInitializeResponse);
@@ -248,14 +256,57 @@ void SpectrumLspClient::restartServer()
 void SpectrumLspClient::onConfigurationChanged()
 {
     qDebug() << "SpectrumLspClient: Configuration changed, notifying components";
-    
+
     if (m_featureManager) {
         m_featureManager->onConfigurationChanged();
     }
-    
+
     if (m_documentManager) {
         m_documentManager->onConfigurationChanged();
     }
+}
+
+void SpectrumLspClient::configureProcessManagement(int maxRestartAttempts, bool autoRestart)
+{
+    qDebug() << "SpectrumLspClient: Configuring process management - max restarts:"
+             << maxRestartAttempts << "auto-restart:" << autoRestart;
+
+    if (m_process) {
+        m_process->setMaxRestartAttempts(maxRestartAttempts);
+        m_process->setAutoRestart(autoRestart);
+    }
+}
+
+QJsonObject SpectrumLspClient::getProcessStatistics() const
+{
+    QJsonObject stats;
+
+    if (!m_process) {
+        stats["error"] = "Process not initialized";
+        return stats;
+    }
+
+    stats["state"] = static_cast<int>(m_connectionState);
+    stats["processState"] = static_cast<int>(m_process->getState());
+    stats["isRunning"] = m_process->isRunning();
+    stats["isResponsive"] = m_process->isResponsive();
+    stats["restartAttempts"] = m_process->getRestartAttempts();
+    stats["autoRestartEnabled"] = m_process->isAutoRestartEnabled();
+    stats["uptimeSeconds"] = m_process->getUptimeSeconds();
+    stats["memoryUsageKB"] = m_process->getMemoryUsageKB();
+    stats["processId"] = m_process->processId();
+    stats["lastError"] = m_process->getLastError();
+
+    return stats;
+}
+
+bool SpectrumLspClient::isServerResponsive() const
+{
+    if (!m_process) {
+        return false;
+    }
+
+    return m_process->isResponsive() && isConnected();
 }
 
 void SpectrumLspClient::setConnectionState(ConnectionState state)
@@ -440,6 +491,39 @@ void SpectrumLspClient::setupHealthMonitoring()
 {
     qDebug() << "SpectrumLspClient: Setting up health monitoring";
     m_healthTimer->start();
+}
+
+void SpectrumLspClient::onProcessUnresponsive()
+{
+    qWarning() << "SpectrumLspClient: ALS server process became unresponsive";
+
+    if (m_connectionState == ConnectionState::Connected) {
+        setConnectionState(ConnectionState::Reconnecting);
+        emit errorOccurred("ALS server became unresponsive");
+    }
+}
+
+void SpectrumLspClient::onMemoryThresholdExceeded(qint64 memoryKB)
+{
+    qWarning() << "SpectrumLspClient: ALS server memory usage exceeded threshold:" << memoryKB << "KB";
+
+    // Log memory usage but don't take drastic action yet
+    // In the future, we could implement memory-based restart policies
+    emit errorOccurred(QString("ALS server high memory usage: %1 KB").arg(memoryKB));
+}
+
+void SpectrumLspClient::onMaxRestartsReached()
+{
+    qCritical() << "SpectrumLspClient: Maximum restart attempts reached for ALS server";
+
+    setConnectionState(ConnectionState::Disconnected);
+    emit errorOccurred("ALS server failed to restart after maximum attempts");
+    emit serverUnavailable();
+
+    // Disable auto-restart to prevent infinite restart loops
+    if (m_process) {
+        m_process->setAutoRestart(false);
+    }
 }
 
 void SpectrumLspClient::cleanup()
