@@ -10,6 +10,11 @@
 #include <QCoreApplication>
 #include <QTextStream>
 #include <QApplication>
+#include <QTimer>
+#include <QFile>
+#include <QDir>
+// LSP Client
+#include "../Source/LspClient/SpectrumLspClient.h"
 
 
 Spectrum::Spectrum(const QString& filePath, QWidget *parent)
@@ -53,9 +58,17 @@ Spectrum::Spectrum(const QString& filePath, QWidget *parent)
         this->openFile(filePath);
     }
 
+    // Initialize LSP Client for Alif language support (delayed and optional)
+    // Comment out for now to prevent hanging - can be enabled later
+    // QTimer::singleShot(1000, this, &Spectrum::initializeLspClient);
+
     // Create a shortcut for Ctrl+S
     QShortcut* saveShortcut = new QShortcut(QKeySequence::Save, this);
     connect(saveShortcut, &QShortcut::activated, this, &Spectrum::saveFile);
+
+    // Create a shortcut for Ctrl+L to enable LSP manually
+    QShortcut* lspShortcut = new QShortcut(QKeySequence("Ctrl+L"), this);
+    connect(lspShortcut, &QShortcut::activated, this, &Spectrum::initializeLspClient);
 
     connect(menuBar, &SPMenuBar::newRequested, this, &Spectrum::newFile);
     connect(menuBar, &SPMenuBar::openRequested, this, [this](){this->openFile("");});
@@ -351,13 +364,102 @@ void Spectrum::onModificationChanged(bool modified) {
     this->setWindowModified(modified);
 }
 
+void Spectrum::initializeLspClient()
+{
+    qDebug() << "Spectrum: Initializing LSP client for Alif language support";
 
+    try {
+        // Get the ALS server path (relative to application directory)
+        QString appDir = QCoreApplication::applicationDirPath();
+        QString alsServerPath = appDir + "/alif-language-server.exe";
 
+        // Use current directory as workspace root for now
+        QString workspaceRoot = QDir::currentPath();
 
+        qDebug() << "Spectrum: ALS server path:" << alsServerPath;
+        qDebug() << "Spectrum: Workspace root:" << workspaceRoot;
 
+        // Check if ALS server exists before proceeding
+        if (!QFile::exists(alsServerPath)) {
+            qWarning() << "Spectrum: ALS server not found at:" << alsServerPath;
+            qWarning() << "Spectrum: LSP features will not be available";
+            return;
+        }
 
+        // Get LSP client instance
+        SpectrumLspClient& lspClient = SpectrumLspClient::instance();
 
+        // Connect LSP client signals with queued connections to prevent blocking
+        connect(&lspClient, &SpectrumLspClient::serverReady, this, &Spectrum::onLspServerReady, Qt::QueuedConnection);
+        connect(&lspClient, &SpectrumLspClient::errorOccurred, this, &Spectrum::onLspError, Qt::QueuedConnection);
 
+        // Add a timeout to prevent hanging
+        QTimer* timeoutTimer = new QTimer(this);
+        timeoutTimer->setSingleShot(true);
+        timeoutTimer->setInterval(5000); // 5 second timeout
 
+        connect(timeoutTimer, &QTimer::timeout, [this]() {
+            qWarning() << "Spectrum: LSP initialization timed out - disabling LSP features";
+        });
+
+        connect(&lspClient, &SpectrumLspClient::serverReady, timeoutTimer, &QTimer::stop);
+        connect(&lspClient, &SpectrumLspClient::errorOccurred, timeoutTimer, &QTimer::stop);
+
+        timeoutTimer->start();
+
+        // Initialize and start LSP client with error handling
+        bool initSuccess = false;
+        bool startSuccess = false;
+
+        try {
+            initSuccess = lspClient.initialize(alsServerPath, workspaceRoot);
+        } catch (...) {
+            qWarning() << "Spectrum: Exception during LSP initialize - continuing without LSP";
+            return;
+        }
+
+        if (initSuccess) {
+            qDebug() << "Spectrum: LSP client initialized successfully";
+
+            try {
+                startSuccess = lspClient.start();
+            } catch (...) {
+                qWarning() << "Spectrum: Exception during LSP start - continuing without LSP";
+                return;
+            }
+
+            if (startSuccess) {
+                qDebug() << "Spectrum: LSP client started successfully";
+            } else {
+                qWarning() << "Spectrum: Failed to start LSP client - continuing without LSP features";
+            }
+        } else {
+            qWarning() << "Spectrum: Failed to initialize LSP client - continuing without LSP features";
+        }
+
+    } catch (const std::exception& e) {
+        qCritical() << "Spectrum: Exception during LSP initialization:" << e.what();
+        qWarning() << "Spectrum: Continuing without LSP features";
+    } catch (...) {
+        qCritical() << "Spectrum: Unknown exception during LSP initialization";
+        qWarning() << "Spectrum: Continuing without LSP features";
+    }
+}
+
+void Spectrum::onLspServerReady()
+{
+    qDebug() << "Spectrum: LSP server is ready! Alif language features are now available.";
+
+    // You can show a status message to the user here
+    // For example: statusBar()->showMessage("Alif Language Server connected", 3000);
+}
+
+void Spectrum::onLspError(const QString& error)
+{
+    qWarning() << "Spectrum: LSP error:" << error;
+
+    // You can show an error message to the user here
+    // For example: QMessageBox::warning(this, "Language Server Error", error);
+}
 
 

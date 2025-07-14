@@ -34,7 +34,12 @@ private slots:
     void updateWindowTitle();
     void onModificationChanged(bool modified);
 
+    // LSP Client slots
+    void onLspServerReady();
+    void onLspError(const QString& error);
+
 private:
+    void initializeLspClient();
     int needSave();
 
 private:
