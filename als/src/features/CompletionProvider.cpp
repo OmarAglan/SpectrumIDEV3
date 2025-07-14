@@ -6,6 +6,7 @@
 #include "CompletionProvider.h"
 #include <algorithm>
 #include <sstream>
+#include <set>
 
 namespace als {
 namespace features {

@@ -7,7 +7,7 @@
 #include "als/core/JsonRpcProtocol.h"
 #include "als/core/ThreadPool.h"
 #include "als/core/RequestDispatcher.h"
-#include "als/features/CompletionProvider.h"
+#include "../features/CompletionProvider.h"
 #include "als/logging/Logger.h"
 #include <iostream>
 #include <nlohmann/json.hpp>

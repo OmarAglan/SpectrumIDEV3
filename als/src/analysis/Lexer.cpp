@@ -222,7 +222,7 @@ Token Lexer::tokenizeString(char quote) {
         if (prevPos < source_.length()) {
             // Simple check for Arabic 'م' (U+0645)
             // This is a simplified check - full UTF-8 handling would be more complex
-            if (source_[prevPos] == '\xD9' && prevPos + 1 < source_.length() && 
+            if (static_cast<unsigned char>(source_[prevPos]) == 0xD9 && prevPos + 1 < source_.length() &&
                 static_cast<unsigned char>(source_[prevPos + 1]) == 0x85) {
                 isFStringToken = true;
                 isFString_ = true;
@@ -420,7 +420,7 @@ bool Lexer::isPunctuationChar(char32_t ch) const {
 }
 
 char32_t Lexer::readUtf8Char() const {
-    if (isAtEnd()) {
+    if (pos_ >= source_.length()) {
         return 0;
     }
 

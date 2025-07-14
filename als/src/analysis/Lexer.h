@@ -149,7 +149,7 @@ private:
     bool isPunctuationChar(char32_t ch) const;
     
     // UTF-8 handling
-    char32_t readUtf8Char();
+    char32_t readUtf8Char() const;
     size_t utf8CharLength(char ch) const;
     std::string utf32ToString(char32_t ch) const;
     
