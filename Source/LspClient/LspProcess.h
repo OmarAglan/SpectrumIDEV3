@@ -49,7 +49,7 @@ public:
      * @param serverPath Path to the ALS server executable
      * @return true if process started successfully
      */
-    bool start(const QString& serverPath);
+    bool start(const QString& serverPath, const QStringList& arguments);
 
     /**
      * @brief Stop the ALS server process

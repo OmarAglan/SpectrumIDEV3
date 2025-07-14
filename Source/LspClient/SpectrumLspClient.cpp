@@ -162,8 +162,11 @@ bool SpectrumLspClient::start()
 
     setConnectionState(ConnectionState::Connecting);
 
-    // Start the ALS server process
-    if (!m_process->start(m_alsServerPath)) {
+    // Start the ALS server process with --stdio argument for LSP communication
+    QStringList arguments;
+    arguments << "--stdio";
+
+    if (!m_process->start(m_alsServerPath, arguments)) {
         qCritical() << "SpectrumLspClient: Failed to start ALS server";
         setConnectionState(ConnectionState::Disconnected);
         emit errorOccurred("Failed to start ALS server");

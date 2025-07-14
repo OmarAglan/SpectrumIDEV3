@@ -371,7 +371,15 @@ void Spectrum::initializeLspClient()
     try {
         // Get the ALS server path (relative to application directory)
         QString appDir = QCoreApplication::applicationDirPath();
-        QString alsServerPath = appDir + "/alif-language-server.exe";
+
+        // Get the platform-specific executable name
+        QString alsServerExecutable;
+#if defined(Q_OS_WIN)
+        alsServerExecutable = "alif-language-server.exe";
+#else
+        alsServerExecutable = "alif-language-server";
+#endif
+        QString alsServerPath = appDir + "/" + alsServerExecutable;
 
         // Use current directory as workspace root for now
         QString workspaceRoot = QDir::currentPath();

@@ -7,6 +7,7 @@
 #include <QFileInfo>
 #include <QTextStream>
 #include <QRegularExpression>
+#include <QCoreApplication>
 
 #ifdef Q_OS_WIN
 #include <windows.h>
@@ -58,11 +59,11 @@ LspProcess::~LspProcess()
     cleanup();
 }
 
-bool LspProcess::start(const QString& serverPath)
+bool LspProcess::start(const QString& serverPath, const QStringList& arguments)
 {
     QMutexLocker locker(&m_stateMutex);
     
-    qDebug() << "LspProcess: Starting ALS server:" << serverPath;
+    qDebug() << "LspProcess: Asynchronously starting ALS server:" << serverPath;
     
     if (m_state != ProcessState::Stopped) {
         qWarning() << "LspProcess: Process already running or starting";
@@ -71,39 +72,22 @@ bool LspProcess::start(const QString& serverPath)
     
     if (serverPath.isEmpty() || !QFile::exists(serverPath)) {
         qCritical() << "LspProcess: Server executable not found:" << serverPath;
-        emit errorOccurred(QString("Server executable not found: %1").arg(serverPath));
+        // The onProcessError slot will handle the state change and signal emission
         return false;
     }
     
     m_serverPath = serverPath;
+    m_arguments = arguments;  // Store arguments for potential restart
     setState(ProcessState::Starting);
-    
-    // Set up process environment
+
     m_process->setProcessEnvironment(m_environment);
+    m_process->setWorkingDirectory(QCoreApplication::applicationDirPath());
 
-    // Set working directory
-    QString workingDir = m_workingDirectory.isEmpty() ?
-        QFileInfo(serverPath).absolutePath() : m_workingDirectory;
-    m_process->setWorkingDirectory(workingDir);
-
-    // Prepare arguments
-    QStringList arguments = m_arguments;
-    if (arguments.isEmpty()) {
-        arguments << "--stdio";  // Default to stdio for LSP communication
-    }
-    
-    qDebug() << "LspProcess: Starting process with arguments:" << arguments;
+    // The onProcessStarted and onProcessError slots will handle the result.
     m_process->start(serverPath, arguments);
-    
-    // Wait for process to start (with timeout)
-    if (!m_process->waitForStarted(5000)) {
-        qCritical() << "LspProcess: Failed to start server process:" << m_process->errorString();
-        emit errorOccurred(QString("Failed to start server: %1").arg(m_process->errorString()));
-        setState(ProcessState::Stopped);
-        return false;
-    }
-    
-    qDebug() << "LspProcess: Server process started successfully, PID:" << m_process->processId();
+
+    // The function now returns true if the start *attempt* was successful.
+    // The actual success/failure is communicated via signals.
     return true;
 }
 
@@ -432,7 +416,7 @@ void LspProcess::onRestartTimer()
     emit restartAttempted(m_restartAttempts);
 
     if (!m_serverPath.isEmpty()) {
-        start(m_serverPath);
+        start(m_serverPath, m_arguments);
     } else {
         qCritical() << "LspProcess: Cannot restart - no server path";
         emit errorOccurred("Cannot restart server - no server path");
