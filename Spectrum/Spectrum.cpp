@@ -369,10 +369,9 @@ void Spectrum::initializeLspClient()
     qDebug() << "Spectrum: Initializing LSP client for Alif language support";
 
     try {
-        // Get the ALS server path (relative to application directory)
         QString appDir = QCoreApplication::applicationDirPath();
 
-        // Get the platform-specific executable name
+        // Platform-independent way to find the executable
         QString alsServerExecutable;
 #if defined(Q_OS_WIN)
         alsServerExecutable = "alif-language-server.exe";
@@ -380,77 +379,45 @@ void Spectrum::initializeLspClient()
         alsServerExecutable = "alif-language-server";
 #endif
         QString alsServerPath = appDir + "/" + alsServerExecutable;
-
-        // Use current directory as workspace root for now
+        
         QString workspaceRoot = QDir::currentPath();
 
-        qDebug() << "Spectrum: ALS server path:" << alsServerPath;
-        qDebug() << "Spectrum: Workspace root:" << workspaceRoot;
+        qDebug() << "Spectrum: Attempting to use ALS server at:" << alsServerPath;
+        qDebug() << "Spectrum: Workspace root is set to:" << workspaceRoot;
 
-        // Check if ALS server exists before proceeding
         if (!QFile::exists(alsServerPath)) {
-            qWarning() << "Spectrum: ALS server not found at:" << alsServerPath;
-            qWarning() << "Spectrum: LSP features will not be available";
+            qWarning() << "Spectrum: CRITICAL - ALS server executable not found at the expected path.";
+            qWarning() << "Spectrum: Please ensure 'als' project is built and its executable is copied to the Spectrum build directory.";
+            qWarning() << "Spectrum: LSP features will be unavailable.";
+            QMessageBox::warning(this, "LSP Error", "Alif Language Server not found. Please build and copy it to the application directory.");
             return;
         }
 
-        // Get LSP client instance
         SpectrumLspClient& lspClient = SpectrumLspClient::instance();
 
-        // Connect LSP client signals with queued connections to prevent blocking
-        connect(&lspClient, &SpectrumLspClient::serverReady, this, &Spectrum::onLspServerReady, Qt::QueuedConnection);
-        connect(&lspClient, &SpectrumLspClient::errorOccurred, this, &Spectrum::onLspError, Qt::QueuedConnection);
-
-        // Add a timeout to prevent hanging
-        QTimer* timeoutTimer = new QTimer(this);
-        timeoutTimer->setSingleShot(true);
-        timeoutTimer->setInterval(5000); // 5 second timeout
-
-        connect(timeoutTimer, &QTimer::timeout, [this]() {
-            qWarning() << "Spectrum: LSP initialization timed out - disabling LSP features";
-        });
-
-        connect(&lspClient, &SpectrumLspClient::serverReady, timeoutTimer, &QTimer::stop);
-        connect(&lspClient, &SpectrumLspClient::errorOccurred, timeoutTimer, &QTimer::stop);
-
-        timeoutTimer->start();
-
-        // Initialize and start LSP client with error handling
-        bool initSuccess = false;
-        bool startSuccess = false;
-
-        try {
-            initSuccess = lspClient.initialize(alsServerPath, workspaceRoot);
-        } catch (...) {
-            qWarning() << "Spectrum: Exception during LSP initialize - continuing without LSP";
-            return;
+        // Connect signals only once
+        static bool signalsConnected = false;
+        if (!signalsConnected) {
+            connect(&lspClient, &SpectrumLspClient::serverReady, this, &Spectrum::onLspServerReady, Qt::QueuedConnection);
+            connect(&lspClient, &SpectrumLspClient::errorOccurred, this, &Spectrum::onLspError, Qt::QueuedConnection);
+            signalsConnected = true;
         }
 
-        if (initSuccess) {
-            qDebug() << "Spectrum: LSP client initialized successfully";
-
-            try {
-                startSuccess = lspClient.start();
-            } catch (...) {
-                qWarning() << "Spectrum: Exception during LSP start - continuing without LSP";
-                return;
-            }
-
-            if (startSuccess) {
-                qDebug() << "Spectrum: LSP client started successfully";
+        if (lspClient.initialize(alsServerPath, workspaceRoot)) {
+            qDebug() << "Spectrum: LSP client components initialized.";
+            if (lspClient.start()) {
+                qDebug() << "Spectrum: LSP client startup initiated.";
             } else {
-                qWarning() << "Spectrum: Failed to start LSP client - continuing without LSP features";
+                qWarning() << "Spectrum: Failed to start LSP client.";
             }
         } else {
-            qWarning() << "Spectrum: Failed to initialize LSP client - continuing without LSP features";
+            qWarning() << "Spectrum: Failed to initialize LSP client.";
         }
 
     } catch (const std::exception& e) {
-        qCritical() << "Spectrum: Exception during LSP initialization:" << e.what();
-        qWarning() << "Spectrum: Continuing without LSP features";
+        qCritical() << "Spectrum: An exception occurred during LSP initialization:" << e.what();
     } catch (...) {
-        qCritical() << "Spectrum: Unknown exception during LSP initialization";
-        qWarning() << "Spectrum: Continuing without LSP features";
+        qCritical() << "Spectrum: An unknown exception occurred during LSP initialization.";
     }
 }
 

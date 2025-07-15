@@ -112,38 +112,54 @@ bool JsonRpcProtocol::isJsonComplete(const std::string& json) {
 }
 
 std::optional<JsonRpcMessage> JsonRpcProtocol::readMessage() {
-    if (!connected_) {
+    if (!connected_ || !input_stream_) {
+        connected_ = false;
         return std::nullopt;
     }
 
-    try {
-        // Read Content-Length header
-        auto content_length = readContentLengthHeader();
-        if (!content_length.has_value()) {
-            connected_ = false;
-            return std::nullopt;
+    std::string header_line;
+    long long content_length = -1;
+
+    // 1. Read headers line by line
+    while (std::getline(input_stream_, header_line)) {
+        // Trim trailing '\r' for Windows compatibility
+        if (!header_line.empty() && header_line.back() == '\r') {
+            header_line.pop_back();
         }
 
-        size_t length = std::stoul(content_length.value());
-        if (length == 0 || length > 100 * 1024 * 1024) { // 100MB limit
-            std::cerr << "[JsonRpcProtocol] Invalid content length: " << length << std::endl;
-            return std::nullopt;
+        if (header_line.empty()) {
+            // End of headers
+            break;
         }
 
-        // Read JSON payload
-        std::string json_content = readJsonPayload(length);
-        if (json_content.empty()) {
-            connected_ = false;
-            return std::nullopt;
+        // Find and parse Content-Length
+        if (header_line.rfind("Content-Length", 0) == 0) {
+            try {
+                content_length = std::stoll(header_line.substr(16));
+            } catch (const std::exception& e) {
+                writeError(nullptr, -32700, "Invalid Content-Length header", {{"header", header_line}});
+                return std::nullopt;
+            }
         }
+    }
 
-        // Parse and return message
-        return parseMessage(json_content);
-
-    } catch (const std::exception& e) {
-        std::cerr << "[JsonRpcProtocol] Error reading message: " << e.what() << std::endl;
+    if (input_stream_.eof() || content_length == -1) {
+        connected_ = false;
         return std::nullopt;
     }
+
+    // 2. Read the exact number of bytes for the JSON payload
+    std::string json_content(content_length, '\0');
+    input_stream_.read(&json_content[0], content_length);
+
+    if (input_stream_.gcount() != content_length) {
+        writeError(nullptr, -32700, "Failed to read full message content", {{"expected", content_length}, {"read", input_stream_.gcount()}});
+        connected_ = false;
+        return std::nullopt;
+    }
+
+    // 3. Parse the JSON content
+    return parseMessage(json_content);
 }
 
 std::optional<JsonRpcMessage> JsonRpcProtocol::parseMessage(const std::string& json_content) {
