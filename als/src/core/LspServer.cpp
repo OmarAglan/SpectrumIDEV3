@@ -573,17 +573,27 @@ void LspServer::Impl::handleCompletionRequest(const RequestContext& context) {
         // In a full implementation, we would retrieve document content from a document manager
         std::string documentContent = ""; // TODO: Get actual document content
 
-        // Create completion context
-        auto completionContext = completionProvider_->createContext(uri, documentContent, line, character);
+        // Create enhanced completion context for Arabic completions
+        auto completionContext = completionProvider_->createArabicContext(uri, documentContent, line, character);
 
-        // Get completions
-        auto completions = completionProvider_->provideCompletions(completionContext);
+        // Get enhanced Arabic completions
+        auto arabicCompletions = completionProvider_->provideArabicCompletions(completionContext);
 
-        // Convert to JSON and respond
-        auto result = completionProvider_->toJson(completions);
-        context.respond(result);
+        // Convert Arabic completions to JSON format
+        nlohmann::json result = nlohmann::json::array();
+        for (const auto& item : arabicCompletions) {
+            result.push_back(item.toJson());
+        }
 
-        ALS_LOG_DEBUG("Provided ", completions.size(), " completion items");
+        // Wrap in completion list format
+        nlohmann::json completionList = nlohmann::json{
+            {"isIncomplete", false},
+            {"items", result}
+        };
+
+        context.respond(completionList);
+
+        ALS_LOG_DEBUG("Provided ", arabicCompletions.size(), " Arabic completion items");
 
     } catch (const std::exception& e) {
         ALS_LOG_ERROR("Error in completion request: ", e.what());

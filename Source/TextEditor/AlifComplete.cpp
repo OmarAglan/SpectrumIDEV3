@@ -20,6 +20,25 @@
 
 AutoComplete::AutoComplete(QPlainTextEdit* editor, QObject* parent)
     : QObject(parent), editor(editor) {
+
+    // Initialize Arabic completion widget
+    m_arabicCompletionWidget = new ArabicCompletionWidget(editor);
+
+    // Connect Arabic completion signals
+    connect(m_arabicCompletionWidget, &ArabicCompletionWidget::itemSelected,
+            this, &AutoComplete::onArabicCompletionItemSelected);
+    connect(m_arabicCompletionWidget, &ArabicCompletionWidget::itemActivated,
+            this, &AutoComplete::onArabicCompletionItemActivated);
+    connect(m_arabicCompletionWidget, &ArabicCompletionWidget::exampleInsertRequested,
+            this, &AutoComplete::onArabicExampleInsertRequested);
+    connect(m_arabicCompletionWidget, &ArabicCompletionWidget::cancelled,
+            this, &AutoComplete::onArabicCompletionCancelled);
+
+    // Initialize typing delay timer
+    m_typingDelayTimer = new QTimer(this);
+    m_typingDelayTimer->setSingleShot(true);
+    m_typingDelayTimer->setInterval(TYPING_DELAY_MS);
+    connect(m_typingDelayTimer, &QTimer::timeout, this, &AutoComplete::onTypingDelayTimeout);
     keywords = QStringList()
                << "اطبع"
                << "اذا"
@@ -204,7 +223,34 @@ AutoComplete::AutoComplete(QPlainTextEdit* editor, QObject* parent)
 bool AutoComplete::eventFilter(QObject* obj, QEvent* event) {
     if (obj == editor and event->type() == QEvent::KeyPress) {
         QKeyEvent* keyEvent = static_cast<QKeyEvent*>(event);
-        if (popup->isVisible()) {
+
+        // Handle Arabic completion widget
+        if (m_arabicCompletionWidget && m_arabicCompletionWidget->isVisible()) {
+            if (keyEvent->key() == Qt::Key_Tab) {
+                // Accept inline completion if showing, otherwise activate selected item
+                if (m_showingInlineCompletion) {
+                    acceptInlineCompletion();
+                } else if (m_arabicCompletionWidget->hasSelection()) {
+                    onArabicCompletionItemActivated(m_arabicCompletionWidget->getSelectedItem());
+                }
+                return true;
+            } else if (keyEvent->key() == Qt::Key_Return || keyEvent->key() == Qt::Key_Enter) {
+                if (m_arabicCompletionWidget->hasSelection()) {
+                    onArabicCompletionItemActivated(m_arabicCompletionWidget->getSelectedItem());
+                }
+                return true;
+            } else if (keyEvent->key() == Qt::Key_Escape) {
+                m_arabicCompletionWidget->hide();
+                hideInlineCompletion();
+                return true;
+            } else if (keyEvent->key() == Qt::Key_Up || keyEvent->key() == Qt::Key_Down) {
+                // Forward navigation to Arabic completion widget
+                QCoreApplication::sendEvent(m_arabicCompletionWidget, event);
+                return true;
+            }
+        }
+        // Handle legacy popup
+        else if (popup->isVisible()) {
             if (keyEvent->key() == Qt::Key_Tab
                 or keyEvent->key() == Qt::Key_Return
                 or keyEvent->key() == Qt::Key_Enter) {
@@ -219,6 +265,16 @@ bool AutoComplete::eventFilter(QObject* obj, QEvent* event) {
                 return true;
             } else {
                 return false;
+            }
+        }
+        // Handle inline completion when no popup is visible
+        else if (m_showingInlineCompletion) {
+            if (keyEvent->key() == Qt::Key_Tab) {
+                acceptInlineCompletion();
+                return true;
+            } else if (keyEvent->key() == Qt::Key_Escape) {
+                hideInlineCompletion();
+                return true;
             }
         }
     } else if (event->type() == QEvent::FocusOut) { // review
@@ -239,9 +295,20 @@ QString AutoComplete::getCurrentWord() const {
 }
 
 void AutoComplete::showCompletion() {
+    // Stop any existing timer and start a new one
+    if (m_typingDelayTimer) {
+        m_typingDelayTimer->stop();
+        m_typingDelayTimer->start();
+    }
+}
+
+void AutoComplete::onTypingDelayTimeout() {
     QString currentWord = getCurrentWord();
     if (currentWord.isEmpty() or currentWord.length() < 1) {
         hidePopup();
+        if (m_arabicCompletionWidget) {
+            m_arabicCompletionWidget->hide();
+        }
         return;
     }
 
@@ -416,36 +483,76 @@ void AutoComplete::onLspCompletionReceived(const QJsonObject& response)
 
     qDebug() << "AutoComplete: Received LSP completion response";
 
-    // Parse LSP completion response
-    QStringList lspSuggestions;
-    QJsonArray items = response.value("items").toArray();
+    if (m_useArabicCompletion && m_arabicCompletionWidget) {
+        // Use enhanced Arabic completion widget
+        QList<ArabicCompletionItem> arabicItems;
 
-    for (const auto& itemValue : items) {
-        QJsonObject item = itemValue.toObject();
-        QString label = item.value("label").toString();
-        QString detail = item.value("detail").toString();
+        // Parse LSP completion response into Arabic completion items
+        QJsonArray items = response.value("items").toArray();
 
-        if (!label.isEmpty()) {
-            lspSuggestions << label;
+        for (const auto& itemValue : items) {
+            QJsonObject itemObj = itemValue.toObject();
+            ArabicCompletionItem arabicItem(itemObj);
+            arabicItems.append(arabicItem);
+        }
 
-            // Store description for this completion item
-            if (!detail.isEmpty()) {
-                descriptions[label] = detail;
+        qDebug() << "AutoComplete: Parsed" << arabicItems.size() << "Arabic completion items";
+
+        if (!arabicItems.isEmpty()) {
+            // Position the Arabic completion widget
+            QTextCursor cursor = editor->textCursor();
+            QRect cursorRect = editor->cursorRect(cursor);
+            QPoint globalPos = editor->mapToGlobal(cursorRect.bottomLeft());
+
+            // Adjust position to avoid going off screen
+            QScreen* screen = QGuiApplication::primaryScreen();
+            QRect screenGeometry = screen->availableGeometry();
+
+            if (globalPos.x() + m_arabicCompletionWidget->width() > screenGeometry.right()) {
+                globalPos.setX(screenGeometry.right() - m_arabicCompletionWidget->width());
+            }
+            if (globalPos.y() + m_arabicCompletionWidget->height() > screenGeometry.bottom()) {
+                globalPos.setY(globalPos.y() - cursorRect.height() - m_arabicCompletionWidget->height());
+            }
+
+            m_arabicCompletionWidget->move(globalPos);
+            m_arabicCompletionWidget->showCompletions(arabicItems, getCurrentWord());
+        } else {
+            // Fall back to static completions if no LSP results
+            showCompletion();
+        }
+    } else {
+        // Use legacy completion system
+        QStringList lspSuggestions;
+        QJsonArray items = response.value("items").toArray();
+
+        for (const auto& itemValue : items) {
+            QJsonObject item = itemValue.toObject();
+            QString label = item.value("label").toString();
+            QString detail = item.value("detail").toString();
+
+            if (!label.isEmpty()) {
+                lspSuggestions << label;
+
+                // Store description for this completion item
+                if (!detail.isEmpty()) {
+                    descriptions[label] = detail;
+                }
             }
         }
-    }
 
-    qDebug() << "AutoComplete: Parsed" << lspSuggestions.size() << "LSP completions";
+        qDebug() << "AutoComplete: Parsed" << lspSuggestions.size() << "LSP completions";
 
-    // Show LSP completions if we have any
-    if (!lspSuggestions.isEmpty()) {
-        listWidget->clear();
-        listWidget->addItems(lspSuggestions);
-        listWidget->setCurrentRow(0);
-        showPopup();
-    } else {
-        // Fall back to static completions if no LSP results
-        showCompletion();
+        // Show LSP completions if we have any
+        if (!lspSuggestions.isEmpty()) {
+            listWidget->clear();
+            listWidget->addItems(lspSuggestions);
+            listWidget->setCurrentRow(0);
+            showPopup();
+        } else {
+            // Fall back to static completions if no LSP results
+            showCompletion();
+        }
     }
 }
 
@@ -453,4 +560,189 @@ void AutoComplete::onLspCompletionReceived(const QJsonObject& response)
 
 bool AutoComplete::isPopupVisible() {
     return popup->isVisible();
+}
+
+// Arabic Completion Implementation
+void AutoComplete::setArabicCompletionEnabled(bool enabled) {
+    m_useArabicCompletion = enabled;
+
+    if (!enabled && m_arabicCompletionWidget) {
+        m_arabicCompletionWidget->hide();
+    }
+}
+
+bool AutoComplete::isArabicCompletionEnabled() const {
+    return m_useArabicCompletion;
+}
+
+void AutoComplete::onArabicCompletionItemSelected(const ArabicCompletionItem& item) {
+    // Show inline completion preview
+    QString completionText = item.insertText.isEmpty() ? item.label : item.insertText;
+    showInlineCompletion(completionText);
+}
+
+void AutoComplete::onArabicCompletionItemActivated(const ArabicCompletionItem& item) {
+    // Insert the completion
+    if (!editor) return;
+
+    QTextCursor cursor = editor->textCursor();
+
+    // Find the start of the current word
+    QString currentWord = getCurrentWord();
+    int wordStart = cursor.position() - currentWord.length();
+
+    // Select the current word
+    cursor.setPosition(wordStart);
+    cursor.setPosition(cursor.position() + currentWord.length(), QTextCursor::KeepAnchor);
+
+    // Insert the completion text
+    QString insertText = item.insertText.isEmpty() ? item.label : item.insertText;
+    cursor.insertText(insertText);
+
+    // Hide the completion widget
+    m_arabicCompletionWidget->hide();
+
+    // Handle snippet expansion if needed
+    if (item.kind == 15) { // Snippet
+        // TODO: Implement snippet expansion with placeholders
+        // For now, just insert the text
+    }
+}
+
+void AutoComplete::onArabicExampleInsertRequested(const ArabicCompletionItem& item) {
+    // Insert the example code instead of just the completion text
+    if (!editor) return;
+
+    QTextCursor cursor = editor->textCursor();
+
+    // Get the example text (prefer arabicExample over usageExample)
+    QString exampleText = item.arabicExample.isEmpty() ? item.usageExample : item.arabicExample;
+
+    if (exampleText.isEmpty()) {
+        // Fall back to regular completion if no example
+        onArabicCompletionItemActivated(item);
+        return;
+    }
+
+    // Clean up the example text (remove any leading/trailing whitespace and comments)
+    QStringList lines = exampleText.split('\n');
+    QStringList cleanLines;
+
+    for (const QString& line : lines) {
+        QString cleanLine = line.trimmed();
+        if (!cleanLine.isEmpty() && !cleanLine.startsWith("//")) {
+            cleanLines.append(cleanLine);
+        }
+    }
+
+    if (!cleanLines.isEmpty()) {
+        // Insert the first meaningful line of the example
+        QString insertText = cleanLines.first();
+
+        // Find the start of the current word
+        QString currentWord = getCurrentWord();
+        int wordStart = cursor.position() - currentWord.length();
+
+        // Select the current word
+        cursor.setPosition(wordStart);
+        cursor.setPosition(cursor.position() + currentWord.length(), QTextCursor::KeepAnchor);
+
+        // Insert the example
+        cursor.insertText(insertText);
+    }
+
+    // Hide the completion widget
+    m_arabicCompletionWidget->hide();
+}
+
+void AutoComplete::onArabicCompletionCancelled() {
+    if (m_arabicCompletionWidget) {
+        m_arabicCompletionWidget->hide();
+    }
+    hideInlineCompletion();
+}
+
+// Inline Completion Implementation
+void AutoComplete::showInlineCompletion(const QString& completion) {
+    if (!editor || completion.isEmpty()) return;
+
+    hideInlineCompletion(); // Clear any existing inline completion
+
+    QString currentWord = getCurrentWord();
+    if (currentWord.isEmpty()) return;
+
+    // Check if the completion starts with the current word
+    if (!completion.startsWith(currentWord)) return;
+
+    // Get the remaining part to show as gray text
+    QString remainingText = completion.mid(currentWord.length());
+    if (remainingText.isEmpty()) return;
+
+    // Store the completion info
+    m_inlineCompletionText = completion;
+    m_inlineCompletionCursor = editor->textCursor();
+    m_showingInlineCompletion = true;
+
+    // Create a format for gray text
+    QTextCharFormat grayFormat;
+    grayFormat.setForeground(QColor(128, 128, 128)); // Gray color
+    grayFormat.setBackground(QColor(240, 240, 240, 50)); // Light gray background
+
+    // Insert the gray text
+    QTextCursor cursor = editor->textCursor();
+    int originalPosition = cursor.position();
+
+    cursor.insertText(remainingText, grayFormat);
+
+    // Move cursor back to original position
+    cursor.setPosition(originalPosition);
+    editor->setTextCursor(cursor);
+}
+
+void AutoComplete::hideInlineCompletion() {
+    if (!m_showingInlineCompletion || !editor) return;
+
+    // Remove the gray text by restoring the cursor position
+    QTextCursor cursor = editor->textCursor();
+    QString currentWord = getCurrentWord();
+
+    // Find and remove any gray text after the current word
+    cursor.movePosition(QTextCursor::EndOfWord);
+    cursor.movePosition(QTextCursor::NextCharacter, QTextCursor::KeepAnchor,
+                       m_inlineCompletionText.length() - currentWord.length());
+
+    // Check if the selected text matches our inline completion
+    QString selectedText = cursor.selectedText();
+    if (selectedText == m_inlineCompletionText.mid(currentWord.length())) {
+        cursor.removeSelectedText();
+    }
+
+    m_showingInlineCompletion = false;
+    m_inlineCompletionText.clear();
+}
+
+void AutoComplete::acceptInlineCompletion() {
+    if (!m_showingInlineCompletion || !editor) return;
+
+    // Replace current word with the full completion
+    QTextCursor cursor = editor->textCursor();
+    QString currentWord = getCurrentWord();
+
+    // Find the start of the current word
+    int wordStart = cursor.position() - currentWord.length();
+
+    // Select the current word and any gray text
+    cursor.setPosition(wordStart);
+    cursor.movePosition(QTextCursor::NextCharacter, QTextCursor::KeepAnchor,
+                       m_inlineCompletionText.length());
+
+    // Insert the completion with normal formatting
+    QTextCharFormat normalFormat;
+    normalFormat.setForeground(editor->palette().color(QPalette::Text));
+    normalFormat.setBackground(QBrush());
+
+    cursor.insertText(m_inlineCompletionText, normalFormat);
+
+    m_showingInlineCompletion = false;
+    m_inlineCompletionText.clear();
 }

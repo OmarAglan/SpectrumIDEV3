@@ -125,6 +125,8 @@ set(ALS_SOURCES
     src/analysis/Token.cpp
     src/analysis/Lexer.cpp
     src/features/CompletionProvider.cpp
+    src/features/ArabicCompletionItem.cpp
+    src/features/ArabicCompletionDatabase.cpp
 )
 
 set(ALS_HEADERS
@@ -134,6 +136,8 @@ set(ALS_HEADERS
     src/analysis/Token.h
     src/analysis/Lexer.h
     src/features/CompletionProvider.h
+    src/features/ArabicCompletionItem.h
+    src/features/ArabicCompletionDatabase.h
 )
 
 # Create main executable

@@ -16,7 +16,7 @@ CompletionProvider::CompletionProvider() : lexer_("") {
 
 CompletionProvider::~CompletionProvider() = default;
 
-std::vector<CompletionItem> CompletionProvider::provideCompletions(const CompletionContext& context) {
+std::vector<CompletionItem> CompletionProvider::provideCompletions(const LegacyCompletionContext& context) {
     std::vector<CompletionItem> completions;
     
     // Don't provide completions if we're in a comment or string
@@ -67,10 +67,10 @@ nlohmann::json CompletionProvider::toJson(const std::vector<CompletionItem>& ite
     return result;
 }
 
-CompletionContext CompletionProvider::createContext(const std::string& documentUri,
-                                                   const std::string& documentContent,
-                                                   size_t line, size_t character) {
-    CompletionContext context;
+LegacyCompletionContext CompletionProvider::createContext(const std::string& documentUri,
+                                                         const std::string& documentContent,
+                                                         size_t line, size_t character) {
+    LegacyCompletionContext context;
     context.documentUri = documentUri;
     context.documentContent = documentContent;
     context.line = line;
@@ -89,17 +89,38 @@ CompletionContext CompletionProvider::createContext(const std::string& documentU
     return context;
 }
 
-std::vector<CompletionItem> CompletionProvider::provideKeywordCompletions(const CompletionContext& context) {
+CompletionContext CompletionProvider::createArabicContext(const std::string& documentUri,
+                                                         const std::string& documentContent,
+                                                         size_t line, size_t character) {
+    CompletionContext context;
+    context.cursorLine = static_cast<int>(line);
+    context.cursorColumn = static_cast<int>(character);
+    context.currentWord = getCurrentWord(documentContent, line, character);
+
+    // TODO: Add more sophisticated context analysis
+    // For now, set basic context
+    context.type = CompletionContext::Type::Global;
+
+    // TODO: Analyze document content to populate:
+    // - availableVariables
+    // - availableFunctions
+    // - availableClasses
+    // - currentScope
+
+    return context;
+}
+
+std::vector<CompletionItem> CompletionProvider::provideKeywordCompletions(const LegacyCompletionContext& context) {
     (void)context; // Mark as intentionally unused for now
     return getKeywordCompletions();
 }
 
-std::vector<CompletionItem> CompletionProvider::provideBuiltinCompletions(const CompletionContext& context) {
+std::vector<CompletionItem> CompletionProvider::provideBuiltinCompletions(const LegacyCompletionContext& context) {
     (void)context; // Mark as intentionally unused for now
     return getBuiltinCompletions();
 }
 
-std::vector<CompletionItem> CompletionProvider::provideIdentifierCompletions(const CompletionContext& context) {
+std::vector<CompletionItem> CompletionProvider::provideIdentifierCompletions(const LegacyCompletionContext& context) {
     std::vector<CompletionItem> completions;
     
     // Extract identifiers from tokens
@@ -176,7 +197,7 @@ analysis::Token CompletionProvider::getPreviousToken(const std::vector<analysis:
     return previousToken;
 }
 
-bool CompletionProvider::shouldTriggerCompletion(const CompletionContext& context) {
+bool CompletionProvider::shouldTriggerCompletion(const LegacyCompletionContext& context) {
     (void)context; // Mark as intentionally unused for now
     return true; // Always trigger for now
 }
@@ -257,6 +278,181 @@ nlohmann::json CompletionProvider::completionItemToJson(const CompletionItem& it
     json["preselect"] = item.preselect;
     
     return json;
+}
+
+// Arabic Completion Implementation
+std::vector<ArabicCompletionItem> CompletionProvider::provideArabicCompletions(const CompletionContext& context) {
+    // Initialize the Arabic completion database
+    ArabicCompletionDatabase::initialize();
+
+    // Get all available completions
+    std::vector<ArabicCompletionItem> allCompletions = ArabicCompletionDatabase::getAllCompletions();
+
+    // Add code snippets as completion items
+    auto snippets = ArabicCompletionDatabase::getBuiltinSnippets();
+    for (const auto& snippet : snippets) {
+        allCompletions.push_back(snippet.toCompletionItem());
+    }
+
+    // Analyze context and filter completions
+    std::vector<ArabicCompletionItem> contextualCompletions = getContextualArabicCompletions(context);
+
+    // Merge contextual completions with built-in ones
+    allCompletions.insert(allCompletions.end(), contextualCompletions.begin(), contextualCompletions.end());
+
+    // Filter by current word
+    std::vector<ArabicCompletionItem> filteredCompletions = filterArabicCompletions(allCompletions, context.currentWord);
+
+    // Sort by priority and relevance
+    std::sort(filteredCompletions.begin(), filteredCompletions.end(),
+             [this, &context](const ArabicCompletionItem& a, const ArabicCompletionItem& b) {
+                 int priorityA = calculateCompletionPriority(a, context);
+                 int priorityB = calculateCompletionPriority(b, context);
+                 if (priorityA != priorityB) return priorityA > priorityB;
+                 return a.priority > b.priority;
+             });
+
+    // Limit results to prevent overwhelming the user
+    if (filteredCompletions.size() > 50) {
+        filteredCompletions.resize(50);
+    }
+
+    return filteredCompletions;
+}
+
+std::vector<ArabicCompletionItem> CompletionProvider::getContextualArabicCompletions(const CompletionContext& context) {
+    std::vector<ArabicCompletionItem> contextualCompletions;
+
+    // Analyze the current context to provide relevant completions
+    CompletionContext::Type contextType = analyzeCompletionContext(context);
+
+    std::string contextString;
+    switch (contextType) {
+        case CompletionContext::Type::Global:
+            contextString = "global";
+            break;
+        case CompletionContext::Type::FunctionBody:
+            contextString = "function";
+            break;
+        case CompletionContext::Type::ClassBody:
+            contextString = "class";
+            break;
+        case CompletionContext::Type::IfCondition:
+            contextString = "condition";
+            break;
+        case CompletionContext::Type::LoopBody:
+            contextString = "loop";
+            break;
+        default:
+            contextString = "global";
+            break;
+    }
+
+    // Get completions for this context
+    contextualCompletions = ArabicCompletionDatabase::getCompletionsForContext(contextString);
+
+    // TODO: Add variable and function completions from current scope
+    // This would require more sophisticated analysis of the document
+
+    return contextualCompletions;
+}
+
+std::vector<ArabicCompletionItem> CompletionProvider::filterArabicCompletions(
+    const std::vector<ArabicCompletionItem>& items, const std::string& prefix) {
+
+    if (prefix.empty()) {
+        return items;
+    }
+
+    std::vector<ArabicCompletionItem> filtered;
+
+    for (const auto& item : items) {
+        // Check if item matches the prefix
+        bool matches = false;
+
+        // Check Arabic name
+        if (item.arabicName.find(prefix) == 0) {
+            matches = true;
+        }
+        // Check label
+        else if (item.label.find(prefix) == 0) {
+            matches = true;
+        }
+        // Check filter text
+        else if (!item.filterText.empty() && item.filterText.find(prefix) == 0) {
+            matches = true;
+        }
+        // Fuzzy matching for Arabic text
+        else {
+            // Simple fuzzy matching - can be improved
+            std::string lowerPrefix = prefix;
+            std::string lowerLabel = item.arabicName;
+            std::transform(lowerPrefix.begin(), lowerPrefix.end(), lowerPrefix.begin(), ::tolower);
+            std::transform(lowerLabel.begin(), lowerLabel.end(), lowerLabel.begin(), ::tolower);
+
+            if (lowerLabel.find(lowerPrefix) != std::string::npos) {
+                matches = true;
+            }
+        }
+
+        if (matches) {
+            filtered.push_back(item);
+        }
+    }
+
+    return filtered;
+}
+
+CompletionContext::Type CompletionProvider::analyzeCompletionContext(const CompletionContext& context) {
+    // Simple context analysis based on current scope
+    // TODO: Implement more sophisticated analysis using document parsing
+
+    // For now, use the type that's already set in the context
+    return context.type;
+}
+
+int CompletionProvider::calculateCompletionPriority(const ArabicCompletionItem& item, const CompletionContext& context) {
+    int priority = item.priority;
+
+    // Boost priority based on context relevance
+    CompletionContext::Type contextType = analyzeCompletionContext(context);
+
+    // Boost items that are applicable in current context
+    std::string contextString;
+    switch (contextType) {
+        case CompletionContext::Type::FunctionBody:
+            contextString = "function";
+            break;
+        case CompletionContext::Type::ClassBody:
+            contextString = "class";
+            break;
+        case CompletionContext::Type::Global:
+            contextString = "global";
+            break;
+        default:
+            contextString = "global";
+            break;
+    }
+
+    if (item.isApplicableInContext(contextString)) {
+        priority += 20;
+    }
+
+    // Boost based on prefix match quality
+    if (!context.currentWord.empty()) {
+        if (item.arabicName.find(context.currentWord) == 0) {
+            priority += 30; // Exact prefix match
+        } else if (item.arabicName.find(context.currentWord) != std::string::npos) {
+            priority += 10; // Contains match
+        }
+    }
+
+    // Boost frequently used items (keywords, basic functions)
+    if (item.hasTag("basic") || item.hasTag("beginner")) {
+        priority += 15;
+    }
+
+    return priority;
 }
 
 } // namespace features

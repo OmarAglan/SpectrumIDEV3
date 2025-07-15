@@ -26,6 +26,7 @@ SOURCES += \
     Spectrum.cpp \
     main.cpp     \
     ../Source/TextEditor/AlifComplete.cpp \
+    ../Source/TextEditor/ArabicCompletionWidget.cpp \
     ../Source/TextEditor/AlifLexer.cpp \
     ../Source/TextEditor/SPEditor.cpp \
     ../Source/TextEditor/SPHighlighter.cpp \
@@ -43,6 +44,7 @@ SOURCES += \
 HEADERS += \
     Spectrum.h  \
     ../Source/TextEditor/AlifComplete.h \
+    ../Source/TextEditor/ArabicCompletionWidget.h \
     ../Source/TextEditor/AlifLexer.h \
     ../Source/TextEditor/SPEditor.h \
     ../Source/TextEditor/SPHighlighter.h \
