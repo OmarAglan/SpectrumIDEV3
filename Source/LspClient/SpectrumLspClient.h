@@ -313,6 +313,12 @@ private:
      */
     int findAvailablePort();
 
+    /**
+     * @brief Get the LSP socket port from settings
+     * @return Configured socket port (default: 8080)
+     */
+    static int getLspSocketPort();
+
 private:
     // Core components
     std::unique_ptr<LspProcess> m_process;

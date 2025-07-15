@@ -25,6 +25,7 @@ protected:
 
 signals:
     void fontSizeChanged(int size);
+    void lspSocketPortChanged(int port);
     // void settingsChanged();
     // void windowClosed();
 
@@ -33,10 +34,12 @@ private:
     void switchPage();
     void createCategory(const QString&, const QString&);
     void createAppearancePage(QVBoxLayout*);
+    void createLspPage(QVBoxLayout*);
 
     QVBoxLayout* optionsLayout{};
     QStackedWidget* stackedWidget{};
     QList<SPFlatButton*> categories{};
 
     QSpinBox* fontSpin{};
+    QSpinBox* lspSocketPortSpin{};
 };

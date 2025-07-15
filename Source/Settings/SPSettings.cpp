@@ -16,6 +16,7 @@ SPSettings::SPSettings(QWidget* parent) : QWidget(parent) {
     stackedWidget = new QStackedWidget();
 
     createCategory("المحرر", "إعدادات مظهر المحرر");
+    createCategory("LSP", "إعدادات خادم اللغة");
     // createCategory("متقدم", "الإعداد المتقدمة");
 
 
@@ -45,6 +46,7 @@ SPSettings::SPSettings(QWidget* parent) : QWidget(parent) {
 void SPSettings::closeEvent(QCloseEvent* event) {
     QSettings settings("Alif", "Spectrum");
     settings.setValue("editorFontSize", fontSpin->value());
+    settings.setValue("lspSocketPort", lspSocketPortSpin->value());
 
     // emit windowClosed();
     // event->accept();
@@ -90,6 +92,8 @@ void SPSettings::createCategory(const QString& name, const QString& description)
     // Add category-specific content
     if (name == "المحرر") {
         createAppearancePage(pageLayout);
+    } else if (name == "LSP") {
+        createLspPage(pageLayout);
     } else if (name == "متقدم") {
         // createFontsPage(pageLayout);
     }
@@ -141,4 +145,36 @@ void SPSettings::createAppearancePage(QVBoxLayout* layout) {
     // fontLayout->addLayout(fontFamilyLayout);
 
     layout->addWidget(fontGroup);
+}
+
+void SPSettings::createLspPage(QVBoxLayout* layout) {
+    // LSP Socket Configuration
+    QGroupBox* lspGroup = new QGroupBox("إعدادات الاتصال");
+    lspGroup->setStyleSheet("QGroupBox { border: 1px solid gray; border-radius: 6px; margin-top: 2.0ex;}"
+                            " QGroupBox::title { subcontrol-origin: margin; padding: 0 2px; left: 10px; }");
+    QVBoxLayout* lspLayout = new QVBoxLayout(lspGroup);
+    QFormLayout* socketLayout = new QFormLayout();
+
+    lspSocketPortSpin = new QSpinBox;
+    lspSocketPortSpin->setRange(1024, 65535);  // Valid port range
+    lspSocketPortSpin->setMinimumHeight(40);
+    lspSocketPortSpin->setMaximumWidth(120);
+
+    // Load saved port or use default
+    QSettings settingsVal("Alif", "Spectrum");
+    int savedPort = settingsVal.value("lspSocketPort", 8080).toInt();  // Default to 8080
+    lspSocketPortSpin->setValue(savedPort);
+
+    socketLayout->addRow("منفذ الاتصال: ", lspSocketPortSpin);
+    connect(lspSocketPortSpin, &QSpinBox::valueChanged, this, &SPSettings::lspSocketPortChanged);
+
+    // Add description label
+    QLabel* descLabel = new QLabel("منفذ الاتصال المستخدم للتواصل مع خادم اللغة العربية (ALS)");
+    descLabel->setWordWrap(true);
+    descLabel->setStyleSheet("color: #888; font-size: 12px; margin-top: 10px;");
+
+    lspLayout->addLayout(socketLayout);
+    lspLayout->addWidget(descLabel);
+
+    layout->addWidget(lspGroup);
 }

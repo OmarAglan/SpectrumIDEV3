@@ -80,11 +80,29 @@ bool LspProcess::start(const QString& serverPath, const QStringList& arguments)
     m_arguments = arguments;  // Store arguments for potential restart
     setState(ProcessState::Starting);
 
+    // Set working directory to the same directory as the executable
+    QFileInfo serverInfo(serverPath);
+    QString workingDir = serverInfo.absolutePath();
+
+    qDebug() << "LspProcess: Setting working directory to:" << workingDir;
+    qDebug() << "LspProcess: Server executable exists:" << serverInfo.exists();
+    qDebug() << "LspProcess: Server is executable:" << serverInfo.isExecutable();
+
     m_process->setProcessEnvironment(m_environment);
-    m_process->setWorkingDirectory(QCoreApplication::applicationDirPath());
+    m_process->setWorkingDirectory(workingDir);
 
     // The onProcessStarted and onProcessError slots will handle the result.
+    qDebug() << "LspProcess: About to start process with:" << serverPath << arguments;
     m_process->start(serverPath, arguments);
+
+    // Check if the process started immediately
+    if (m_process->state() == QProcess::NotRunning) {
+        qCritical() << "LspProcess: Process failed to start immediately";
+        qCritical() << "LspProcess: Process error:" << m_process->errorString();
+        return false;
+    }
+
+    qDebug() << "LspProcess: Process start initiated, current state:" << m_process->state();
 
     // The function now returns true if the start *attempt* was successful.
     // The actual success/failure is communicated via signals.
@@ -324,7 +342,8 @@ void LspProcess::setArguments(const QStringList& arguments)
 
 void LspProcess::onProcessStarted()
 {
-    qDebug() << "LspProcess: Process started successfully";
+    qDebug() << "LspProcess: Process started successfully, PID:" << m_process->processId();
+    qDebug() << "LspProcess: Process arguments were:" << m_arguments;
     setState(ProcessState::Running);
     m_restartAttempts = 0; // Reset restart attempts on successful start
     m_startTime = QDateTime::currentDateTime();

@@ -12,6 +12,8 @@
 #include <QMutexLocker>
 #include <QJsonArray>
 #include <QFile>
+#include <QSettings>
+#include <QTcpServer>
 
 // Static member definitions
 std::unique_ptr<SpectrumLspClient> SpectrumLspClient::s_instance = nullptr;
@@ -130,8 +132,8 @@ bool SpectrumLspClient::initialize(const QString& alsServerPath, const QString& 
         connect(m_protocol.get(), &LspProtocol::initializeResponseReceived,
                 this, &SpectrumLspClient::onInitializeResponse);
 
-        // Initialize protocol with process
-        m_protocol->initialize(m_process.get());
+        // Note: Protocol will be initialized with socket after connection is established
+        // No longer using stdio communication
 
         qDebug() << "SpectrumLspClient: Core components initialized successfully";
         return true;
@@ -163,20 +165,16 @@ bool SpectrumLspClient::start()
 
     setConnectionState(ConnectionState::Connecting);
 
-    // Find an available port for socket communication
-    m_socketPort = findAvailablePort();
-    if (m_socketPort <= 0) {
-        qCritical() << "SpectrumLspClient: Could not find an available port";
-        setConnectionState(ConnectionState::Disconnected);
-        emit errorOccurred("Could not find an available port for LSP communication");
-        return false;
-    }
-
-    qDebug() << "SpectrumLspClient: Found available port:" << m_socketPort;
+    // Use the configured socket port from settings
+    m_socketPort = getLspSocketPort();
+    qDebug() << "SpectrumLspClient: Using configured socket port:" << m_socketPort;
 
     // Start the ALS server process with --socket argument for LSP communication
     QStringList arguments;
     arguments << "--socket" << QString::number(m_socketPort);
+
+    qDebug() << "SpectrumLspClient: Starting ALS server with arguments:" << arguments;
+    qDebug() << "SpectrumLspClient: Server path:" << m_alsServerPath;
 
     if (!m_process->start(m_alsServerPath, arguments)) {
         qCritical() << "SpectrumLspClient: Failed to start ALS server";
@@ -448,11 +446,17 @@ void SpectrumLspClient::onServerProcessStateChanged()
             break;
             
         case LspProcess::ProcessState::Running:
-            // Process is running, initiate LSP handshake
-            if (m_connectionState == ConnectionState::Connecting) {
-                setConnectionState(ConnectionState::Initializing);
-                if (m_protocol) {
-                    m_protocol->sendInitialize(m_workspaceRoot);
+            // Process is running
+            if (m_socket) {
+                // In socket mode, the socket connection handles the initialization
+                qDebug() << "SpectrumLspClient: Server process running, socket will handle initialization";
+            } else {
+                // In stdio mode, initiate LSP handshake directly
+                if (m_connectionState == ConnectionState::Connecting) {
+                    setConnectionState(ConnectionState::Initializing);
+                    if (m_protocol) {
+                        m_protocol->sendInitialize(m_workspaceRoot);
+                    }
                 }
             }
             break;
@@ -738,6 +742,12 @@ void SpectrumLspClient::onSocketError(QAbstractSocket::SocketError socketError)
     if (m_process) {
         m_process->stop();
     }
+}
+
+int SpectrumLspClient::getLspSocketPort()
+{
+    QSettings settings("Alif", "Spectrum");
+    return settings.value("lspSocketPort", 8080).toInt(); // Default to 8080
 }
 
 int SpectrumLspClient::findAvailablePort()
