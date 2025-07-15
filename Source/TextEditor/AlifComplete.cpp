@@ -295,6 +295,9 @@ QString AutoComplete::getCurrentWord() const {
 }
 
 void AutoComplete::showCompletion() {
+    // Hide any existing inline completion when user types
+    hideInlineCompletion();
+
     // Stop any existing timer and start a new one
     if (m_typingDelayTimer) {
         m_typingDelayTimer->stop();
