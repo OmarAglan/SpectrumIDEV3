@@ -11,6 +11,7 @@
 LspProtocol::LspProtocol(QObject* parent)
     : QObject(parent)
     , m_process(nullptr)
+    , m_socket(nullptr)
     , m_requestIdCounter(1)
     , m_initialized(false)
     , m_ready(false)
@@ -43,6 +44,50 @@ void LspProtocol::initialize(LspProcess* process)
 
     if (m_process) {
         connect(m_process, &LspProcess::readyReadStandardOutput,
+                this, &LspProtocol::onDataReceived);
+    }
+
+    // Reset state
+    m_buffer.clear();
+    m_requestIdCounter = 1;
+    m_initialized = true;
+    m_ready = false;
+
+    // Clear any pending requests
+    {
+        QMutexLocker locker(&m_requestMutex);
+        for (auto it = m_pendingRequests.begin(); it != m_pendingRequests.end(); ++it) {
+            delete it.value()->timeoutTimer;
+            delete it.value();
+        }
+        m_pendingRequests.clear();
+    }
+
+    // Clear message queue
+    while (!m_messageQueue.empty()) {
+        m_messageQueue.pop();
+    }
+}
+
+void LspProtocol::initialize(QTcpSocket* socket)
+{
+    qDebug() << "LspProtocol: Initializing with socket";
+
+    // Disconnect from previous process if any
+    if (m_process) {
+        m_process->disconnect(this);
+        m_process = nullptr;
+    }
+
+    // Disconnect from previous socket if any
+    if (m_socket) {
+        m_socket->disconnect(this);
+    }
+
+    m_socket = socket;
+
+    if (m_socket) {
+        connect(m_socket, &QTcpSocket::readyRead,
                 this, &LspProtocol::onDataReceived);
     }
 
@@ -354,16 +399,28 @@ int LspProtocol::getPendingRequestCount() const
 
 bool LspProtocol::isReady() const
 {
-    return m_initialized && m_ready && m_process && m_process->isRunning();
+    bool hasValidChannel = false;
+    if (m_socket && m_socket->isOpen()) {
+        hasValidChannel = true;
+    } else if (m_process && m_process->isRunning()) {
+        hasValidChannel = true;
+    }
+
+    return m_initialized && m_ready && hasValidChannel;
 }
 
 void LspProtocol::onDataReceived()
 {
-    if (!m_process) {
+    QByteArray data;
+
+    if (m_socket) {
+        data = m_socket->readAll();
+    } else if (m_process) {
+        data = m_process->readAllStandardOutput();
+    } else {
         return;
     }
-    
-    QByteArray data = m_process->readAllStandardOutput();
+
     if (!data.isEmpty()) {
         processReceivedData(data);
     }
@@ -558,8 +615,16 @@ void LspProtocol::sendMessageImmediate(const QJsonObject& message)
 {
     QMutexLocker locker(&m_sendMutex);
 
-    if (!m_process || !m_process->isRunning()) {
-        qWarning() << "LspProtocol: Cannot send message - process not running";
+    // Check if we have a valid communication channel
+    bool canSend = false;
+    if (m_socket && m_socket->isOpen()) {
+        canSend = true;
+    } else if (m_process && m_process->isRunning()) {
+        canSend = true;
+    }
+
+    if (!canSend) {
+        qWarning() << "LspProtocol: Cannot send message - no valid communication channel";
         return;
     }
 
@@ -572,7 +637,13 @@ void LspProtocol::sendMessageImmediate(const QJsonObject& message)
 
     QByteArray fullMessage = headerData + jsonData;
 
-    qint64 written = m_process->write(fullMessage);
+    qint64 written = 0;
+    if (m_socket) {
+        written = m_socket->write(fullMessage);
+    } else if (m_process) {
+        written = m_process->write(fullMessage);
+    }
+
     if (written != fullMessage.size()) {
         qWarning() << "LspProtocol: Failed to write complete message";
         emit errorOccurred("Failed to send message to server");

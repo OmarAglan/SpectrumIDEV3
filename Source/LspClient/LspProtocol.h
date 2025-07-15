@@ -11,11 +11,13 @@
 #include <QFuture>
 #include <QFutureWatcher>
 #include <QPromise>
+#include <QTcpSocket>
 #include <functional>
 #include <queue>
 
-// Forward declaration
+// Forward declarations
 class LspProcess;
+class QTcpSocket;
 
 /**
  * @brief Message priority levels
@@ -101,10 +103,16 @@ public:
     ~LspProtocol();
 
     /**
-     * @brief Initialize the protocol with process
+     * @brief Initialize the protocol with process (legacy stdio mode)
      * @param process LSP process instance
      */
     void initialize(LspProcess* process);
+
+    /**
+     * @brief Initialize the protocol with socket (new socket mode)
+     * @param socket TCP socket for communication
+     */
+    void initialize(QTcpSocket* socket);
 
     /**
      * @brief Send LSP initialize request
@@ -379,6 +387,7 @@ private:
 
 private:
     LspProcess* m_process;
+    QTcpSocket* m_socket;
     QByteArray m_buffer;
     int m_requestIdCounter;
     mutable QMutex m_sendMutex;

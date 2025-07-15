@@ -12,9 +12,109 @@
 #include <iostream>
 #include <nlohmann/json.hpp>
 #include <sstream>
+#include <memory>
+
+// Socket includes
+#ifdef _WIN32
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#ifdef _MSC_VER
+#pragma comment(lib, "ws2_32.lib")
+#endif
+#else
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+#endif
 
 namespace als {
 namespace core {
+
+/**
+ * @brief Simple socket stream wrapper for JsonRpcProtocol
+ */
+class SocketStream : public std::iostream {
+private:
+    class SocketStreamBuf : public std::streambuf {
+    private:
+        int socket_fd_;
+        char* buffer_;
+        static const size_t BUFFER_SIZE = 4096;
+
+    public:
+        explicit SocketStreamBuf(int socket_fd) : socket_fd_(socket_fd) {
+            buffer_ = new char[BUFFER_SIZE];
+            setg(buffer_, buffer_, buffer_); // Set get area
+            setp(buffer_, buffer_ + BUFFER_SIZE); // Set put area
+        }
+
+        ~SocketStreamBuf() {
+            delete[] buffer_;
+        }
+
+    protected:
+        // Input operations
+        int underflow() override {
+            if (gptr() < egptr()) {
+                return traits_type::to_int_type(*gptr());
+            }
+
+#ifdef _WIN32
+            int bytes_read = recv(socket_fd_, buffer_, BUFFER_SIZE, 0);
+#else
+            ssize_t bytes_read = read(socket_fd_, buffer_, BUFFER_SIZE);
+#endif
+
+            if (bytes_read <= 0) {
+                return traits_type::eof();
+            }
+
+            setg(buffer_, buffer_, buffer_ + bytes_read);
+            return traits_type::to_int_type(*gptr());
+        }
+
+        // Output operations
+        int overflow(int ch) override {
+            if (sync() == -1) {
+                return traits_type::eof();
+            }
+
+            if (ch != traits_type::eof()) {
+                *pptr() = static_cast<char>(ch);
+                pbump(1);
+            }
+
+            return ch;
+        }
+
+        int sync() override {
+            size_t bytes_to_write = pptr() - pbase();
+            if (bytes_to_write > 0) {
+#ifdef _WIN32
+                int bytes_written = send(socket_fd_, pbase(), static_cast<int>(bytes_to_write), 0);
+#else
+                ssize_t bytes_written = write(socket_fd_, pbase(), bytes_to_write);
+#endif
+
+                if (bytes_written != static_cast<int>(bytes_to_write)) {
+                    return -1;
+                }
+
+                setp(buffer_, buffer_ + BUFFER_SIZE);
+            }
+            return 0;
+        }
+    };
+
+    std::unique_ptr<SocketStreamBuf> socket_buf_;
+
+public:
+    explicit SocketStream(int socket_fd)
+        : std::iostream(nullptr), socket_buf_(std::make_unique<SocketStreamBuf>(socket_fd)) {
+        rdbuf(socket_buf_.get());
+    }
+};
 
 /**
  * @brief Private implementation class (PIMPL pattern)
@@ -22,7 +122,8 @@ namespace core {
 class LspServer::Impl {
 public:
     explicit Impl(std::shared_ptr<ServerConfig> config)
-        : config_(config), running_(false), protocol_(std::cin, std::cout) {
+        : config_(config), running_(false), protocol_(std::cin, std::cout),
+          use_socket_(false), socket_port_(-1), server_socket_(-1), client_socket_(-1) {
         // Initialize ThreadPool
         threadPool_ = std::make_unique<ThreadPool>(4, 1000); // 4 threads, max 1000 queued tasks
         ALS_LOG_INFO("ThreadPool initialized with 4 threads and max 1000 queued tasks");
@@ -45,6 +146,7 @@ public:
     
     ~Impl() {
         stop();
+        cleanupSockets();
     }
     
     bool startStdio() {
@@ -55,12 +157,85 @@ public:
 
     bool startSocket(int port) {
         ALS_LOG_INFO("Starting LSP server with socket on port ", port);
+
+        use_socket_ = true;
+        socket_port_ = port;
+
+        // Initialize Winsock on Windows
+#ifdef _WIN32
+        WSADATA wsaData;
+        if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
+            ALS_LOG_CRITICAL("WSAStartup failed");
+            return false;
+        }
+#endif
+
+        // Create socket
+#ifdef _WIN32
+        SOCKET temp_socket = socket(AF_INET, SOCK_STREAM, 0);
+        if (temp_socket == INVALID_SOCKET) {
+            ALS_LOG_CRITICAL("Failed to create socket");
+            return false;
+        }
+        server_socket_ = static_cast<int>(temp_socket);
+#else
+        server_socket_ = socket(AF_INET, SOCK_STREAM, 0);
+        if (server_socket_ < 0) {
+            ALS_LOG_CRITICAL("Failed to create socket");
+            return false;
+        }
+#endif
+
+        // Set socket options
+        int opt = 1;
+#ifdef _WIN32
+        if (setsockopt(server_socket_, SOL_SOCKET, SO_REUSEADDR,
+                      reinterpret_cast<const char*>(&opt), sizeof(opt)) < 0) {
+#else
+        if (setsockopt(server_socket_, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0) {
+#endif
+            ALS_LOG_ERROR("Failed to set socket options");
+        }
+
+        // Bind socket
+        sockaddr_in address;
+        address.sin_family = AF_INET;
+#ifdef _WIN32
+        inet_pton(AF_INET, "127.0.0.1", &address.sin_addr);
+#else
+        address.sin_addr.s_addr = inet_addr("127.0.0.1"); // Localhost only
+#endif
+        address.sin_port = htons(static_cast<uint16_t>(port));
+
+        if (bind(server_socket_, reinterpret_cast<struct sockaddr*>(&address), sizeof(address)) < 0) {
+            ALS_LOG_CRITICAL("Failed to bind socket to port ", port);
+            cleanupSockets();
+            return false;
+        }
+
+        // Listen for connections
+        if (listen(server_socket_, 1) < 0) {
+            ALS_LOG_CRITICAL("Failed to listen on socket");
+            cleanupSockets();
+            return false;
+        }
+
+        ALS_LOG_INFO("Socket server listening on port ", port);
         running_ = true;
         return true;
     }
     
     int run() {
-        ALS_LOG_INFO("Entering LSP server main loop");
+        if (use_socket_) {
+            return runSocket();
+        } else {
+            return runStdio();
+        }
+    }
+
+private:
+    int runStdio() {
+        ALS_LOG_INFO("Entering LSP server main loop (stdio)");
 
         while (running_ && protocol_.isConnected()) {
             try {
@@ -85,6 +260,64 @@ public:
         ALS_LOG_INFO("LSP server main loop exited");
         return 0;
     }
+
+    int runSocket() {
+        ALS_LOG_INFO("Entering LSP server main loop (socket)");
+
+        // Accept client connection
+        ALS_LOG_INFO("Waiting for client connection...");
+#ifdef _WIN32
+        SOCKET temp_client = accept(static_cast<SOCKET>(server_socket_), nullptr, nullptr);
+        if (temp_client == INVALID_SOCKET) {
+            ALS_LOG_CRITICAL("Failed to accept client connection");
+            return 1;
+        }
+        client_socket_ = static_cast<int>(temp_client);
+#else
+        client_socket_ = accept(server_socket_, nullptr, nullptr);
+        if (client_socket_ < 0) {
+            ALS_LOG_CRITICAL("Failed to accept client connection");
+            return 1;
+        }
+#endif
+
+        ALS_LOG_INFO("Client connected successfully");
+
+        // Create socket stream and new protocol instance
+        auto socket_stream = std::make_unique<SocketStream>(client_socket_);
+        JsonRpcProtocol socket_protocol(*socket_stream, *socket_stream);
+
+        // Update dispatcher to use socket protocol
+        dispatcher_ = std::make_unique<RequestDispatcher>(socket_protocol, *threadPool_);
+
+        // Re-register handlers with the new dispatcher
+        registerLspHandlers();
+
+        // Process messages using socket protocol
+        while (running_ && socket_protocol.isConnected()) {
+            try {
+                auto message = socket_protocol.readMessage();
+                if (!message.has_value()) {
+                    ALS_LOG_INFO("No message received or client disconnected, exiting main loop");
+                    break;
+                }
+
+                if (!handleMessage(message.value())) {
+                    ALS_LOG_INFO("Message handling requested exit");
+                    break;
+                }
+
+            } catch (const std::exception& e) {
+                ALS_LOG_ERROR("Error processing message: ", e.what());
+                // Continue processing other messages
+            }
+        }
+
+        ALS_LOG_INFO("LSP server socket main loop exited");
+        return 0;
+    }
+
+public:
 
     bool handleMessage(const JsonRpcMessage& message) {
         ALS_LOG_DEBUG("Processing message type: ", static_cast<int>(message.type));
@@ -123,6 +356,9 @@ public:
                            ", Cancelled: ", stats.cancelled,
                            ", Failed: ", stats.failed);
             }
+
+            // Clean up socket resources
+            cleanupSockets();
         }
     }
     
@@ -140,6 +376,12 @@ private:
     std::unique_ptr<RequestDispatcher> dispatcher_;
     std::unique_ptr<features::CompletionProvider> completionProvider_;
 
+    // Socket-related members
+    bool use_socket_;
+    int socket_port_;
+    int server_socket_;
+    int client_socket_;
+
     // LSP handler registration
     void registerLspHandlers();
 
@@ -153,6 +395,33 @@ private:
     void handleDidChangeNotification(const JsonRpcNotification& notification);
     void handleDidCloseNotification(const JsonRpcNotification& notification);
     void handleExitNotification(const JsonRpcNotification& notification);
+
+    // Socket cleanup
+    void cleanupSockets() {
+        if (client_socket_ >= 0) {
+#ifdef _WIN32
+            closesocket(client_socket_);
+#else
+            close(client_socket_);
+#endif
+            client_socket_ = -1;
+        }
+
+        if (server_socket_ >= 0) {
+#ifdef _WIN32
+            closesocket(server_socket_);
+#else
+            close(server_socket_);
+#endif
+            server_socket_ = -1;
+        }
+
+#ifdef _WIN32
+        if (use_socket_) {
+            WSACleanup();
+        }
+#endif
+    }
 };
 
 // LspServer implementation

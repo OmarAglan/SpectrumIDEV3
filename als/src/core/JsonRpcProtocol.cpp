@@ -137,6 +137,7 @@ std::optional<JsonRpcMessage> JsonRpcProtocol::readMessage() {
             try {
                 content_length = std::stoll(header_line.substr(16));
             } catch (const std::exception& e) {
+                (void)e; // Mark as intentionally unused
                 writeError(nullptr, -32700, "Invalid Content-Length header", {{"header", header_line}});
                 return std::nullopt;
             }

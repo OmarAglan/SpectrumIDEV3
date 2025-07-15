@@ -32,6 +32,7 @@ SpectrumLspClient::SpectrumLspClient(QObject* parent)
     , m_gracefulDegradationEnabled(true)
     , m_connectionTimer(new QTimer(this))
     , m_healthTimer(new QTimer(this))
+    , m_socketPort(-1)
 {
     qDebug() << "SpectrumLspClient: Initializing enhanced LSP client with error management";
 
@@ -162,9 +163,20 @@ bool SpectrumLspClient::start()
 
     setConnectionState(ConnectionState::Connecting);
 
-    // Start the ALS server process with --stdio argument for LSP communication
+    // Find an available port for socket communication
+    m_socketPort = findAvailablePort();
+    if (m_socketPort <= 0) {
+        qCritical() << "SpectrumLspClient: Could not find an available port";
+        setConnectionState(ConnectionState::Disconnected);
+        emit errorOccurred("Could not find an available port for LSP communication");
+        return false;
+    }
+
+    qDebug() << "SpectrumLspClient: Found available port:" << m_socketPort;
+
+    // Start the ALS server process with --socket argument for LSP communication
     QStringList arguments;
-    arguments << "--stdio";
+    arguments << "--socket" << QString::number(m_socketPort);
 
     if (!m_process->start(m_alsServerPath, arguments)) {
         qCritical() << "SpectrumLspClient: Failed to start ALS server";
@@ -173,10 +185,23 @@ bool SpectrumLspClient::start()
         return false;
     }
 
+    // Create and configure socket
+    m_socket = std::make_unique<QTcpSocket>(this);
+
+    // Connect socket signals
+    connect(m_socket.get(), &QTcpSocket::connected, this, &SpectrumLspClient::onSocketConnected);
+    connect(m_socket.get(), &QTcpSocket::errorOccurred, this, &SpectrumLspClient::onSocketError);
+
+    // Give the server a moment to start listening, then connect
+    QTimer::singleShot(100, this, [this]() {
+        qDebug() << "SpectrumLspClient: Attempting to connect to server on port" << m_socketPort;
+        m_socket->connectToHost("127.0.0.1", static_cast<quint16>(m_socketPort));
+    });
+
     // Start connection timeout
     m_connectionTimer->start();
 
-    qDebug() << "SpectrumLspClient: Server startup initiated";
+    qDebug() << "SpectrumLspClient: Server startup initiated with socket on port" << m_socketPort;
     return true;
 }
 
@@ -672,6 +697,60 @@ void SpectrumLspClient::onComponentDegraded(const QString& component, const QStr
     }
 }
 
+void SpectrumLspClient::onSocketConnected()
+{
+    m_connectionTimer->stop();
+    qDebug() << "SpectrumLspClient: Socket connected successfully on port" << m_socketPort;
+
+    // The protocol now communicates over the socket, not the process's stdio
+    if (m_protocol) {
+        m_protocol->initialize(m_socket.get());
+    }
+
+    setConnectionState(ConnectionState::Initializing);
+    if (m_protocol) {
+        m_protocol->sendInitialize(m_workspaceRoot);
+    }
+}
+
+void SpectrumLspClient::onSocketError(QAbstractSocket::SocketError socketError)
+{
+    m_connectionTimer->stop();
+    QString errorString = m_socket ? m_socket->errorString() : "Unknown socket error";
+    qWarning() << "SpectrumLspClient: Socket connection error:" << socketError << errorString;
+
+    // Report to error manager
+    if (m_errorManager) {
+        m_errorManager->reportError(ErrorSeverity::Error, ErrorCategory::CommunicationError,
+                                   "SpectrumLspClient", "Socket connection failed",
+                                   QString("Error: %1, Port: %2").arg(errorString).arg(m_socketPort));
+    }
+
+    emit errorOccurred("Failed to connect to language server: " + errorString);
+    setConnectionState(ConnectionState::Disconnected);
+
+    // Clean up socket
+    if (m_socket) {
+        m_socket->close();
+    }
+
+    // Stop the process since socket connection failed
+    if (m_process) {
+        m_process->stop();
+    }
+}
+
+int SpectrumLspClient::findAvailablePort()
+{
+    QTcpServer server;
+    if (server.listen(QHostAddress::LocalHost, 0)) { // 0 tells the OS to pick a free port
+        int port = server.serverPort();
+        server.close();
+        return port;
+    }
+    return -1; // Failed to find a port
+}
+
 void SpectrumLspClient::cleanup()
 {
     qDebug() << "SpectrumLspClient: Cleaning up resources";
@@ -683,6 +762,12 @@ void SpectrumLspClient::cleanup()
     if (m_healthTimer) {
         m_healthTimer->stop();
     }
+
+    // Close socket if open
+    if (m_socket && m_socket->isOpen()) {
+        m_socket->close();
+    }
+    m_socket.reset();
 
     // Reset components
     m_documentManager.reset();

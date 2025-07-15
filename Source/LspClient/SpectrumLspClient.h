@@ -9,6 +9,8 @@
 #include <QQueue>
 #include <QFuture>
 #include <QFutureWatcher>
+#include <QTcpSocket>
+#include <QTcpServer>
 #include <memory>
 #include <functional>
 
@@ -229,6 +231,16 @@ private slots:
     void onServerProcessStateChanged();
 
     /**
+     * @brief Handle successful socket connection
+     */
+    void onSocketConnected();
+
+    /**
+     * @brief Handle socket connection errors
+     */
+    void onSocketError(QAbstractSocket::SocketError socketError);
+
+    /**
      * @brief Handle LSP initialize response
      */
     void onInitializeResponse(const QJsonObject& response);
@@ -295,6 +307,12 @@ private:
      */
     void cleanup();
 
+    /**
+     * @brief Find an available port for socket communication
+     * @return Available port number, or -1 if none found
+     */
+    int findAvailablePort();
+
 private:
     // Core components
     std::unique_ptr<LspProcess> m_process;
@@ -314,7 +332,11 @@ private:
     // Timers and monitoring
     QTimer* m_connectionTimer;
     QTimer* m_healthTimer;
-    
+
+    // Socket communication
+    std::unique_ptr<QTcpSocket> m_socket;
+    int m_socketPort;
+
     // Thread safety
     mutable QMutex m_stateMutex;
 
