@@ -172,6 +172,19 @@ public:
      */
     QJsonObject getSystemHealth() const;
 
+    /**
+     * @brief Request code completion at specified position
+     * @param uri Document URI
+     * @param line Line number (0-based)
+     * @param character Character position (0-based)
+     * @param callback Success callback function
+     * @param errorCallback Error callback function
+     * @return Request ID
+     */
+    int requestCompletion(const QString& uri, int line, int character,
+                         std::function<void(const QJsonObject&)> callback = nullptr,
+                         std::function<void(const QString&)> errorCallback = nullptr);
+
 public slots:
     /**
      * @brief Request server restart (e.g., after configuration changes)
@@ -318,6 +331,12 @@ private:
      * @return Configured socket port (default: 8080)
      */
     static int getLspSocketPort();
+
+    /**
+     * @brief Start with workaround mode - connect to existing server
+     * @return True if workaround initiated successfully
+     */
+    bool startWithWorkaround();
 
 private:
     // Core components

@@ -1,4 +1,5 @@
 #include "AlifComplete.h"
+#include "../LspClient/SpectrumLspClient.h"
 
 #include <QVBoxLayout>
 #include <QCoreApplication>
@@ -8,6 +9,13 @@
 #include <QLabel>
 #include <QTimer>
 #include <QApplication>
+#include <QKeyEvent>
+#include <QTextCursor>
+#include <QRegularExpression>
+#include <QDebug>
+#include <QJsonObject>
+#include <QJsonArray>
+#include <QUrl>
 
 
 AutoComplete::AutoComplete(QPlainTextEdit* editor, QObject* parent)
@@ -177,7 +185,7 @@ AutoComplete::AutoComplete(QPlainTextEdit* editor, QObject* parent)
 
     // connections
     connect(listWidget, &QListWidget::currentItemChanged, this,
-            [=](QListWidgetItem* current, QListWidgetItem* previos) {
+            [=](QListWidgetItem* current, QListWidgetItem* /*previous*/) {
         if (!current) return;
         QString desc = descriptions.value(current->text(), QString());
         if (desc.isEmpty()) {
@@ -236,6 +244,56 @@ void AutoComplete::showCompletion() {
         hidePopup();
         return;
     }
+
+    // Debug LSP availability
+    qDebug() << "AutoComplete: Checking LSP availability...";
+    qDebug() << "AutoComplete: m_lspClient:" << (m_lspClient ? "Available" : "NULL");
+    if (m_lspClient) {
+        qDebug() << "AutoComplete: LSP connected:" << m_lspClient->isConnected();
+        qDebug() << "AutoComplete: Connection state:" << static_cast<int>(m_lspClient->getConnectionState());
+    }
+    qDebug() << "AutoComplete: Waiting for completion:" << m_waitingForLspCompletion;
+
+    // Try LSP completion first if available
+    if (m_lspClient && m_lspClient->isConnected() && !m_waitingForLspCompletion) {
+        qDebug() << "AutoComplete: ✅ Using LSP completion for word:" << currentWord;
+
+        // Get current cursor position
+        QTextCursor cursor = editor->textCursor();
+        int line = cursor.blockNumber();  // 0-based line number
+        int character = cursor.columnNumber();  // 0-based character position
+
+        // Create document URI (for now, use a placeholder)
+        QString uri = "file:///current_document.alif";  // TODO: Use actual file path
+
+        m_waitingForLspCompletion = true;
+
+        // Request LSP completion
+        m_lspClient->requestCompletion(
+            uri, line, character,
+            [this](const QJsonObject& response) {
+                this->onLspCompletionReceived(response);
+            },
+            [this](const QString& error) {
+                qWarning() << "AutoComplete: LSP completion error:" << error;
+                m_waitingForLspCompletion = false;
+                // Fall back to static completion
+                showStaticCompletion();
+            }
+        );
+
+        return;  // Wait for LSP response
+    }
+
+    // Fall back to static completion
+    qDebug() << "AutoComplete: ❌ Falling back to static completion";
+    showStaticCompletion();
+}
+
+void AutoComplete::showStaticCompletion() {
+    QString currentWord = getCurrentWord();
+
+    qDebug() << "AutoComplete: 📝 Using static completion for word:" << currentWord;
 
     QStringList suggestions{};
     for (const QString& keyword : keywords) {
@@ -344,6 +402,51 @@ void AutoComplete::insertCompletion() {
     }
 
     hidePopup();
+}
+
+void AutoComplete::setLspClient(SpectrumLspClient* lspClient)
+{
+    m_lspClient = lspClient;
+    qDebug() << "AutoComplete: LSP client set, enhanced completion enabled";
+}
+
+void AutoComplete::onLspCompletionReceived(const QJsonObject& response)
+{
+    m_waitingForLspCompletion = false;
+
+    qDebug() << "AutoComplete: Received LSP completion response";
+
+    // Parse LSP completion response
+    QStringList lspSuggestions;
+    QJsonArray items = response.value("items").toArray();
+
+    for (const auto& itemValue : items) {
+        QJsonObject item = itemValue.toObject();
+        QString label = item.value("label").toString();
+        QString detail = item.value("detail").toString();
+
+        if (!label.isEmpty()) {
+            lspSuggestions << label;
+
+            // Store description for this completion item
+            if (!detail.isEmpty()) {
+                descriptions[label] = detail;
+            }
+        }
+    }
+
+    qDebug() << "AutoComplete: Parsed" << lspSuggestions.size() << "LSP completions";
+
+    // Show LSP completions if we have any
+    if (!lspSuggestions.isEmpty()) {
+        listWidget->clear();
+        listWidget->addItems(lspSuggestions);
+        listWidget->setCurrentRow(0);
+        showPopup();
+    } else {
+        // Fall back to static completions if no LSP results
+        showCompletion();
+    }
 }
 
 

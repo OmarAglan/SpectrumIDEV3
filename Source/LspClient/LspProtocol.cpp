@@ -430,8 +430,16 @@ void LspProtocol::sendMessage(const QJsonObject& message)
 {
     QMutexLocker locker(&m_sendMutex);
     
-    if (!m_process || !m_process->isRunning()) {
-        qWarning() << "LspProtocol: Cannot send message - process not running";
+    // Check if we have either a running process OR a connected socket
+    bool canSend = false;
+    if (m_socket && m_socket->state() == QTcpSocket::ConnectedState) {
+        canSend = true;  // Socket mode
+    } else if (m_process && m_process->isRunning()) {
+        canSend = true;  // Process mode
+    }
+
+    if (!canSend) {
+        qWarning() << "LspProtocol: Cannot send message - neither process running nor socket connected";
         return;
     }
     
@@ -445,11 +453,23 @@ void LspProtocol::sendMessage(const QJsonObject& message)
     QByteArray fullMessage = headerData + jsonData;
     
     qDebug() << "LspProtocol: Sending message:" << jsonData;
-    
-    qint64 bytesWritten = m_process->write(fullMessage);
+
+    qint64 bytesWritten = -1;
+
+    // Send via socket if available, otherwise use process
+    if (m_socket && m_socket->state() == QTcpSocket::ConnectedState) {
+        qDebug() << "LspProtocol: Sending via socket";
+        bytesWritten = m_socket->write(fullMessage);
+    } else if (m_process && m_process->isRunning()) {
+        qDebug() << "LspProtocol: Sending via process";
+        bytesWritten = m_process->write(fullMessage);
+    }
+
     if (bytesWritten == -1) {
         qCritical() << "LspProtocol: Failed to send message";
         emit errorOccurred("Failed to send message to server");
+    } else {
+        qDebug() << "LspProtocol: Successfully sent" << bytesWritten << "bytes";
     }
 }
 
@@ -516,8 +536,30 @@ bool LspProtocol::parseMessage()
     // Handle different message types
     if (message.contains("id") && message.contains("result")) {
         // Response message
-        if (message["method"].toString() == "initialize") {
+        int responseId = message["id"].toInt();
+        qDebug() << "LspProtocol: Received response with ID:" << responseId;
+
+        // Handle initialize response specially
+        if (responseId == 1) {
+            qDebug() << "LspProtocol: Detected initialize response";
             emit initializeResponseReceived(message);
+        }
+
+        // Handle all responses with callbacks
+        QMutexLocker locker(&m_requestMutex);
+        if (m_pendingRequests.contains(responseId)) {
+            PendingRequest* request = m_pendingRequests[responseId];
+            if (request && request->successCallback) {
+                qDebug() << "LspProtocol: Calling success callback for request" << responseId;
+                request->successCallback(message["result"].toObject());
+            }
+
+            // Clean up pending request
+            if (request) {
+                request->timeoutTimer->stop();
+                delete request;
+            }
+            m_pendingRequests.remove(responseId);
         }
     } else if (message.contains("method") && !message.contains("id")) {
         // Notification message
@@ -526,9 +568,28 @@ bool LspProtocol::parseMessage()
         emit notificationReceived(method, params);
     } else if (message.contains("error")) {
         // Error response
+        int responseId = message["id"].toInt();
         QJsonObject errorObj = message["error"].toObject();
         QString errorMsg = errorObj["message"].toString();
-        qWarning() << "LspProtocol: Server error:" << errorMsg;
+        qWarning() << "LspProtocol: Server error for request" << responseId << ":" << errorMsg;
+
+        // Handle error callbacks
+        QMutexLocker locker(&m_requestMutex);
+        if (m_pendingRequests.contains(responseId)) {
+            PendingRequest* request = m_pendingRequests[responseId];
+            if (request && request->errorCallback) {
+                qDebug() << "LspProtocol: Calling error callback for request" << responseId;
+                request->errorCallback(errorMsg);
+            }
+
+            // Clean up pending request
+            if (request) {
+                request->timeoutTimer->stop();
+                delete request;
+            }
+            m_pendingRequests.remove(responseId);
+        }
+
         emit errorOccurred(errorMsg);
     }
     

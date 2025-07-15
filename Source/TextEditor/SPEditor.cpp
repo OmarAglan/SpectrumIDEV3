@@ -1,4 +1,5 @@
 #include "SPEditor.h"
+#include "../LspClient/SpectrumLspClient.h"
 
 #include <QPainter>
 #include <QTextBlock>
@@ -22,6 +23,9 @@ SPEditor::SPEditor(QWidget* parent) {
     highlighter = new SyntaxHighlighter(editorDocument);
     autoComplete = new AutoComplete(this, parent);
     lineNumberArea = new LineNumberArea(this);
+
+    // Set up LSP integration for enhanced completion
+    setupLspIntegration();
 
     connect(this, &SPEditor::blockCountChanged, this, &SPEditor::updateLineNumberAreaWidth);
     connect(this, &SPEditor::updateRequest, this, &SPEditor::updateLineNumberArea);
@@ -292,4 +296,16 @@ QString SPEditor::getCurrentLineIndentation(const QTextCursor &cursor) const {
         }
     }
     return indentation;
+}
+
+void SPEditor::setupLspIntegration()
+{
+    // Get the LSP client instance and set it up for autocompletion
+    try {
+        SpectrumLspClient& lspClient = SpectrumLspClient::instance();
+        autoComplete->setLspClient(&lspClient);
+        qDebug() << "SPEditor: LSP integration set up for enhanced completion";
+    } catch (...) {
+        qDebug() << "SPEditor: No LSP client available, using static completion only";
+    }
 }

@@ -17,6 +17,7 @@ public:
 
     QString getCurrentLineIndentation(const QTextCursor &cursor) const;
     void curserIndentation();
+    void setupLspIntegration();
 
 public slots:
     void updateFontSize(int);

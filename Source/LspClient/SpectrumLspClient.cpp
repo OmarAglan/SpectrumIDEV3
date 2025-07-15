@@ -14,6 +14,7 @@
 #include <QFile>
 #include <QSettings>
 #include <QTcpServer>
+#include <QTimer>
 
 // Static member definitions
 std::unique_ptr<SpectrumLspClient> SpectrumLspClient::s_instance = nullptr;
@@ -165,6 +166,14 @@ bool SpectrumLspClient::start()
 
     setConnectionState(ConnectionState::Connecting);
 
+    // TEMPORARY WORKAROUND: Skip QProcess due to hanging issue
+    qDebug() << "SpectrumLspClient: Using workaround mode - bypassing QProcess";
+
+    // Release the mutex before calling workaround (it has its own locking)
+    locker.unlock();
+    return startWithWorkaround();
+
+    /* TODO: Restore this code once QProcess hanging is fixed
     // Use the configured socket port from settings
     m_socketPort = getLspSocketPort();
     qDebug() << "SpectrumLspClient: Using configured socket port:" << m_socketPort;
@@ -182,6 +191,7 @@ bool SpectrumLspClient::start()
         emit errorOccurred("Failed to start ALS server");
         return false;
     }
+    */
 
     // Create and configure socket
     m_socket = std::make_unique<QTcpSocket>(this);
@@ -543,17 +553,31 @@ void SpectrumLspClient::onConnectionTimeout()
 
 void SpectrumLspClient::onHealthCheck()
 {
-    if (!isConnected() || !m_process) {
+    if (!isConnected()) {
         return;
     }
 
-    // Check if process is still running
-    if (m_process->getState() != LspProcess::ProcessState::Running) {
-        qWarning() << "SpectrumLspClient: Health check failed - process not running";
-        setConnectionState(ConnectionState::Reconnecting);
-        emit errorOccurred("ALS server health check failed");
-        restartServer();
-        return;
+    // In socket mode, check socket connection instead of process
+    if (m_socket) {
+        // Socket mode - check if socket is still connected
+        if (m_socket->state() != QTcpSocket::ConnectedState) {
+            qWarning() << "SpectrumLspClient: Health check failed - socket disconnected";
+            setConnectionState(ConnectionState::Reconnecting);
+            emit errorOccurred("ALS server socket disconnected");
+            restartServer();
+            return;
+        }
+        qDebug() << "SpectrumLspClient: Socket health check passed";
+    } else if (m_process) {
+        // Process mode - check if process is still running
+        if (m_process->getState() != LspProcess::ProcessState::Running) {
+            qWarning() << "SpectrumLspClient: Health check failed - process not running";
+            setConnectionState(ConnectionState::Reconnecting);
+            emit errorOccurred("ALS server health check failed");
+            restartServer();
+            return;
+        }
+        qDebug() << "SpectrumLspClient: Process health check passed";
     }
 
     // Send ping to server (if protocol supports it)
@@ -748,6 +772,79 @@ int SpectrumLspClient::getLspSocketPort()
 {
     QSettings settings("Alif", "Spectrum");
     return settings.value("lspSocketPort", 8080).toInt(); // Default to 8080
+}
+
+bool SpectrumLspClient::startWithWorkaround()
+{
+    qDebug() << "SpectrumLspClient: Using WORKAROUND mode - connecting to existing server";
+
+    setConnectionState(ConnectionState::Connecting);
+
+    // Use the configured socket port
+    m_socketPort = getLspSocketPort();
+    qDebug() << "SpectrumLspClient: Attempting to connect to existing server on port:" << m_socketPort;
+
+    // Create and configure socket (skip process management entirely)
+    m_socket = std::make_unique<QTcpSocket>(this);
+
+    // Connect socket signals
+    connect(m_socket.get(), &QTcpSocket::connected, this, &SpectrumLspClient::onSocketConnected);
+    connect(m_socket.get(), &QTcpSocket::errorOccurred, this, &SpectrumLspClient::onSocketError);
+
+    // Try to connect to existing server immediately
+    qDebug() << "SpectrumLspClient: Connecting to 127.0.0.1:" << m_socketPort;
+    m_socket->connectToHost("127.0.0.1", static_cast<quint16>(m_socketPort));
+
+    // Start connection timeout
+    m_connectionTimer->start();
+
+    // If connection fails after a delay, show user instructions
+    QTimer::singleShot(3000, this, [this]() {
+        if (!m_socket || m_socket->state() != QTcpSocket::ConnectedState) {
+            QString serverDir = QFileInfo(m_alsServerPath).absolutePath();
+            QString instructions = QString(
+                "LSP Server Connection Failed!\n\n"
+                "Please manually start the ALS server:\n\n"
+                "1. Open terminal/command prompt\n"
+                "2. Navigate to: %1\n"
+                "3. Run: alif-language-server.exe --socket %2\n"
+                "4. Restart SpectrumIDE\n\n"
+                "The server should show: 'Waiting for client connection...'"
+            ).arg(serverDir).arg(m_socketPort);
+
+            qWarning() << "SpectrumLspClient: Connection failed, showing user instructions";
+            emit errorOccurred(instructions);
+            setConnectionState(ConnectionState::Disconnected);
+        }
+    });
+
+    qDebug() << "SpectrumLspClient: Workaround mode initiated, waiting for connection...";
+    return true;
+}
+
+int SpectrumLspClient::requestCompletion(const QString& uri, int line, int character,
+                                        std::function<void(const QJsonObject&)> callback,
+                                        std::function<void(const QString&)> errorCallback)
+{
+    if (!m_protocol) {
+        qWarning() << "SpectrumLspClient: No protocol available for completion request";
+        if (errorCallback) {
+            errorCallback("No protocol available");
+        }
+        return -1;
+    }
+
+    if (m_connectionState != ConnectionState::Connected) {
+        qWarning() << "SpectrumLspClient: Not connected, cannot request completion";
+        if (errorCallback) {
+            errorCallback("Not connected to LSP server");
+        }
+        return -1;
+    }
+
+    qDebug() << "SpectrumLspClient: Requesting completion for" << uri << "at" << line << ":" << character;
+
+    return m_protocol->sendTextDocumentCompletion(uri, line, character, callback, errorCallback);
 }
 
 int SpectrumLspClient::findAvailablePort()

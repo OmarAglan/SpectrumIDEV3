@@ -8,6 +8,7 @@
 #include <QTextStream>
 #include <QRegularExpression>
 #include <QCoreApplication>
+#include <QTimer>
 
 #ifdef Q_OS_WIN
 #include <windows.h>
@@ -80,20 +81,69 @@ bool LspProcess::start(const QString& serverPath, const QStringList& arguments)
     m_arguments = arguments;  // Store arguments for potential restart
     setState(ProcessState::Starting);
 
+    // === COMPREHENSIVE DEBUGGING START ===
+    qDebug() << "=== LspProcess Debug Info ===";
+    qDebug() << "Server path:" << serverPath;
+    qDebug() << "Arguments:" << arguments;
+
     // Set working directory to the same directory as the executable
     QFileInfo serverInfo(serverPath);
     QString workingDir = serverInfo.absolutePath();
 
-    qDebug() << "LspProcess: Setting working directory to:" << workingDir;
-    qDebug() << "LspProcess: Server executable exists:" << serverInfo.exists();
-    qDebug() << "LspProcess: Server is executable:" << serverInfo.isExecutable();
+    qDebug() << "Working dir will be:" << workingDir;
+    qDebug() << "File exists:" << serverInfo.exists();
+    qDebug() << "Is executable:" << serverInfo.isExecutable();
+    qDebug() << "File size:" << serverInfo.size();
+    qDebug() << "File permissions:" << serverInfo.permissions();
+    qDebug() << "Absolute file path:" << serverInfo.absoluteFilePath();
+
+    // Check working directory
+    QDir workDir(workingDir);
+    qDebug() << "Working dir exists:" << workDir.exists();
+    qDebug() << "Working dir is readable:" << workDir.isReadable();
+
+    // Environment debugging
+    qDebug() << "Current environment PATH:" << m_environment.value("PATH");
+    qDebug() << "System environment PATH:" << qgetenv("PATH");
+
+#ifdef Q_OS_WIN
+    // Windows-specific debugging
+    qDebug() << "=== Windows Debug Info ===";
+    qDebug() << "Current user:" << qgetenv("USERNAME");
+    qDebug() << "Current directory:" << QDir::currentPath();
+
+    // Test basic command execution
+    QProcess testProcess;
+    testProcess.start("cmd", QStringList() << "/c" << "echo" << "Windows CMD test");
+    if (testProcess.waitForFinished(2000)) {
+        qDebug() << "CMD test successful, output:" << testProcess.readAllStandardOutput();
+    } else {
+        qDebug() << "CMD test failed:" << testProcess.errorString();
+    }
+
+    // Check if executable can be found by Windows
+    QProcess whereProcess;
+    whereProcess.start("cmd", QStringList() << "/c" << "where" << serverPath);
+    if (whereProcess.waitForFinished(2000)) {
+        qDebug() << "Where command output:" << whereProcess.readAllStandardOutput();
+    } else {
+        qDebug() << "Where command failed:" << whereProcess.errorString();
+    }
+    qDebug() << "=== End Windows Debug Info ===";
+#endif
 
     m_process->setProcessEnvironment(m_environment);
     m_process->setWorkingDirectory(workingDir);
 
+    qDebug() << "About to call QProcess::start()...";
+
     // The onProcessStarted and onProcessError slots will handle the result.
-    qDebug() << "LspProcess: About to start process with:" << serverPath << arguments;
     m_process->start(serverPath, arguments);
+
+    // Immediate state check
+    qDebug() << "QProcess state immediately after start():" << m_process->state();
+    qDebug() << "QProcess error immediately after start():" << m_process->error();
+    qDebug() << "QProcess error string:" << m_process->errorString();
 
     // Check if the process started immediately
     if (m_process->state() == QProcess::NotRunning) {
@@ -102,7 +152,20 @@ bool LspProcess::start(const QString& serverPath, const QStringList& arguments)
         return false;
     }
 
-    qDebug() << "LspProcess: Process start initiated, current state:" << m_process->state();
+    qDebug() << "Process start call completed, current state:" << m_process->state();
+    qDebug() << "=== End Debug Info ===";
+
+    // Add periodic state monitoring
+    QTimer::singleShot(1000, this, [this]() {
+        qDebug() << "QProcess state after 1s:" << m_process->state() << "Error:" << m_process->error();
+    });
+
+    QTimer::singleShot(3000, this, [this]() {
+        qDebug() << "QProcess state after 3s:" << m_process->state() << "Error:" << m_process->error();
+        if (m_process->state() == QProcess::Starting) {
+            qWarning() << "Process still in Starting state after 3 seconds - likely hanging!";
+        }
+    });
 
     // The function now returns true if the start *attempt* was successful.
     // The actual success/failure is communicated via signals.
@@ -342,11 +405,17 @@ void LspProcess::setArguments(const QStringList& arguments)
 
 void LspProcess::onProcessStarted()
 {
+    qDebug() << "*** LspProcess::onProcessStarted() CALLED! ***";
     qDebug() << "LspProcess: Process started successfully, PID:" << m_process->processId();
     qDebug() << "LspProcess: Process arguments were:" << m_arguments;
+    qDebug() << "LspProcess: Process state:" << m_process->state();
+    qDebug() << "LspProcess: Working directory:" << m_process->workingDirectory();
+
     setState(ProcessState::Running);
     m_restartAttempts = 0; // Reset restart attempts on successful start
     m_startTime = QDateTime::currentDateTime();
+
+    qDebug() << "*** LspProcess::onProcessStarted() COMPLETED ***";
     m_isResponsive = true;
     m_healthCheckFailures = 0;
     m_lastError.clear();
@@ -414,6 +483,13 @@ void LspProcess::onProcessError(QProcess::ProcessError error)
     }
 
     qCritical() << "LspProcess: Process error:" << errorString;
+    qCritical() << "LspProcess: Process state when error occurred:" << m_process->state();
+    qCritical() << "LspProcess: Process exit code:" << m_process->exitCode();
+    qCritical() << "LspProcess: Process exit status:" << m_process->exitStatus();
+    qCritical() << "LspProcess: Working directory was:" << m_process->workingDirectory();
+    qCritical() << "LspProcess: Server path was:" << m_serverPath;
+    qCritical() << "LspProcess: Arguments were:" << m_arguments;
+
     emit errorOccurred(errorString);
 
     if (error == QProcess::FailedToStart || error == QProcess::Crashed) {
