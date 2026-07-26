@@ -203,6 +203,10 @@ void Qalam::connectSignals()
     connect(renameShortcut, &QShortcut::activated,
             this, &Qalam::renameSymbol);
 
+    auto *quickFixShortcut = new QShortcut(QKeySequence("Ctrl+."), this);
+    connect(quickFixShortcut, &QShortcut::activated,
+            this, &Qalam::quickFix);
+
     // --- Menu bar signals ---
     connect(menuBar, &TMenuBar::newRequested, this, &Qalam::newFileFromUi);
     connect(menuBar, &TMenuBar::openFileRequested, this, [this]() { openFileFromUi(QString()); });
@@ -299,6 +303,65 @@ void Qalam::connectSignals()
             m_layoutManager->statusBar()->showMessage(
                 QStringLiteral("تم العثور على %1 مرجعاً دلالياً")
                     .arg(references.size()), 3000);
+        }
+    });
+    connect(m_languageClient, &BaaLanguageClient::codeActionsPublished,
+            this, [this](const QString &filePath, int documentVersion,
+                         int, int, const QVector<BaaCodeAction> &actions) {
+        if (not languageDocumentVersionIsCurrent(filePath, documentVersion))
+            return;
+        if (actions.isEmpty()) {
+            if (m_layoutManager and m_layoutManager->statusBar()) {
+                m_layoutManager->statusBar()->showMessage(
+                    QStringLiteral("لا يوجد إصلاح آمن في هذا الموضع"), 3000);
+            }
+            return;
+        }
+
+        int selectedIndex = 0;
+        if (actions.size() > 1) {
+            QStringList titles;
+            titles.reserve(actions.size());
+            for (const BaaCodeAction &action : actions)
+                titles.push_back(action.title);
+            bool accepted = false;
+            const QString selected = QInputDialog::getItem(
+                this,
+                QStringLiteral("إصلاحات باء الآمنة"),
+                QStringLiteral("اختر الإصلاح المراد معاينته:"),
+                titles,
+                0,
+                false,
+                &accepted);
+            if (not accepted) return;
+            selectedIndex = titles.indexOf(selected);
+            if (selectedIndex < 0) return;
+        }
+
+        const BaaCodeAction &action = actions.at(selectedIndex);
+        const QMessageBox::StandardButton answer = QMessageBox::question(
+            this,
+            QStringLiteral("معاينة الإصلاح"),
+            QStringLiteral(
+                "%1\n\nسيطبق قلم %2 تعديلاً في %3 ملفاً بعد التحقق من "
+                "إصدار المستند. هل تريد المتابعة؟")
+                .arg(action.title)
+                .arg(action.edit.editCount())
+                .arg(action.edit.documents.size()),
+            QMessageBox::Yes | QMessageBox::No,
+            QMessageBox::Yes);
+        if (answer != QMessageBox::Yes) return;
+
+        QString error;
+        if (not applyWorkspaceEdit(action.edit, &error)) {
+            QMessageBox::warning(
+                this, QStringLiteral("تعذر تطبيق الإصلاح"), error);
+            return;
+        }
+        if (m_layoutManager and m_layoutManager->statusBar()) {
+            m_layoutManager->statusBar()->showMessage(
+                QStringLiteral("طُبق إصلاح باء الآمن: %1")
+                    .arg(action.title), 4000);
         }
     });
     connect(m_languageClient, &BaaLanguageClient::renamePrepared,
@@ -1120,6 +1183,7 @@ bool Qalam::runCommandById(const QString &commandId)
     if (commandId == "code.definition") { goToDefinition(); return true; }
     if (commandId == "code.references") { findReferences(); return true; }
     if (commandId == "code.rename") { renameSymbol(); return true; }
+    if (commandId == "code.quickFix") { quickFix(); return true; }
     if (commandId == "project.build") { buildTakweenProject(); return true; }
     if (commandId == "project.test") { testTakweenProject(); return true; }
     if (commandId == "run.baa") { runBaa(); return true; }
@@ -1341,6 +1405,26 @@ void Qalam::renameSymbol()
         cursor.positionInBlock());
 }
 
+void Qalam::quickFix()
+{
+    TEditor *editor = currentEditor();
+    if (not editor or not m_languageClient or
+        not BaaLanguageClient::isBaaSourcePath(editor->currentFilePath())) {
+        if (m_layoutManager and m_layoutManager->statusBar()) {
+            m_layoutManager->statusBar()->showMessage(
+                QStringLiteral("الإصلاحات السريعة متاحة لملفات باء"),
+                3000);
+        }
+        return;
+    }
+    scheduleEditorAnalysis(editor);
+    const QTextCursor cursor = editor->textCursor();
+    m_languageClient->requestCodeActions(
+        editor->currentFilePath(),
+        cursor.blockNumber(),
+        cursor.positionInBlock());
+}
+
 bool Qalam::applyWorkspaceEdit(const BaaWorkspaceEdit &workspaceEdit,
                                QString *error)
 {
@@ -1350,7 +1434,7 @@ bool Qalam::applyWorkspaceEdit(const BaaWorkspaceEdit &workspaceEdit,
         return false;
     };
     if (not workspaceEdit.isValid())
-        return fail(QStringLiteral("خطة إعادة التسمية فارغة."));
+        return fail(QStringLiteral("خطة التعديل فارغة."));
 
     struct PreparedDocument
     {
@@ -1392,11 +1476,11 @@ bool Qalam::applyWorkspaceEdit(const BaaWorkspaceEdit &workspaceEdit,
         if (documentEdit.version >= 0) {
             if (not document.editor)
                 return fail(QStringLiteral(
-                    "تغيرت حالة ملف مفتوح قبل تطبيق إعادة التسمية."));
+                    "تغيرت حالة ملف مفتوح قبل تطبيق التعديل."));
             if (document.editor->property("qalam.lsp.version").toInt() !=
                 documentEdit.version)
                 return fail(QStringLiteral(
-                    "تغير نص أحد الملفات بعد حساب إعادة التسمية."));
+                    "تغير نص أحد الملفات بعد حساب التعديل."));
         }
 
         if (document.editor) {
@@ -1433,7 +1517,7 @@ bool Qalam::applyWorkspaceEdit(const BaaWorkspaceEdit &workspaceEdit,
         const QByteArray bytes = document.updatedText.toUtf8();
         if (output.write(bytes) != bytes.size() or not output.commit())
             return fail(QStringLiteral(
-                "تعذر حفظ الملف بعد إعادة التسمية: %1")
+                "تعذر حفظ الملف بعد تطبيق التعديل: %1")
                 .arg(document.filePath));
     }
 
@@ -1558,6 +1642,8 @@ void Qalam::attachAnalysisToEditor(TEditor *editor)
             scheduleEditorAnalysis(editor);
             m_languageClient->requestSignatureHelp(filePath, line, character);
         });
+        connect(editor, &TEditor::quickFixRequested,
+                this, &Qalam::quickFix);
     }
 }
 

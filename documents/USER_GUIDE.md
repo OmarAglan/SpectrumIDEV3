@@ -89,6 +89,7 @@ Adjust the editor font size and family in Settings:
 | | `Ctrl+/` | Toggle Comment | ✓ Working |
 | | `Ctrl+D` | Duplicate Line | ✓ Working |
 | | `Ctrl+Space` | Trigger Autocomplete | ✓ Working |
+| | `Ctrl+.` | Preview a safe Baa quick fix | ✓ Working |
 | **Navigation** | `Alt+Up/Down` | Move line up/down | ✓ Working |
 | | `F12` | Go to a Baa declaration | ✓ Working |
 | | `Shift+F12` | List compiler-resolved Baa references | ✓ Working |
@@ -100,6 +101,18 @@ Adjust the editor font size and family in Settings:
 | | `Ctrl+0` | Reset Zoom | ✓ Working |
 | | `Ctrl+Shift+F` | Project Search | ✓ Working |
 | **Build** | `F5` | Run / Build | ✓ Working |
+
+---
+
+## Safe Quick Fixes
+
+Place the cursor on a Baa diagnostic and press `Ctrl+.` or choose
+**إصلاح سريع من باء** from the editor context menu. Qalam asks Baa-LSP for
+compiler-owned structured edits, shows an Arabic preview, and applies the
+selected fix only when it still matches the current document version.
+
+Qalam does not infer fixes from human-readable error messages. A stale,
+destructive, duplicate, or out-of-document edit is refused.
 
 ---
 

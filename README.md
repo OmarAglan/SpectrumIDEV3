@@ -38,6 +38,8 @@
 - **Compiler-backed hover and signature help** with Arabic declarations,
   scope-correct shadowing, included prototypes, active parameters, and
   stale-result cancellation while editing.
+- **Safe compiler-owned quick fixes** through `Ctrl+.` or the editor context
+  menu, with an Arabic preview and version-checked workspace edits.
 - **Auto-save & crash recovery**
   - Periodic auto-save to `file.~`
   - Recovery prompt if a newer backup exists
@@ -57,8 +59,10 @@
   using Baa's versioned JSON contracts without writing shadow files. Arabic
   completion, hover, and call-signature help use that same language-service
   boundary. Project-wide definition, references, and collision-checked Arabic
-  rename combine Takween's source closure with Baa's structured symbol identities;
-  projects containing `مشروع.تكوين` can be built, run,
+  rename combine Takween's source closure with Baa's structured symbol identities.
+  Quick fixes come from Baa's structured diagnostic edits, pass through Baa-LSP
+  without message parsing, and are previewed before Qalam applies them.
+  Projects containing `مشروع.تكوين` can be built, run,
   tested, and cleaned through Takween from the Run menu or command palette.
   Qalam asks `takween-targets-v1` for selectable targets and consumes
   `takween-build-events-v1` for Arabic progress; `Shift+F5` cancels the active

@@ -5,6 +5,7 @@ add_library(qalam_core STATIC
     # Language / IDE services
     language/BaaLanguageClient.cpp
     language/BaaLanguageClient.h
+    language/BaaCodeAction.h
     language/BaaDocumentSymbol.h
     language/BaaCompletionItem.h
     language/BaaHover.h

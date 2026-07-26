@@ -178,6 +178,9 @@ Acceptance:
 - Add scope-aware, collision-checked rename with an edit preview. **Complete
   with compiler identities, conservative collision refusal, Arabic-only names,
   versioned edits, and atomic closed-file saves.**
+- Add diagnostic code actions. **Complete for compiler-owned safe insertion
+  fixes, with exact UTF-16 conversion, stale-version refusal, an Arabic preview,
+  and no message parsing.**
 - Keep the workspace text index for explicit text search and quick-open only;
   semantic navigation never falls back to regex or equal-looking text.
 

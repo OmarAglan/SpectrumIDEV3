@@ -72,6 +72,9 @@ The heart of Qalam is `TEditor`, a custom `QPlainTextEdit` subclass.
   Project navigation starts at the nearest Takween root. Prepared rename
   consumes versioned `WorkspaceEdit` results, previews their scope, applies
   open-document edits as one undo block, and writes closed files atomically.
+  Quick fixes consume only Baa-owned structured diagnostic edits, request
+  `textDocument/codeAction` at the cursor, preview the selected Arabic action,
+  and reuse the same version-checked workspace-edit path.
 - **`BuildManager`:** Owns project execution. Build, run, test, and clean requests
   search parent directories for `مشروع.تكوين`, ask
   `takween-targets-v1` for capabilities, and invoke canonical Arabic Takween argv

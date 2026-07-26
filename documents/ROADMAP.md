@@ -379,6 +379,8 @@ One deferred item from Phase 2:
 - [x] 9.1.9 Support hierarchical `textDocument/documentSymbol`
 - [x] 9.1.10 Support `textDocument/signatureHelp` with Arabic/ASCII comma
   triggers, active-parameter display, and `Ctrl+Shift+Space`
+- [x] 9.1.11 Support compiler-owned safe `textDocument/codeAction` fixes with
+  `Ctrl+.`, an Arabic preview, exact versioned edits, and stale-edit refusal
 
 ### 9.2 Baa Language Server
 

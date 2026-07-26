@@ -72,6 +72,7 @@ private slots:
     void goToDefinition();
     void findReferences();
     void renameSymbol();
+    void quickFix();
     bool applyWorkspaceEdit(const BaaWorkspaceEdit &edit,
                             QString *error = nullptr);
     

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "BaaCodeAction.h"
 #include "BaaDocumentSymbol.h"
 #include "BaaCompletionItem.h"
 #include "BaaHover.h"
@@ -46,6 +47,7 @@ public:
     void requestDefinition(const QString &filePath, int line, int character);
     void requestReferences(const QString &filePath, int line, int character,
                            bool includeDeclaration = true);
+    void requestCodeActions(const QString &filePath, int line, int character);
     void requestPrepareRename(const QString &filePath,
                               int line,
                               int character);
@@ -98,6 +100,11 @@ signals:
                              int line,
                              int character,
                              const QVector<BaaLocation> &references);
+    void codeActionsPublished(const QString &filePath,
+                              int documentVersion,
+                              int line,
+                              int character,
+                              const QVector<BaaCodeAction> &actions);
     void renamePrepared(const QString &filePath,
                         int documentVersion,
                         int line,
@@ -122,6 +129,7 @@ private:
         SignatureHelp,
         Definition,
         References,
+        CodeAction,
         PrepareRename,
         Rename
     };
@@ -192,6 +200,7 @@ private:
     BaaSignatureHelp parseSignatureHelp(const QJsonValue &result) const;
     BaaLocation parseLocation(const QJsonValue &result) const;
     QVector<BaaLocation> parseLocations(const QJsonValue &result) const;
+    QVector<BaaCodeAction> parseCodeActions(const QJsonValue &result) const;
     BaaWorkspaceEdit parseWorkspaceEdit(const QJsonValue &result,
                                         bool *valid) const;
     void handleProcessFinished(int exitCode, QProcess::ExitStatus status);
@@ -221,6 +230,7 @@ private:
     bool m_signatureHelpProvider{};
     bool m_definitionProvider{};
     bool m_referencesProvider{};
+    bool m_codeActionProvider{};
     bool m_renameProvider{};
     bool m_prepareRenameProvider{};
 };

@@ -34,6 +34,7 @@ void TestBaaLanguageClient::synchronizesDocumentsAndRejectsStaleDiagnostics()
     int signatureVersion = 0;
     int definitionVersion = 0;
     int referencesVersion = 0;
+    int codeActionVersion = 0;
     int prepareRenameVersion = 0;
     int renameEditVersion = 0;
     QVector<Diagnostic> lastDiagnostics;
@@ -43,6 +44,7 @@ void TestBaaLanguageClient::synchronizesDocumentsAndRejectsStaleDiagnostics()
     BaaSignatureHelp lastSignature;
     BaaLocation lastDefinition;
     QVector<BaaLocation> lastReferences;
+    QVector<BaaCodeAction> lastCodeActions;
     QString renamePlaceholder;
     BaaLocation renameRange;
     BaaWorkspaceEdit lastWorkspaceEdit;
@@ -168,6 +170,30 @@ void TestBaaLanguageClient::synchronizesDocumentsAndRejectsStaleDiagnostics()
     QCOMPARE(lastReferences.size(), 2);
     QCOMPARE(lastReferences.first().line, 0);
     QCOMPARE(lastReferences.last().line, 1);
+
+    connect(&client, &BaaLanguageClient::codeActionsPublished, this,
+            [&](const QString &publishedPath, int version, int line, int character,
+                const QVector<BaaCodeAction> &actions) {
+                QCOMPARE(QDir::cleanPath(publishedPath), QDir::cleanPath(filePath));
+                QCOMPARE(line, 1);
+                QCOMPARE(character, 4);
+                codeActionVersion = version;
+                lastCodeActions = actions;
+            });
+    client.requestCodeActions(filePath, 1, 4);
+    QTRY_COMPARE_WITH_TIMEOUT(codeActionVersion, 1, 5000);
+    QCOMPARE(lastCodeActions.size(), 1);
+    QVERIFY(lastCodeActions.first().isValid());
+    QCOMPARE(lastCodeActions.first().id,
+             QStringLiteral("B1000.insert-int-type"));
+    QCOMPARE(lastCodeActions.first().title,
+             QStringLiteral("عرّف المتغير بإضافة نوعه"));
+    QVERIFY(lastCodeActions.first().preferred);
+    QCOMPARE(lastCodeActions.first().edit.documents.size(), 1);
+    QCOMPARE(lastCodeActions.first().edit.documents.first().version, 1);
+    QCOMPARE(lastCodeActions.first().edit.documents.first().edits.size(), 1);
+    QCOMPARE(lastCodeActions.first().edit.documents.first().edits.first().newText,
+             QStringLiteral("صحيح "));
 
     connect(&client, &BaaLanguageClient::renamePrepared, this,
             [&](const QString &publishedPath, int version, int line, int character,

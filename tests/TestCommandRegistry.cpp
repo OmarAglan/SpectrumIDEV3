@@ -33,6 +33,9 @@ void TestCommandRegistry::exposesDefaultCommands()
     QVERIFY(std::any_of(commands.begin(), commands.end(), [](const auto &command) {
         return command.id == "project.test";
     }));
+    QVERIFY(std::any_of(commands.begin(), commands.end(), [](const auto &command) {
+        return command.id == "code.quickFix" and command.shortcut == "Ctrl+.";
+    }));
 }
 
 QTEST_MAIN(TestCommandRegistry)

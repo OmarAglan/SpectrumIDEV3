@@ -351,6 +351,12 @@ void TEditor::contextMenuEvent(QContextMenuEvent *event)
     connect(duplicateAction, &QAction::triggered, this, &TEditor::duplicateLine);
     menu->addAction(duplicateAction);
 
+    QAction *quickFixAction = new QAction("إصلاح سريع من باء", this);
+    quickFixAction->setShortcut(QKeySequence("Ctrl+."));
+    connect(quickFixAction, &QAction::triggered,
+            this, &TEditor::quickFixRequested);
+    menu->addAction(quickFixAction);
+
 
     menu->setStyleSheet(QString(
         "QMenu { background-color: %1; color: %2; border: 1px solid %3; }"

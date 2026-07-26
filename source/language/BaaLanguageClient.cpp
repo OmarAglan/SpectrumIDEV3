@@ -167,6 +167,14 @@ void BaaLanguageClient::requestReferences(const QString &filePath,
                     includeDeclaration);
 }
 
+void BaaLanguageClient::requestCodeActions(const QString &filePath,
+                                           int line,
+                                           int character)
+{
+    requestSemantic(filePath, line, character,
+                    SemanticRequestKind::CodeAction);
+}
+
 void BaaLanguageClient::requestPrepareRename(const QString &filePath,
                                              int line,
                                              int character)
@@ -211,6 +219,10 @@ void BaaLanguageClient::requestSemantic(const QString &filePath,
             supported = m_referencesProvider;
             method = QStringLiteral("textDocument/references");
             break;
+        case SemanticRequestKind::CodeAction:
+            supported = m_codeActionProvider;
+            method = QStringLiteral("textDocument/codeAction");
+            break;
         case SemanticRequestKind::PrepareRename:
             supported = m_renameProvider and m_prepareRenameProvider;
             method = QStringLiteral("textDocument/prepareRename");
@@ -247,7 +259,26 @@ void BaaLanguageClient::requestSemantic(const QString &filePath,
             {QStringLiteral("character"), character}
         }}
     };
-    if (kind == SemanticRequestKind::References) {
+    if (kind == SemanticRequestKind::CodeAction) {
+        const QJsonObject position{
+            {QStringLiteral("line"), line},
+            {QStringLiteral("character"), character}
+        };
+        params.remove(QStringLiteral("position"));
+        params.insert(
+            QStringLiteral("range"),
+            QJsonObject{
+                {QStringLiteral("start"), position},
+                {QStringLiteral("end"), position}
+            });
+        params.insert(
+            QStringLiteral("context"),
+            QJsonObject{
+                {QStringLiteral("diagnostics"), QJsonArray{}},
+                {QStringLiteral("only"),
+                 QJsonArray{QStringLiteral("quickfix")}}
+            });
+    } else if (kind == SemanticRequestKind::References) {
         params.insert(
             QStringLiteral("context"),
             QJsonObject{{QStringLiteral("includeDeclaration"),
@@ -536,6 +567,15 @@ void BaaLanguageClient::sendInitialize()
                 {QStringLiteral("references"), QJsonObject{
                     {QStringLiteral("dynamicRegistration"), false}
                 }},
+                {QStringLiteral("codeAction"), QJsonObject{
+                    {QStringLiteral("dynamicRegistration"), false},
+                    {QStringLiteral("codeActionLiteralSupport"), QJsonObject{
+                        {QStringLiteral("codeActionKind"), QJsonObject{
+                            {QStringLiteral("valueSet"),
+                             QJsonArray{QStringLiteral("quickfix")}}
+                        }}
+                    }}
+                }},
                 {QStringLiteral("rename"), QJsonObject{
                     {QStringLiteral("prepareSupport"), true}
                 }}
@@ -693,6 +733,10 @@ void BaaLanguageClient::handleResponse(const QJsonObject &message)
             capabilities.value(QStringLiteral("referencesProvider"));
         m_referencesProvider = referencesProvider.isObject() or
             referencesProvider.toBool(false);
+        const QJsonValue codeActionProvider =
+            capabilities.value(QStringLiteral("codeActionProvider"));
+        m_codeActionProvider = codeActionProvider.isObject() or
+            codeActionProvider.toBool(false);
         const QJsonValue renameProvider =
             capabilities.value(QStringLiteral("renameProvider"));
         m_renameProvider = renameProvider.isObject() or
@@ -805,6 +849,11 @@ void BaaLanguageClient::handleResponse(const QJsonObject &message)
                 emit referencesPublished(
                     pending.filePath, pending.documentVersion,
                     pending.line, pending.character, parseLocations(result));
+                break;
+            case SemanticRequestKind::CodeAction:
+                emit codeActionsPublished(
+                    pending.filePath, pending.documentVersion,
+                    pending.line, pending.character, parseCodeActions(result));
                 break;
             case SemanticRequestKind::PrepareRename:
             {
@@ -1072,6 +1121,34 @@ QVector<BaaLocation> BaaLanguageClient::parseLocations(
     return locations;
 }
 
+QVector<BaaCodeAction> BaaLanguageClient::parseCodeActions(
+    const QJsonValue &result) const
+{
+    QVector<BaaCodeAction> actions;
+    if (not result.isArray()) return actions;
+    const QJsonArray source = result.toArray();
+    actions.reserve(source.size());
+    for (const QJsonValue &value : source) {
+        if (not value.isObject()) continue;
+        const QJsonObject object = value.toObject();
+        BaaCodeAction action;
+        action.id = object.value(QStringLiteral("data")).toObject()
+                        .value(QStringLiteral("fixId")).toString();
+        action.title =
+            object.value(QStringLiteral("title")).toString().trimmed();
+        action.kind =
+            object.value(QStringLiteral("kind")).toString();
+        action.preferred =
+            object.value(QStringLiteral("isPreferred")).toBool(false);
+        bool editValid = false;
+        action.edit = parseWorkspaceEdit(
+            object.value(QStringLiteral("edit")), &editValid);
+        if (editValid and action.isValid())
+            actions.push_back(std::move(action));
+    }
+    return actions;
+}
+
 BaaWorkspaceEdit BaaLanguageClient::parseWorkspaceEdit(
     const QJsonValue &result,
     bool *valid) const
@@ -1147,6 +1224,7 @@ void BaaLanguageClient::handleProcessFinished(int exitCode, QProcess::ExitStatus
     m_signatureHelpProvider = false;
     m_definitionProvider = false;
     m_referencesProvider = false;
+    m_codeActionProvider = false;
     m_renameProvider = false;
     m_prepareRenameProvider = false;
     m_pendingSymbolRequests.clear();

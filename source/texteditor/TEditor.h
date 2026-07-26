@@ -141,6 +141,7 @@ private slots:
     void updateLineNumberArea(const QRect &rect, int dy);
 signals:
     void openRequest(QString filePath);
+    void quickFixRequested();
     void completionRequested(QString filePath, int line, int character);
     void hoverRequested(QString filePath, int line, int character);
     void signatureHelpRequested(QString filePath, int line, int character);

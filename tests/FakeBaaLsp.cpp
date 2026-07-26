@@ -89,6 +89,10 @@ int main(int argc, char *argv[])
                             {"hoverProvider", true},
                             {"definitionProvider", true},
                             {"referencesProvider", true},
+                            {"codeActionProvider", QJsonObject{
+                                {"codeActionKinds", QJsonArray{"quickfix"}},
+                                {"resolveProvider", false}
+                            }},
                             {"renameProvider", QJsonObject{
                                 {"prepareProvider", true}
                             }},
@@ -225,6 +229,41 @@ int main(int argc, char *argv[])
                 }
                 send(output, QJsonObject{
                     {"jsonrpc", "2.0"}, {"id", id}, {"result", results}
+                });
+            } else if (method == "textDocument/codeAction") {
+                const QString uri = params.value("textDocument").toObject()
+                                        .value("uri").toString();
+                const QJsonObject insertion{
+                    {"start", QJsonObject{{"line", 1}, {"character", 4}}},
+                    {"end", QJsonObject{{"line", 1}, {"character", 4}}}
+                };
+                send(output, QJsonObject{
+                    {"jsonrpc", "2.0"}, {"id", id},
+                    {"result", QJsonArray{
+                        QJsonObject{
+                            {"title", "عرّف المتغير بإضافة نوعه"},
+                            {"kind", "quickfix"},
+                            {"isPreferred", true},
+                            {"data", QJsonObject{
+                                {"fixId", "B1000.insert-int-type"}
+                            }},
+                            {"edit", QJsonObject{
+                                {"documentChanges", QJsonArray{
+                                    QJsonObject{
+                                        {"textDocument", QJsonObject{
+                                            {"uri", uri}, {"version", 1}
+                                        }},
+                                        {"edits", QJsonArray{
+                                            QJsonObject{
+                                                {"range", insertion},
+                                                {"newText", "صحيح "}
+                                            }
+                                        }}
+                                    }
+                                }}
+                            }}
+                        }
+                    }}
                 });
             } else if (method == "textDocument/prepareRename") {
                 send(output, QJsonObject{

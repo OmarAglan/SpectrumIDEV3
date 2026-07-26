@@ -69,6 +69,7 @@ HEADERS += Qalam.h \
     Constants.h \
     ../source/core/CommandRegistry.h \
     ../source/language/BaaLanguageClient.h \
+    ../source/language/BaaCodeAction.h \
     ../source/language/BaaDocumentSymbol.h \
     ../source/language/BaaCompletionItem.h \
     ../source/language/BaaHover.h \
