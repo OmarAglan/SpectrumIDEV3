@@ -194,6 +194,8 @@ Acceptance:
 
 - [x] Define and consume versioned Baa static completion metadata.
 - [x] Merge document-global compiler symbols with snippets without editor-owned aliases.
+- [x] Consume cursor-visible parameters, locals, compiler builtins, and
+  explicitly included declarations from Baa without an editor-side scope table.
 - [x] Trigger and filter naturally while typing Arabic letters.
 - [x] Display compiler-owned symbol kind, type, signature, source, and Arabic documentation.
 - [x] Add parameter help for calls and included function prototypes.

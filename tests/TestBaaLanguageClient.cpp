@@ -96,13 +96,34 @@ void TestBaaLanguageClient::synchronizesDocumentsAndRejectsStaleDiagnostics()
             });
     client.requestCompletion(filePath, 0, 7);
     QTRY_COMPARE_WITH_TIMEOUT(completionVersion, 1, 5000);
-    QCOMPARE(lastCompletions.size(), 1);
-    QCOMPARE(lastCompletions.first().label, QStringLiteral("الرئيسية"));
-    QCOMPARE(lastCompletions.first().detail, QStringLiteral("دالة ← صحيح"));
-    QCOMPARE(lastCompletions.first().newText, QStringLiteral("الرئيسية"));
-    QCOMPARE(lastCompletions.first().startCharacter, 5);
-    QCOMPARE(lastCompletions.first().endCharacter, 7);
-    QCOMPARE(lastCompletions.first().kind, 3);
+    QCOMPARE(lastCompletions.size(), 3);
+    auto completionByLabel = [&](const QString &label) {
+        return std::ranges::find_if(
+            lastCompletions,
+            [&](const BaaCompletionItem &item) {
+                return item.label == label;
+            });
+    };
+    const auto mainCompletion =
+        completionByLabel(QStringLiteral("الرئيسية"));
+    QVERIFY(mainCompletion != lastCompletions.cend());
+    QCOMPARE(mainCompletion->detail, QStringLiteral("دالة ← صحيح"));
+    QCOMPARE(mainCompletion->newText, QStringLiteral("الرئيسية"));
+    QCOMPARE(mainCompletion->startCharacter, 5);
+    QCOMPARE(mainCompletion->endCharacter, 7);
+    QCOMPARE(mainCompletion->kind, 3);
+    const auto localCompletion =
+        completionByLabel(QStringLiteral("قيمة_محلية"));
+    QVERIFY(localCompletion != lastCompletions.cend());
+    QCOMPARE(localCompletion->detail,
+             QStringLiteral("صحيح قيمة_محلية"));
+    QCOMPARE(localCompletion->kind, 6);
+    const auto includedCompletion =
+        completionByLabel(QStringLiteral("من_واجهة"));
+    QVERIFY(includedCompletion != lastCompletions.cend());
+    QCOMPARE(includedCompletion->detail,
+             QStringLiteral("صحيح من_واجهة()"));
+    QCOMPARE(includedCompletion->kind, 3);
 
     connect(&client, &BaaLanguageClient::hoverPublished, this,
             [&](const QString &publishedPath, int version, int line, int character,

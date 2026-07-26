@@ -34,7 +34,9 @@
 - **Custom syntax highlighting engine** (lexer + Qt highlighter) with stateful multi-line handling.
 - **Theme engine** (multiple built-in code themes).
 - **Arabic-first Baa-LSP completion** sourced from Baa's versioned metadata and
-  current compiler symbols, with exact UTF-16 edits and navigable snippet tab stops.
+  cursor semantic query, including compiler builtins, parameters, visible
+  locals, and explicitly included declarations, with exact UTF-16 edits,
+  shadowing, stale-result cancellation, and navigable snippet tab stops.
 - **Compiler-backed hover and signature help** with Arabic declarations,
   scope-correct shadowing, included prototypes, active parameters, and
   stale-result cancellation while editing.

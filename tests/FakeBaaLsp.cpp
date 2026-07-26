@@ -144,17 +144,42 @@ int main(int argc, char *argv[])
                     {"label", "الرئيسية"},
                     {"detail", "دالة ← صحيح"},
                     {"filterText", "الرئيسية"},
-                    {"sortText", "0الرئيسية"},
+                    {"sortText", "2الرئيسية"},
                     {"kind", 3},
                     {"insertTextFormat", 1},
                     {"textEdit", QJsonObject{
                         {"range", range}, {"newText", "الرئيسية"}
                     }}
                 };
+                const QJsonObject localItem{
+                    {"label", "قيمة_محلية"},
+                    {"detail", "صحيح قيمة_محلية"},
+                    {"filterText", "قيمة_محلية"},
+                    {"sortText", "0قيمة_محلية"},
+                    {"kind", 6},
+                    {"insertTextFormat", 1},
+                    {"textEdit", QJsonObject{
+                        {"range", range}, {"newText", "قيمة_محلية"}
+                    }}
+                };
+                const QJsonObject includedItem{
+                    {"label", "من_واجهة"},
+                    {"detail", "صحيح من_واجهة()"},
+                    {"filterText", "من_واجهة"},
+                    {"sortText", "1من_واجهة"},
+                    {"kind", 3},
+                    {"insertTextFormat", 1},
+                    {"textEdit", QJsonObject{
+                        {"range", range}, {"newText", "من_واجهة"}
+                    }}
+                };
                 send(output, QJsonObject{
                     {"jsonrpc", "2.0"}, {"id", id},
                     {"result", QJsonObject{
-                        {"isIncomplete", false}, {"items", QJsonArray{item}}
+                        {"isIncomplete", false},
+                        {"items", QJsonArray{
+                            item, localItem, includedItem
+                        }}
                     }}
                 });
             } else if (method == "textDocument/hover") {

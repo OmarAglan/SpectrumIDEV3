@@ -20,8 +20,11 @@ Welcome to **Qalam IDE**, the professional environment for Arabic-syntax program
 The editor supports:
 - **Syntax Highlighting:** Automatic coloring for Baa keywords, types, and directives.
 - **RTL Support:** Full right-to-left support for both the interface and the code.
-- **Arabic completion:** Baa-owned keywords, directives, snippets, and current
-  document declarations appear through Baa-LSP while typing Arabic letters.
+- **Arabic completion:** Baa-owned keywords, directives, snippets, compiler
+  builtins, parameters, visible locals, and explicitly included declarations
+  appear through Baa-LSP while typing Arabic letters. Inner declarations
+  correctly shadow outer ones, while future and sibling-block declarations do
+  not appear.
 - **Live Baa diagnostics:** Saved and unsaved `.baa`/`.baahd` contents are checked
   after a short pause. Only results matching the current document revision are shown.
 - **Compiler-backed navigation:** `F12` opens the exact declaration selected by

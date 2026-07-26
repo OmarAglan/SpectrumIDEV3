@@ -390,11 +390,14 @@ One deferred item from Phase 2:
 - [x] 9.2.2 Delegate parsing and semantic analysis to the Baa compiler
 - [x] 9.2.3 Consume Baa's analyzed declaration bindings and scope resolution
   without implementing a second semantic table
-- [ ] 9.2.4 Complete semantic context awareness for locals, includes, and signatures
+- [x] 9.2.4 Complete semantic context awareness for locals, includes, and signatures
   - [x] Consume Baa-owned static metadata and version-matched document-global symbols
   - [x] Consume `semantic-query-json-v1` for scope-correct hover, included
     prototypes, and active call signatures during incomplete typing
-  - [ ] Extend completion itself with visible locals and explicitly included declarations
+  - [x] Consume Baa-owned cursor completion for parameters, visible locals,
+    compiler builtins, and explicitly included declarations, including lexical
+    shadowing and future/sibling exclusion; expose compiler-owned completion
+    documentation through the server's resolve contract
 - [x] 9.2.5 Implement compiler-backed diagnostic provider
 - [x] 9.2.6 Build as a standalone, Qt-free LSP binary
 

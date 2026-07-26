@@ -35,8 +35,10 @@ The heart of Qalam is `TEditor`, a custom `QPlainTextEdit` subclass.
 - **`TLexer`:** A state-based lexer using `QStringView` for zero-copy syntax highlighting.
 - **`TSyntaxHighlighter`:** Integrates `TLexer` with Qt's `QSyntaxHighlighter` for real-time coloring.
 - **Completion UI:** `TEditor` requests `textDocument/completion` after Arabic
-  input, and displays only version-matched Baa-LSP results. It does not own a
-  copied keyword, builtin, or snippet list.
+  input, and displays only version-matched Baa-LSP results. Those results
+  include Baa-owned builtins, parameters, visible locals, and explicitly
+  included declarations. It does not own a copied keyword, builtin, snippet,
+  or scope table.
 - **Semantic tooltips:** delayed identifier hover requests and call-signature
   requests flow through Baa-LSP. `TEditor` renders version-matched Markdown and
   the active Arabic parameter, but owns no keyword, builtin, type, or signature
@@ -65,8 +67,9 @@ The heart of Qalam is `TEditor`, a custom `QPlainTextEdit` subclass.
   position conversion. The client caches hierarchical document symbols only
   when their response matches the current document version and cancels obsolete
   symbol requests. Cursor-sensitive completion flushes the newest full-text
-  document change before requesting exact UTF-16 edits, rejects obsolete
-  responses, and passes standard snippet tab stops to `TSnippetManager`. See
+  document change before requesting compiler-scoped symbols and exact UTF-16
+  edits, rejects obsolete responses, and passes standard snippet tab stops to
+  `TSnippetManager`. See
   `documents/BAA_LSP_INTEGRATION_AR.md`. Hover and signature requests use the
   same immediate full-text flush, cancellation, and document-version checks.
   Project navigation starts at the nearest Takween root. Prepared rename
