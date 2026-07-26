@@ -207,6 +207,11 @@ void Qalam::connectSignals()
     connect(quickFixShortcut, &QShortcut::activated,
             this, &Qalam::quickFix);
 
+    auto *formatShortcut = new QShortcut(
+        QKeySequence("Shift+Alt+F"), this);
+    connect(formatShortcut, &QShortcut::activated,
+            this, &Qalam::formatDocument);
+
     // --- Menu bar signals ---
     connect(menuBar, &TMenuBar::newRequested, this, &Qalam::newFileFromUi);
     connect(menuBar, &TMenuBar::openFileRequested, this, [this]() { openFileFromUi(QString()); });
@@ -362,6 +367,32 @@ void Qalam::connectSignals()
             m_layoutManager->statusBar()->showMessage(
                 QStringLiteral("طُبق إصلاح باء الآمن: %1")
                     .arg(action.title), 4000);
+        }
+    });
+    connect(m_languageClient, &BaaLanguageClient::formattingPublished,
+            this, [this](const QString &filePath, int documentVersion,
+                         const BaaWorkspaceEdit &edit) {
+        if (not languageDocumentVersionIsCurrent(filePath, documentVersion))
+            return;
+        if (not edit.isValid()) {
+            if (m_layoutManager and m_layoutManager->statusBar()) {
+                m_layoutManager->statusBar()->showMessage(
+                    QStringLiteral("المستند منسق بالفعل"), 3000);
+            }
+            return;
+        }
+
+        QString error;
+        if (not applyWorkspaceEdit(edit, &error)) {
+            QMessageBox::warning(
+                this, QStringLiteral("تعذر تنسيق المستند"), error);
+            return;
+        }
+        if (m_layoutManager and m_layoutManager->statusBar()) {
+            m_layoutManager->statusBar()->showMessage(
+                QStringLiteral(
+                    "نُسق المستند وفق النمط الرسمي للغة باء"),
+                4000);
         }
     });
     connect(m_languageClient, &BaaLanguageClient::renamePrepared,
@@ -1184,6 +1215,7 @@ bool Qalam::runCommandById(const QString &commandId)
     if (commandId == "code.references") { findReferences(); return true; }
     if (commandId == "code.rename") { renameSymbol(); return true; }
     if (commandId == "code.quickFix") { quickFix(); return true; }
+    if (commandId == "code.format") { formatDocument(); return true; }
     if (commandId == "project.build") { buildTakweenProject(); return true; }
     if (commandId == "project.test") { testTakweenProject(); return true; }
     if (commandId == "run.baa") { runBaa(); return true; }
@@ -1425,6 +1457,21 @@ void Qalam::quickFix()
         cursor.positionInBlock());
 }
 
+void Qalam::formatDocument()
+{
+    TEditor *editor = currentEditor();
+    if (not editor or not m_languageClient or
+        not BaaLanguageClient::isBaaSourcePath(editor->currentFilePath())) {
+        if (m_layoutManager and m_layoutManager->statusBar()) {
+            m_layoutManager->statusBar()->showMessage(
+                QStringLiteral("التنسيق الرسمي متاح لملفات باء"), 3000);
+        }
+        return;
+    }
+    scheduleEditorAnalysis(editor);
+    m_languageClient->requestFormatting(editor->currentFilePath());
+}
+
 bool Qalam::applyWorkspaceEdit(const BaaWorkspaceEdit &workspaceEdit,
                                QString *error)
 {
@@ -1644,6 +1691,8 @@ void Qalam::attachAnalysisToEditor(TEditor *editor)
         });
         connect(editor, &TEditor::quickFixRequested,
                 this, &Qalam::quickFix);
+        connect(editor, &TEditor::formatRequested,
+                this, &Qalam::formatDocument);
     }
 }
 

@@ -77,6 +77,7 @@ int BaaLanguageClient::synchronizeDocument(const QString &filePath,
     if (it->text == text and it->editorRevision == editorRevision) return it->version;
     cancelPendingSymbolRequests(path);
     cancelPendingCompletionRequests(path);
+    cancelPendingFormattingRequests(path);
     cancelPendingSemanticRequests(path);
     m_documentSymbols.remove(path);
     m_symbolRequestedVersions.remove(path);
@@ -173,6 +174,29 @@ void BaaLanguageClient::requestCodeActions(const QString &filePath,
 {
     requestSemantic(filePath, line, character,
                     SemanticRequestKind::CodeAction);
+}
+
+void BaaLanguageClient::requestFormatting(const QString &filePath)
+{
+    if (m_state != State::Ready or not m_documentFormattingProvider) return;
+    const QString path = normalizedFilePath(filePath);
+    auto document = m_documents.find(path);
+    if (document == m_documents.end() or not document->opened) return;
+
+    flushPendingChange(path, document.value());
+    cancelPendingFormattingRequests(path);
+    const qint64 requestId = sendRequest(
+        QStringLiteral("textDocument/formatting"),
+        QJsonObject{
+            {QStringLiteral("textDocument"),
+             QJsonObject{{QStringLiteral("uri"), document->uri}}},
+            {QStringLiteral("options"), QJsonObject{
+                {QStringLiteral("tabSize"), 4},
+                {QStringLiteral("insertSpaces"), true}
+            }}
+        });
+    m_pendingFormattingRequests.insert(
+        requestId, {path, document->version});
 }
 
 void BaaLanguageClient::requestPrepareRename(const QString &filePath,
@@ -307,6 +331,7 @@ void BaaLanguageClient::closeDocument(const QString &filePath)
     if (it == m_documents.end()) return;
     cancelPendingSymbolRequests(path);
     cancelPendingCompletionRequests(path);
+    cancelPendingFormattingRequests(path);
     cancelPendingSemanticRequests(path);
     m_pendingChanges.remove(path);
     if (it->opened and m_state == State::Ready) {
@@ -576,6 +601,9 @@ void BaaLanguageClient::sendInitialize()
                         }}
                     }}
                 }},
+                {QStringLiteral("formatting"), QJsonObject{
+                    {QStringLiteral("dynamicRegistration"), false}
+                }},
                 {QStringLiteral("rename"), QJsonObject{
                     {QStringLiteral("prepareSupport"), true}
                 }}
@@ -630,6 +658,21 @@ void BaaLanguageClient::cancelPendingCompletionRequests(const QString &filePath)
         sendNotification(QStringLiteral("$/cancelRequest"),
                          QJsonObject{{QStringLiteral("id"), requestId}});
         m_pendingCompletionRequests.remove(requestId);
+    }
+}
+
+void BaaLanguageClient::cancelPendingFormattingRequests(
+    const QString &filePath)
+{
+    QList<qint64> requestIds;
+    for (auto it = m_pendingFormattingRequests.cbegin();
+         it != m_pendingFormattingRequests.cend(); ++it) {
+        if (it->filePath == filePath) requestIds.push_back(it.key());
+    }
+    for (qint64 requestId : requestIds) {
+        sendNotification(QStringLiteral("$/cancelRequest"),
+                         QJsonObject{{QStringLiteral("id"), requestId}});
+        m_pendingFormattingRequests.remove(requestId);
     }
 }
 
@@ -737,6 +780,11 @@ void BaaLanguageClient::handleResponse(const QJsonObject &message)
             capabilities.value(QStringLiteral("codeActionProvider"));
         m_codeActionProvider = codeActionProvider.isObject() or
             codeActionProvider.toBool(false);
+        const QJsonValue documentFormattingProvider =
+            capabilities.value(QStringLiteral("documentFormattingProvider"));
+        m_documentFormattingProvider =
+            documentFormattingProvider.isObject() or
+            documentFormattingProvider.toBool(false);
         const QJsonValue renameProvider =
             capabilities.value(QStringLiteral("renameProvider"));
         m_renameProvider = renameProvider.isObject() or
@@ -805,6 +853,45 @@ void BaaLanguageClient::handleResponse(const QJsonObject &message)
                                  pending.line,
                                  pending.character,
                                  items);
+        return;
+    }
+    auto formattingRequest = m_pendingFormattingRequests.find(id);
+    if (formattingRequest != m_pendingFormattingRequests.end()) {
+        const PendingFormattingRequest pending = formattingRequest.value();
+        m_pendingFormattingRequests.erase(formattingRequest);
+
+        const auto document = m_documents.constFind(pending.filePath);
+        if (document == m_documents.cend() or
+            document->version != pending.documentVersion) return;
+        if (message.contains(QStringLiteral("error"))) {
+            const QJsonObject error =
+                message.value(QStringLiteral("error")).toObject();
+            const int code = error.value(QStringLiteral("code")).toInt();
+            if (code != -32800 and code != -32801) {
+                emit logMessage(
+                    error.value(QStringLiteral("message")).toString(), 2);
+            }
+            return;
+        }
+
+        bool valid = false;
+        QVector<BaaTextEdit> edits = parseTextEdits(
+            message.value(QStringLiteral("result")), &valid);
+        if (not valid) {
+            emit logMessage(
+                QStringLiteral("أعاد Baa-LSP تعديلات تنسيق غير صالحة."), 2);
+            return;
+        }
+        BaaWorkspaceEdit workspaceEdit;
+        if (not edits.isEmpty()) {
+            BaaDocumentEdit documentEdit;
+            documentEdit.filePath = pending.filePath;
+            documentEdit.version = pending.documentVersion;
+            documentEdit.edits = std::move(edits);
+            workspaceEdit.documents.push_back(std::move(documentEdit));
+        }
+        emit formattingPublished(
+            pending.filePath, pending.documentVersion, workspaceEdit);
         return;
     }
     auto semanticRequest = m_pendingSemanticRequests.find(id);
@@ -1149,6 +1236,45 @@ QVector<BaaCodeAction> BaaLanguageClient::parseCodeActions(
     return actions;
 }
 
+QVector<BaaTextEdit> BaaLanguageClient::parseTextEdits(
+    const QJsonValue &result,
+    bool *valid) const
+{
+    if (valid) *valid = false;
+    QVector<BaaTextEdit> edits;
+    if (not result.isArray()) return edits;
+
+    const QJsonArray rawEdits = result.toArray();
+    edits.reserve(rawEdits.size());
+    for (const QJsonValue &editValue : rawEdits) {
+        if (not editValue.isObject()) return {};
+        const QJsonObject editObject = editValue.toObject();
+        const QJsonObject range =
+            editObject.value(QStringLiteral("range")).toObject();
+        const QJsonObject start =
+            range.value(QStringLiteral("start")).toObject();
+        const QJsonObject end =
+            range.value(QStringLiteral("end")).toObject();
+        BaaTextEdit edit;
+        edit.line = start.value(QStringLiteral("line")).toInt(-1);
+        edit.character =
+            start.value(QStringLiteral("character")).toInt(-1);
+        edit.endLine = end.value(QStringLiteral("line")).toInt(-1);
+        edit.endCharacter =
+            end.value(QStringLiteral("character")).toInt(-1);
+        edit.newText =
+            editObject.value(QStringLiteral("newText")).toString();
+        if (not edit.isValid() or
+            edit.endLine < edit.line or
+            (edit.endLine == edit.line and
+             edit.endCharacter < edit.character))
+            return {};
+        edits.push_back(std::move(edit));
+    }
+    if (valid) *valid = true;
+    return edits;
+}
+
 BaaWorkspaceEdit BaaLanguageClient::parseWorkspaceEdit(
     const QJsonValue &result,
     bool *valid) const
@@ -1225,10 +1351,12 @@ void BaaLanguageClient::handleProcessFinished(int exitCode, QProcess::ExitStatus
     m_definitionProvider = false;
     m_referencesProvider = false;
     m_codeActionProvider = false;
+    m_documentFormattingProvider = false;
     m_renameProvider = false;
     m_prepareRenameProvider = false;
     m_pendingSymbolRequests.clear();
     m_pendingCompletionRequests.clear();
+    m_pendingFormattingRequests.clear();
     m_pendingSemanticRequests.clear();
     m_symbolRequestedVersions.clear();
     m_documentSymbols.clear();

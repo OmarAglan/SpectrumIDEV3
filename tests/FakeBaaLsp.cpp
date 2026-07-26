@@ -93,6 +93,7 @@ int main(int argc, char *argv[])
                                 {"codeActionKinds", QJsonArray{"quickfix"}},
                                 {"resolveProvider", false}
                             }},
+                            {"documentFormattingProvider", true},
                             {"renameProvider", QJsonObject{
                                 {"prepareProvider", true}
                             }},
@@ -229,6 +230,24 @@ int main(int argc, char *argv[])
                 }
                 send(output, QJsonObject{
                     {"jsonrpc", "2.0"}, {"id", id}, {"result", results}
+                });
+            } else if (method == "textDocument/formatting") {
+                send(output, QJsonObject{
+                    {"jsonrpc", "2.0"}, {"id", id},
+                    {"result", QJsonArray{
+                        QJsonObject{
+                            {"range", QJsonObject{
+                                {"start", QJsonObject{
+                                    {"line", 0}, {"character", 0}
+                                }},
+                                {"end", QJsonObject{
+                                    {"line", 3}, {"character", 0}
+                                }}
+                            }},
+                            {"newText",
+                             "صحيح الرئيسية() {\n    أرجع ٠.\n}\n"}
+                        }
+                    }}
                 });
             } else if (method == "textDocument/codeAction") {
                 const QString uri = params.value("textDocument").toObject()

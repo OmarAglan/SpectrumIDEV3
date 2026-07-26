@@ -357,6 +357,12 @@ void TEditor::contextMenuEvent(QContextMenuEvent *event)
             this, &TEditor::quickFixRequested);
     menu->addAction(quickFixAction);
 
+    QAction *formatAction = new QAction("تنسيق مستند باء", this);
+    formatAction->setShortcut(QKeySequence("Shift+Alt+F"));
+    connect(formatAction, &QAction::triggered,
+            this, &TEditor::formatRequested);
+    menu->addAction(formatAction);
+
 
     menu->setStyleSheet(QString(
         "QMenu { background-color: %1; color: %2; border: 1px solid %3; }"

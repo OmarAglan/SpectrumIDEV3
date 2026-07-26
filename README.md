@@ -40,6 +40,9 @@
   stale-result cancellation while editing.
 - **Safe compiler-owned quick fixes** through `Ctrl+.` or the editor context
   menu, with an Arabic preview and version-checked workspace edits.
+- **Canonical Baa formatting** through `Shift+Alt+F`, the command palette, or
+  the editor context menu. Baa owns the style, Baa-LSP returns a versioned edit,
+  and Qalam applies it as one undoable operation.
 - **Auto-save & crash recovery**
   - Periodic auto-save to `file.~`
   - Recovery prompt if a newer backup exists
@@ -62,6 +65,8 @@
   rename combine Takween's source closure with Baa's structured symbol identities.
   Quick fixes come from Baa's structured diagnostic edits, pass through Baa-LSP
   without message parsing, and are previewed before Qalam applies them.
+  Formatting comes from Baa's `format-json-v1`; Qalam does not maintain a
+  competing formatter or silently apply stale edits.
   Projects containing `مشروع.تكوين` can be built, run,
   tested, and cleaned through Takween from the Run menu or command palette.
   Qalam asks `takween-targets-v1` for selectable targets and consumes

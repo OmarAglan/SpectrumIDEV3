@@ -372,7 +372,9 @@ One deferred item from Phase 2:
   `textDocument/references` in the search sidebar through Takween's source
   closure and Baa-owned symbol identities
 - [x] 9.1.6 Support versioned `publishDiagnostics` for real-time error reporting
-- [ ] 9.1.7 Support `textDocument/formatting` for auto-format
+- [x] 9.1.7 Support compiler-owned `textDocument/formatting` through
+  `format-json-v1`, with `Shift+Alt+F`, command/context actions, version
+  checks, and one undoable full-document edit
 - [x] 9.1.8 Support prepared, collision-checked Arabic
   `textDocument/rename` with an edit preview, version checks, undoable open-file
   changes, and atomic closed-file saves

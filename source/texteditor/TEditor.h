@@ -142,6 +142,7 @@ private slots:
 signals:
     void openRequest(QString filePath);
     void quickFixRequested();
+    void formatRequested();
     void completionRequested(QString filePath, int line, int character);
     void hoverRequested(QString filePath, int line, int character);
     void signatureHelpRequested(QString filePath, int line, int character);

@@ -74,7 +74,10 @@ The heart of Qalam is `TEditor`, a custom `QPlainTextEdit` subclass.
   open-document edits as one undo block, and writes closed files atomically.
   Quick fixes consume only Baa-owned structured diagnostic edits, request
   `textDocument/codeAction` at the cursor, preview the selected Arabic action,
-  and reuse the same version-checked workspace-edit path.
+  and reuse the same version-checked workspace-edit path. Document formatting
+  flushes the newest text, requests `textDocument/formatting`, and applies
+  Baa's one versioned full-document edit as a single undo block. Qalam does not
+  own formatting rules.
 - **`BuildManager`:** Owns project execution. Build, run, test, and clean requests
   search parent directories for `مشروع.تكوين`, ask
   `takween-targets-v1` for capabilities, and invoke canonical Arabic Takween argv

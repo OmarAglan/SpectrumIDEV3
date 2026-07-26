@@ -48,6 +48,7 @@ public:
     void requestReferences(const QString &filePath, int line, int character,
                            bool includeDeclaration = true);
     void requestCodeActions(const QString &filePath, int line, int character);
+    void requestFormatting(const QString &filePath);
     void requestPrepareRename(const QString &filePath,
                               int line,
                               int character);
@@ -105,6 +106,9 @@ signals:
                               int line,
                               int character,
                               const QVector<BaaCodeAction> &actions);
+    void formattingPublished(const QString &filePath,
+                             int documentVersion,
+                             const BaaWorkspaceEdit &edit);
     void renamePrepared(const QString &filePath,
                         int documentVersion,
                         int line,
@@ -156,6 +160,11 @@ private:
         int line{};
         int character{};
     };
+    struct PendingFormattingRequest
+    {
+        QString filePath;
+        int documentVersion{};
+    };
     struct PendingSemanticRequest
     {
         QString filePath;
@@ -179,6 +188,7 @@ private:
     void sendDidOpen(Document &document);
     void cancelPendingSymbolRequests(const QString &filePath);
     void cancelPendingCompletionRequests(const QString &filePath);
+    void cancelPendingFormattingRequests(const QString &filePath);
     void cancelPendingSemanticRequests(const QString &filePath);
     void requestSemantic(const QString &filePath,
                          int line,
@@ -201,6 +211,8 @@ private:
     BaaLocation parseLocation(const QJsonValue &result) const;
     QVector<BaaLocation> parseLocations(const QJsonValue &result) const;
     QVector<BaaCodeAction> parseCodeActions(const QJsonValue &result) const;
+    QVector<BaaTextEdit> parseTextEdits(const QJsonValue &result,
+                                        bool *valid) const;
     BaaWorkspaceEdit parseWorkspaceEdit(const QJsonValue &result,
                                         bool *valid) const;
     void handleProcessFinished(int exitCode, QProcess::ExitStatus status);
@@ -217,6 +229,7 @@ private:
     QHash<QString, int> m_symbolRequestedVersions;
     QHash<qint64, PendingSymbolRequest> m_pendingSymbolRequests;
     QHash<qint64, PendingCompletionRequest> m_pendingCompletionRequests;
+    QHash<qint64, PendingFormattingRequest> m_pendingFormattingRequests;
     QHash<qint64, PendingSemanticRequest> m_pendingSemanticRequests;
     QSet<QString> m_pendingChanges;
     QTimer m_changeTimer;
@@ -231,6 +244,7 @@ private:
     bool m_definitionProvider{};
     bool m_referencesProvider{};
     bool m_codeActionProvider{};
+    bool m_documentFormattingProvider{};
     bool m_renameProvider{};
     bool m_prepareRenameProvider{};
 };

@@ -211,6 +211,9 @@ Acceptance:
 - Use NFC for compiler identity; provide search-friendly normalization without
   silently changing source identifiers.
 - Add matching-bracket highlighting and Baa-aware formatting/indentation.
+  **Canonical document formatting is complete through Baa-owned
+  `format-json-v1`, a versioned Baa-LSP full-document edit, `Shift+Alt+F`, and
+  one undoable Qalam edit; richer on-type indentation remains additive.**
 
 Acceptance:
 

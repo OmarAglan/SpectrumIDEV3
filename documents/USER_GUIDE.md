@@ -31,6 +31,10 @@ The editor supports:
 - **Safe rename:** press `F2` on a Baa symbol, enter an Arabic name, and review
   the number of affected files and locations. Qalam applies only
   compiler-resolved occurrences and refuses stale or colliding edits.
+- **Official formatting:** press `Shift+Alt+F` or choose **تنسيق مستند باء**
+  from the editor context menu. Baa formats the current unsaved buffer using
+  its canonical four-space style, and Qalam applies the versioned result as one
+  undoable edit.
 - **Semantic hover:** pause the pointer over an Arabic identifier to see the
   declaration and Baa-owned description. Diagnostic tooltips take priority
   when the pointer is on an error.
@@ -90,6 +94,7 @@ Adjust the editor font size and family in Settings:
 | | `Ctrl+D` | Duplicate Line | ✓ Working |
 | | `Ctrl+Space` | Trigger Autocomplete | ✓ Working |
 | | `Ctrl+.` | Preview a safe Baa quick fix | ✓ Working |
+| | `Shift+Alt+F` | Format the current Baa document | ✓ Working |
 | **Navigation** | `Alt+Up/Down` | Move line up/down | ✓ Working |
 | | `F12` | Go to a Baa declaration | ✓ Working |
 | | `Shift+F12` | List compiler-resolved Baa references | ✓ Working |
@@ -113,6 +118,18 @@ selected fix only when it still matches the current document version.
 
 Qalam does not infer fixes from human-readable error messages. A stale,
 destructive, duplicate, or out-of-document edit is refused.
+
+## Format Document
+
+Press `Shift+Alt+F`, choose **الشفرة: تنسيق مستند باء** from the command
+palette, or choose **تنسيق مستند باء** from the editor context menu.
+
+Qalam first sends the newest unsaved text to Baa-LSP. Baa owns the canonical
+rules—four-space indentation, LF line endings, safe spacing, and preservation
+of literal and comment contents. Baa-LSP returns one full-document edit only
+if the text changes. Qalam rejects an obsolete version and applies a current
+result as one undoable editor action. Client preferences do not create a second
+Baa style.
 
 ---
 

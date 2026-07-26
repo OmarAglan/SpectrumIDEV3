@@ -35,6 +35,7 @@ void TestBaaLanguageClient::synchronizesDocumentsAndRejectsStaleDiagnostics()
     int definitionVersion = 0;
     int referencesVersion = 0;
     int codeActionVersion = 0;
+    int formattingVersion = 0;
     int prepareRenameVersion = 0;
     int renameEditVersion = 0;
     QVector<Diagnostic> lastDiagnostics;
@@ -45,6 +46,7 @@ void TestBaaLanguageClient::synchronizesDocumentsAndRejectsStaleDiagnostics()
     BaaLocation lastDefinition;
     QVector<BaaLocation> lastReferences;
     QVector<BaaCodeAction> lastCodeActions;
+    BaaWorkspaceEdit lastFormattingEdit;
     QString renamePlaceholder;
     BaaLocation renameRange;
     BaaWorkspaceEdit lastWorkspaceEdit;
@@ -194,6 +196,27 @@ void TestBaaLanguageClient::synchronizesDocumentsAndRejectsStaleDiagnostics()
     QCOMPARE(lastCodeActions.first().edit.documents.first().edits.size(), 1);
     QCOMPARE(lastCodeActions.first().edit.documents.first().edits.first().newText,
              QStringLiteral("صحيح "));
+
+    connect(&client, &BaaLanguageClient::formattingPublished, this,
+            [&](const QString &publishedPath, int version,
+                const BaaWorkspaceEdit &edit) {
+                QCOMPARE(QDir::cleanPath(publishedPath),
+                         QDir::cleanPath(filePath));
+                formattingVersion = version;
+                lastFormattingEdit = edit;
+            });
+    client.requestFormatting(filePath);
+    QTRY_COMPARE_WITH_TIMEOUT(formattingVersion, 1, 5000);
+    QVERIFY(lastFormattingEdit.isValid());
+    QCOMPARE(lastFormattingEdit.documents.size(), 1);
+    QCOMPARE(lastFormattingEdit.documents.first().version, 1);
+    QCOMPARE(lastFormattingEdit.editCount(), 1);
+    const BaaTextEdit formattingEdit =
+        lastFormattingEdit.documents.first().edits.first();
+    QCOMPARE(formattingEdit.line, 0);
+    QCOMPARE(formattingEdit.endLine, 3);
+    QCOMPARE(formattingEdit.newText,
+             QStringLiteral("صحيح الرئيسية() {\n    أرجع ٠.\n}\n"));
 
     connect(&client, &BaaLanguageClient::renamePrepared, this,
             [&](const QString &publishedPath, int version, int line, int character,
