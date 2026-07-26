@@ -1,11 +1,15 @@
 # Qalam IDE - محرر قلم
 
+<p align="center">
+  <img src="qalam/resources/branding/icons/qalam-256.png" width="160" alt="شعار قلم">
+</p>
+
 [![Qt](https://img.shields.io/badge/Qt-6.x-41CD52?logo=qt&logoColor=white)](https://www.qt.io/)
 [![C++](https://img.shields.io/badge/C%2B%2B-23-00599C?logo=c%2B%2B&logoColor=white)](https://en.cppreference.com/w/cpp/23)
 [![Platforms](https://img.shields.io/badge/Platforms-Windows%20%7C%20Linux%20%7C%20macOS-2ea44f)](#build--run)
 
-**English:** Qalam IDE is a fast, right-to-left friendly, Qt-powered IDE designed for Arabic-syntax system languages — starting with **Baa (باء)**.  
-**العربية:** محرر **قلم** هو بيئة تطوير سريعة تدعم اتجاه الكتابة من اليمين إلى اليسار، ومصممة للغات الأنظمة ذات الصياغة العربية — بدايةً مع **لغة باء**.
+**English:** Qalam IDE is the fast, right-to-left friendly, Qt-powered IDE dedicated to **Baa (باء)**.
+**العربية:** محرر **قلم** هو بيئة التطوير المخصصة للغة **باء**، سريعة ومبنية بـ Qt وتدعم اتجاه الكتابة من اليمين إلى اليسار.
 
 ---
 
@@ -29,11 +33,11 @@
 ### Editor experience
 - **Custom syntax highlighting engine** (lexer + Qt highlighter) with stateful multi-line handling.
 - **Theme engine** (multiple built-in code themes).
-- **Auto-completion framework** with multiple strategies:
-  - Snippets
-  - Keywords
-  - Built-ins
-  - Dynamic words from the current document
+- **Arabic-first Baa-LSP completion** sourced from Baa's versioned metadata and
+  current compiler symbols, with exact UTF-16 edits and navigable snippet tab stops.
+- **Compiler-backed hover and signature help** with Arabic declarations,
+  scope-correct shadowing, included prototypes, active parameters, and
+  stale-result cancellation while editing.
 - **Auto-save & crash recovery**
   - Periodic auto-save to `file.~`
   - Recovery prompt if a newer backup exists
@@ -48,8 +52,13 @@
 
 ### IDE features
 - **Embedded interactive console** with command history and fast flush buffering
-- **Ecosystem tooling integration**: saved files are checked through Baa's
-  `diagnostics-json-v1`; projects containing `مشروع.تكوين` can be built, run,
+- **Ecosystem tooling integration**: saved and unsaved diagnostics and
+  hierarchical document symbols now flow through the standalone Baa-LSP server
+  using Baa's versioned JSON contracts without writing shadow files. Arabic
+  completion, hover, and call-signature help use that same language-service
+  boundary. Project-wide definition, references, and collision-checked Arabic
+  rename combine Takween's source closure with Baa's structured symbol identities;
+  projects containing `مشروع.تكوين` can be built, run,
   tested, and cleaned through Takween from the Run menu or command palette.
   Qalam asks `takween-targets-v1` for selectable targets and consumes
   `takween-build-events-v1` for Arabic progress; `Shift+F5` cancels the active
@@ -153,6 +162,15 @@ cmake --preset windows-release-qt6102
 cmake --build --preset release-qt6102
 ```
 
+Windows tests normalize the runtime `Path` inside CTest and add the configured
+Qt and MinGW directories automatically. The Windows build script also removes
+duplicate `Path`/`PATH` variables before it launches CMake, MinGW, or CTest,
+copies the selected MinGW runtime beside every native executable, and deploys
+the matching Qt runtime beside Qalam. A normal build or test therefore does not
+require manual DLL copying or terminal repair. Use `-SkipDeployAfterBuild` only
+when an intentionally non-runnable intermediate application directory is
+acceptable.
+
 ### Linux
 
 On Ubuntu/Fedora/Arch-like systems, the low-hassle path is:
@@ -223,6 +241,7 @@ The following shortcuts are implemented:
 - [**Baa Language Specification**](documents/LANGUAGE.md)
 - [**User Guide**](documents/USER_GUIDE.md) (How to use the IDE)
 - [**Internal Architecture**](documents/INTERNALS.md) (For contributors)
+- [**Baa-First IDE Plan**](documents/BAA_FIRST_IDE_PLAN.md) (Active architecture and milestones)
 
 ---
 

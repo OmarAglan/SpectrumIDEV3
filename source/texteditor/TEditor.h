@@ -1,10 +1,12 @@
 #pragma once
 
-#include <QTimer>
 #include <QScrollBar>
 #include <QPlainTextEdit>
 #include <QCompleter>
+#include <QPoint>
+#include <QTimer>
 #include <QVector>
+
 #include <memory>
 
 #include "TSettings.h"
@@ -15,6 +17,9 @@
 #include "TAutoSave.h"
 #include "TSnippetManager.h"
 #include "Constants.h"
+#include "BaaCompletionItem.h"
+#include "BaaHover.h"
+#include "BaaSignatureHelp.h"
 
 
 class LineNumberArea;
@@ -47,6 +52,16 @@ public:
     void cursorIndentation();
 
     void setCompleter(QCompleter *completer);
+    void showLanguageCompletions(const QVector<BaaCompletionItem> &items,
+                                 int line,
+                                 int character);
+    bool hasVisibleCompletion() const;
+    void showLanguageHover(const BaaHover &hover,
+                           int requestLine,
+                           int requestCharacter);
+    void showSignatureHelp(const BaaSignatureHelp &signatureHelp,
+                           int requestLine,
+                           int requestCharacter);
 
     void startAutoSave();
     void stopAutoSave();
@@ -100,28 +115,35 @@ private:
     TAutoSave *m_autoSave{};
     TSnippetManager m_snippetManager;
 
-    QTimer *m_indexRebuildTimer{};
-
     friend class LineNumberArea;
 
     QCompleter* c{};
     CompletionModel *model{};
-    std::vector<std::unique_ptr<ICompletionStrategy>> strategies{};
-    DynamicWordStrategy* dynamicStrategy{};
     QVector<Diagnostic> m_diagnostics;
     QString textUnderCursor() const;
-    void performCompletion();
+    void performCompletion(bool explicitRequest = false);
+    void showCompletionPopup();
     void setupAutoComplete();
-    void insertWord(const QString& completion, QTextCursor& tc);
-    void insertBuiltinFunction(const QString& functionName, QTextCursor& tc);
+    int documentPosition(int zeroBasedLine, int utf16Character) const;
+    void insertCompletion(const CompletionItem &item);
+    void scheduleLanguageHover(const QPoint &viewportPosition,
+                               const QPoint &globalPosition);
+    void requestSignatureHelp();
+    void clearSemanticPresentation();
+    QTimer m_hoverTimer;
+    int m_hoverRequestLine{-1};
+    int m_hoverRequestCharacter{-1};
+    QPoint m_hoverGlobalPosition;
 
 private slots:
     void updateLineNumberAreaWidth();
     void highlightCurrentLine();
     void updateLineNumberArea(const QRect &rect, int dy);
-    void insertCompletion(const QString &completion, CompletionType type, SnippetId snippetId);
 signals:
     void openRequest(QString filePath);
+    void completionRequested(QString filePath, int line, int character);
+    void hoverRequested(QString filePath, int line, int character);
+    void signatureHelpRequested(QString filePath, int line, int character);
 };
 
 

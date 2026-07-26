@@ -20,10 +20,26 @@ Welcome to **Qalam IDE**, the professional environment for Arabic-syntax program
 The editor supports:
 - **Syntax Highlighting:** Automatic coloring for Baa keywords, types, and directives.
 - **RTL Support:** Full right-to-left support for both the interface and the code.
-- **Auto-completion:** Suggested keywords and snippets appear as you type.
+- **Arabic completion:** Baa-owned keywords, directives, snippets, and current
+  document declarations appear through Baa-LSP while typing Arabic letters.
+- **Live Baa diagnostics:** Saved and unsaved `.baa`/`.baahd` contents are checked
+  after a short pause. Only results matching the current document revision are shown.
+- **Compiler-backed navigation:** `F12` opens the exact declaration selected by
+  Baa's semantic analysis, including declarations in headers. `Shift+F12`
+  lists scope-correct references across the Takween project in the search
+  sidebar. Qalam does not guess from equal-looking identifier text.
+- **Safe rename:** press `F2` on a Baa symbol, enter an Arabic name, and review
+  the number of affected files and locations. Qalam applies only
+  compiler-resolved occurrences and refuses stale or colliding edits.
+- **Semantic hover:** pause the pointer over an Arabic identifier to see the
+  declaration and Baa-owned description. Diagnostic tooltips take priority
+  when the pointer is on an error.
+- **Call signatures:** type `(`, `،`, or `,` inside a call to see the function
+  declaration and active parameter. Use `Ctrl+Shift+Space` to request it again.
 - **Bracket Matching:** Automatic pairing of `()`, `{}`, `[]`, `''`, `""`, and ` `` `.
-- **Code Folding:** Collapse/expand function and class blocks.
-- **Snippets:** Type triggers like `if` or `main` then press Tab to expand.
+- **Code Folding:** Collapse and expand supported Baa blocks.
+- **Snippets:** Choose an Arabic template such as `إذا` or `الرئيسية`; use Tab
+  or Enter to move through its editable positions.
 - **Auto-save:** Automatic backup every 30 seconds to `.~` files.
 - **Zoom:** Use `Ctrl+Scroll` to change font size.
 
@@ -74,6 +90,9 @@ Adjust the editor font size and family in Settings:
 | | `Ctrl+D` | Duplicate Line | ✓ Working |
 | | `Ctrl+Space` | Trigger Autocomplete | ✓ Working |
 | **Navigation** | `Alt+Up/Down` | Move line up/down | ✓ Working |
+| | `F12` | Go to a Baa declaration | ✓ Working |
+| | `Shift+F12` | List compiler-resolved Baa references | ✓ Working |
+| | `F2` | Safely rename a Baa symbol across the project | ✓ Working |
 | | `Ctrl+Tab` | Next Tab | ✓ Working |
 | | `Ctrl+Shift+Tab` | Previous Tab | ✓ Working |
 | **View** | `F6` | Toggle Console | ✓ Working |
@@ -106,13 +125,12 @@ Type the trigger and press **Tab** to expand:
 
 | Trigger | Expands To |
 |---------|------------|
-| `main` | `صحيح الرئيسية() { ... }` |
-| `if` | `إذا (condition) { ... }` |
-| `ifelse` | `إذا (condition) { ... } وإلا { ... }` |
-| `for` | `لكل (init؛ condition؛ increment) { ... }` |
-| `while` | `طالما (condition) { ... }` |
-| `func` | Function definition template |
-| `class` | Class definition template |
+| `الرئيسية` | `صحيح الرئيسية() { ... }` |
+| `إذا` | `إذا (شرط) { ... }` |
+| `إذا_وإلا` | `إذا (شرط) { ... } وإلا { ... }` |
+| `لكل` | `لكل (تهيئة؛ شرط؛ زيادة) { ... }` |
+| `طالما` | `طالما (شرط) { ... }` |
+| `دالة` | Baa function definition template |
 
 After expanding, press **Tab** to jump between placeholders (e.g., function name, parameters).
 
@@ -143,7 +161,7 @@ Qalam IDE is actively developed. See [ROADMAP.md](ROADMAP.md) for planned featur
 - Multi-cursor editing
 - Split editor
 - Minimap
-- LSP support
+- Scope-aware local completion and code actions through Baa-LSP
 - Git integration
 - Debugger
 

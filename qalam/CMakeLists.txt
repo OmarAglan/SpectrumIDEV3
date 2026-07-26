@@ -29,11 +29,19 @@ elseif(APPLE)
 endif()
 
 target_link_libraries(Qalam PRIVATE qalam_core)
+qalam_harden_windows_runtime(Qalam)
 
 # Add the current directory (qalam/) to include paths for local app headers
 target_include_directories(Qalam PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
-option(QALAM_DEPLOY_AFTER_BUILD "Run Qt deployment tool after building Qalam on Windows" OFF)
+if(WIN32)
+    set(qalam_deploy_after_build_default ON)
+else()
+    set(qalam_deploy_after_build_default OFF)
+endif()
+option(QALAM_DEPLOY_AFTER_BUILD
+    "Run Qt deployment tool after building Qalam on Windows"
+    ${qalam_deploy_after_build_default})
 
 if(WIN32 AND QALAM_DEPLOY_AFTER_BUILD)
     find_program(WINDEPLOYQT_EXECUTABLE
@@ -43,13 +51,28 @@ if(WIN32 AND QALAM_DEPLOY_AFTER_BUILD)
 
     if(WINDEPLOYQT_EXECUTABLE)
         add_custom_command(TARGET Qalam POST_BUILD
-            COMMAND "${WINDEPLOYQT_EXECUTABLE}" --compiler-runtime --no-system-dxc-compiler --dir "$<TARGET_FILE_DIR:Qalam>" "$<TARGET_FILE:Qalam>"
+            COMMAND "${WINDEPLOYQT_EXECUTABLE}" --no-compiler-runtime --no-system-dxc-compiler --dir "$<TARGET_FILE_DIR:Qalam>" "$<TARGET_FILE:Qalam>"
             COMMENT "Deploying Qt runtime with windeployqt"
             VERBATIM
         )
     else()
         message(WARNING "QALAM_DEPLOY_AFTER_BUILD is ON, but windeployqt was not found. Run scripts/package-windows.ps1 after building.")
     endif()
+endif()
+
+if(WIN32 AND QALAM_BUILD_TESTS)
+    find_program(QALAM_POWERSHELL_EXECUTABLE
+        NAMES pwsh.exe powershell.exe
+        REQUIRED)
+    add_test(
+        NAME test_windows_runtime_independence
+        COMMAND "${QALAM_POWERSHELL_EXECUTABLE}"
+            -NoProfile
+            -ExecutionPolicy Bypass
+            -File "${CMAKE_SOURCE_DIR}/scripts/test-windows-runtime.ps1"
+            -Executable "$<TARGET_FILE:Qalam>"
+            -StartupSeconds 1
+    )
 endif()
 
 install(TARGETS Qalam

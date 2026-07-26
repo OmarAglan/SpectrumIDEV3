@@ -1,131 +1,100 @@
 #include "TSnippetManager.h"
+
+#include <QRegularExpression>
+#include <QSet>
 #include <QTextBlock>
-#include <QTextDocument>
+
+#include <algorithm>
+
+namespace {
+struct ParsedPlaceholder
+{
+    int order{};
+    int start{};
+    int length{};
+};
+}
 
 TSnippetManager::TSnippetManager(QPlainTextEdit *editor) : m_editor(editor) {}
 
-void TSnippetManager::insertSnippet(const QString &snippet, QTextCursor &tc, SnippetId snippetId) {
-    QString textToInsert = snippet;
+void TSnippetManager::insertSnippet(const QString &snippet, QTextCursor &tc)
+{
+    m_targets.clear();
 
-    // Calculate indentation from the current line
-    QTextBlock block = tc.block();
-    QString lineText = block.text();
-    QString baseIndentation{};
-    for (const QChar &ch : lineText) {
-        if (ch.isSpace()) baseIndentation.append(ch);
-        else break;
+    static const QRegularExpression placeholderPattern(
+        QStringLiteral(R"(\$\{([0-9]+)(?::([^}]*))?\}|\$([0-9]+))"));
+    QString plainText;
+    QVector<ParsedPlaceholder> placeholders;
+    int sourceOffset = 0;
+    QRegularExpressionMatchIterator matches = placeholderPattern.globalMatch(snippet);
+    while (matches.hasNext()) {
+        const QRegularExpressionMatch match = matches.next();
+        plainText += snippet.mid(sourceOffset, match.capturedStart() - sourceOffset);
+        const int order = (match.captured(1).isEmpty()
+                               ? match.captured(3)
+                               : match.captured(1)).toInt();
+        const QString initialText = match.captured(2);
+        placeholders.push_back({order,
+                                static_cast<int>(plainText.length()),
+                                static_cast<int>(initialText.length())});
+        plainText += initialText;
+        sourceOffset = match.capturedEnd();
+    }
+    plainText += snippet.mid(sourceOffset);
+
+    QString baseIndentation;
+    const QString lineText = tc.block().text();
+    for (const QChar character : lineText) {
+        if (not character.isSpace()) break;
+        baseIndentation += character;
     }
 
-    // Apply indentation to multi-line snippets
-    if (textToInsert.contains('\n')) {
-        QStringList lines = textToInsert.split('\n');
-        // Start from index 1 because index 0 is appended to the current line
-        // (which already has indentation on the left).
-        // Subsequent lines need the base indentation explicitly added.
-        for (int i = 1; i < lines.size(); ++i) {
-            lines[i] = baseIndentation + lines[i];
+    QVector<int> offsetMap(plainText.length() + 1);
+    QString indentedText;
+    for (int index = 0; index < plainText.length(); ++index) {
+        offsetMap[index] = indentedText.length();
+        indentedText += plainText.at(index);
+        if (plainText.at(index) == '\n' and index + 1 < plainText.length()) {
+            indentedText += baseIndentation;
         }
-        textToInsert = lines.join('\n');
     }
+    offsetMap[plainText.length()] = indentedText.length();
 
-    // Perform the insertion
-    tc.insertText(textToInsert);
+    const int insertionStart = tc.selectionStart();
+    tc.insertText(indentedText);
     m_editor->setTextCursor(tc);
 
-    // Set up placeholder navigation based on the snippet ID
-    setupNavigation(snippetId);
-}
-
-void TSnippetManager::setupNavigation(SnippetId snippetId) {
-    m_targets.clear();
-
-    switch (snippetId) {
-    case SnippetId::Function: {
-        // "صحيح اسم_الدالة(صحيح معامل) {...}" — select function name first, then parameter
-        QTextCursor finder = m_editor->textCursor();
-        finder = m_editor->document()->find("اسم_الدالة", finder, QTextDocument::FindBackward);
-        if (!finder.isNull()) m_editor->setTextCursor(finder);
-        m_targets << "معامل" << "مرر";
-        break;
+    std::ranges::stable_sort(placeholders,
+        [](const ParsedPlaceholder &left, const ParsedPlaceholder &right) {
+            if (left.order == 0) return false;
+            if (right.order == 0) return true;
+            return left.order < right.order;
+        });
+    QSet<int> seenOrders;
+    for (const ParsedPlaceholder &placeholder : placeholders) {
+        if (seenOrders.contains(placeholder.order)) continue;
+        seenOrders.insert(placeholder.order);
+        QTextCursor target(m_editor->document());
+        const int start = insertionStart + offsetMap.at(placeholder.start);
+        const int end = insertionStart + offsetMap.at(
+            placeholder.start + placeholder.length);
+        target.setPosition(start);
+        target.setPosition(end, QTextCursor::KeepAnchor);
+        m_targets.push_back(target);
     }
-    case SnippetId::Class: {
-        QTextCursor finder = m_editor->textCursor();
-        finder = m_editor->document()->find("اسم", finder, QTextDocument::FindBackward);
-        if (!finder.isNull()) m_editor->setTextCursor(finder);
-        m_targets << "مرر";
-        break;
-    }
-    case SnippetId::If:
-    case SnippetId::IfElse:
-    case SnippetId::ElseIf: {
-        // "إذا (الشرط) {...}" — select the condition placeholder
-        QTextCursor finder = m_editor->textCursor();
-        finder = m_editor->document()->find("الشرط", finder, QTextDocument::FindBackward);
-        if (!finder.isNull()) m_editor->setTextCursor(finder);
-        m_targets << "مرر";
-        break;
-    }
-    case SnippetId::ForLoop: {
-        // "لكل (صحيح س = ٠؛ ...) {...}" — select loop variable
-        QTextCursor finder = m_editor->textCursor();
-        finder = m_editor->document()->find("س", finder, QTextDocument::FindBackward);
-        if (!finder.isNull()) m_editor->setTextCursor(finder);
-        m_targets << "مرر";
-        break;
-    }
-    case SnippetId::WhileLoop: {
-        // "طالما (الشرط) {...}" — select condition
-        QTextCursor finder = m_editor->textCursor();
-        finder = m_editor->document()->find("الشرط", finder, QTextDocument::FindBackward);
-        if (!finder.isNull()) m_editor->setTextCursor(finder);
-        m_targets << "مرر";
-        break;
-    }
-    case SnippetId::Switch: {
-        // "اختر (المتغير) {...}" — select the variable placeholder
-        QTextCursor finder = m_editor->textCursor();
-        finder = m_editor->document()->find("المتغير", finder, QTextDocument::FindBackward);
-        if (!finder.isNull()) m_editor->setTextCursor(finder);
-        m_targets << "مرر";
-        break;
-    }
-    case SnippetId::Array: {
-        // "صحيح المصفوفة[١٠]." — select array name
-        QTextCursor finder = m_editor->textCursor();
-        finder = m_editor->document()->find("المصفوفة", finder, QTextDocument::FindBackward);
-        if (!finder.isNull()) m_editor->setTextCursor(finder);
-        break;
-    }
-    case SnippetId::Constant: {
-        // "ثابت صحيح الاسم = القيمة." — select constant name, then value
-        QTextCursor finder = m_editor->textCursor();
-        finder = m_editor->document()->find("الاسم", finder, QTextDocument::FindBackward);
-        if (!finder.isNull()) m_editor->setTextCursor(finder);
-        m_targets << "القيمة";
-        break;
-    }
-    case SnippetId::Main:
-    case SnippetId::Else:
-    case SnippetId::None:
-        // No placeholder navigation needed
-        break;
+    if (not m_targets.isEmpty()) {
+        m_editor->setTextCursor(m_targets.takeFirst());
     }
 }
 
-bool TSnippetManager::processSnippetNavigation() {
+bool TSnippetManager::processSnippetNavigation()
+{
     if (m_targets.isEmpty()) return false;
-    QString nextTarget = m_targets.first();
-    QTextCursor tc = m_editor->textCursor();
-    QTextCursor found = m_editor->document()->find(nextTarget, tc);
-    if (!found.isNull()) {
-        m_editor->setTextCursor(found);
-        m_targets.removeFirst();
-        return true;
-    }
-    m_targets.clear();
-    return false;
+    m_editor->setTextCursor(m_targets.takeFirst());
+    return true;
 }
 
-bool TSnippetManager::hasActiveSnippet() const {
-    return !m_targets.isEmpty();
+bool TSnippetManager::hasActiveSnippet() const
+{
+    return not m_targets.isEmpty();
 }

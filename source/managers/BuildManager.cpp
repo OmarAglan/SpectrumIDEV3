@@ -21,10 +21,6 @@ BuildManager::BuildManager(QObject *parent)
 
 BuildManager::~BuildManager()
 {
-    if (m_checkProcess and m_checkProcess->state() != QProcess::NotRunning) {
-        m_checkProcess->kill();
-        m_checkProcess->waitForFinished(500);
-    }
     cleanupBuild();
 }
 
@@ -69,7 +65,7 @@ QString BuildManager::resolveCompilerPath() const
 #endif
 }
 
-QString BuildManager::resolveTakweenPath() const
+QString BuildManager::resolveTakweenProgram()
 {
     const QString appDir = QCoreApplication::applicationDirPath();
     const QStringList candidates = {
@@ -95,11 +91,6 @@ QString BuildManager::resolveTakweenPath() const
         }
     }
     return QString();
-}
-
-QStringList BuildManager::baaCheckArguments(const QString &filePath)
-{
-    return {"--check", "--diagnostics=json", QFileInfo(filePath).absoluteFilePath()};
 }
 
 QStringList BuildManager::takweenCommandArguments(const QString &command,
@@ -198,7 +189,7 @@ QVector<TakweenTarget> BuildManager::discoverTakweenTargets(const QString &fileP
                                                             QString *error) const
 {
     const QString projectRoot = findTakweenProjectRoot(filePath);
-    const QString takween = resolveTakweenPath();
+    const QString takween = resolveTakweenProgram();
     if (projectRoot.isEmpty()) {
         if (error) *error = "لم يُعثر على مشروع.تكوين.";
         return {};
@@ -259,64 +250,6 @@ QVector<TakweenTarget> BuildManager::selectableTakweenTargets(
     return selected;
 }
 
-void BuildManager::checkBaa(const QString &filePath)
-{
-    const QFileInfo source(filePath);
-    if (!source.isFile() or (source.suffix() != "baa" and source.suffix() != "baahd")) return;
-
-    QString program = resolveCompilerPath();
-    if (!QFileInfo(program).isExecutable()) {
-        const QString pathProgram = QStandardPaths::findExecutable(program);
-        if (!pathProgram.isEmpty()) program = pathProgram;
-    }
-    if (!QFileInfo(program).isExecutable()) return;
-
-    if (m_checkProcess) {
-        QProcess *previous = m_checkProcess.data();
-        disconnect(previous, nullptr, this, nullptr);
-        if (previous->state() != QProcess::NotRunning) {
-            previous->kill();
-            previous->waitForFinished(250);
-        }
-        previous->deleteLater();
-        m_checkProcess = nullptr;
-    }
-
-    m_checkStdout.clear();
-    m_checkProcess = new QProcess(this);
-    m_checkProcess->setProgram(program);
-    m_checkProcess->setArguments(baaCheckArguments(filePath));
-    m_checkProcess->setWorkingDirectory(source.absolutePath());
-    m_checkProcess->setProcessChannelMode(QProcess::SeparateChannels);
-
-    QProcess *checkProcess = m_checkProcess.data();
-    connect(checkProcess, &QProcess::readyReadStandardOutput, this, [this, checkProcess]() {
-        if (m_checkProcess == checkProcess) {
-            m_checkStdout += QString::fromUtf8(checkProcess->readAllStandardOutput());
-        }
-    });
-    connect(checkProcess, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
-            this, [this, checkProcess](int exitCode, QProcess::ExitStatus exitStatus) {
-                if (m_checkProcess != checkProcess) return;
-                m_checkStdout += QString::fromUtf8(checkProcess->readAllStandardOutput());
-                const QString payload = m_checkStdout;
-                m_checkStdout.clear();
-                checkProcess->deleteLater();
-                m_checkProcess = nullptr;
-                if (!payload.trimmed().isEmpty()) emit diagnosticsReady(payload);
-                emit toolingFinished("check", exitStatus == QProcess::NormalExit ? exitCode : -1);
-            });
-    connect(checkProcess, &QProcess::errorOccurred, this,
-            [this, checkProcess](QProcess::ProcessError error) {
-                if (error != QProcess::FailedToStart or m_checkProcess != checkProcess) return;
-                m_checkStdout.clear();
-                checkProcess->deleteLater();
-                m_checkProcess = nullptr;
-                emit toolingFinished("check", -1);
-            });
-    checkProcess->start();
-}
-
 void BuildManager::cleanupBuild()
 {
     QThread *thread = m_buildThread.data();
@@ -359,7 +292,7 @@ void BuildManager::runBaa(const QString &filePath, TConsole *console)
 
     const QString projectRoot = findTakweenProjectRoot(filePath);
     if (!projectRoot.isEmpty()) {
-        const QString takween = resolveTakweenPath();
+        const QString takween = resolveTakweenProgram();
         if (!takween.isEmpty()) {
             program = takween;
             args = takweenCommandArguments("run");
@@ -386,7 +319,7 @@ bool BuildManager::runTakweenCommand(const QString &filePath,
 
     const QStringList arguments = takweenCommandArguments(command, targetName);
     const QString projectRoot = findTakweenProjectRoot(filePath);
-    const QString takween = resolveTakweenPath();
+    const QString takween = resolveTakweenProgram();
     if (arguments.isEmpty() or projectRoot.isEmpty() or takween.isEmpty()) return false;
 
     const QString normalized = command.trimmed().toLower();

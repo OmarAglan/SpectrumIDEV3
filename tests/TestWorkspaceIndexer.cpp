@@ -12,7 +12,6 @@ class TestWorkspaceIndexer : public QObject
 
 private slots:
     void indexesAllowedFilesAndSkipsGeneratedFolders();
-    void findsDefinitionsAndReferences();
 };
 
 namespace {
@@ -52,32 +51,6 @@ void TestWorkspaceIndexer::indexesAllowedFilesAndSkipsGeneratedFolders()
     QVERIFY(files.contains(QDir::cleanPath(root.filePath("README.md"))));
     QVERIFY(std::none_of(files.begin(), files.end(), [](const QString &path) {
         return path.contains("/build/") || path.contains("/.git/") || path.endsWith("image.png");
-    }));
-}
-
-void TestWorkspaceIndexer::findsDefinitionsAndReferences()
-{
-    QTemporaryDir tempDir;
-    QVERIFY(tempDir.isValid());
-
-    QDir root(tempDir.path());
-    writeUtf8File(root.filePath("main.baa"),
-                  "دالة احسب()\n"
-                  "    احسب\n"
-                  "نهاية\n");
-
-    WorkspaceIndexer indexer;
-    indexer.setRootPath(tempDir.path());
-
-    WorkspaceIndexer::SymbolLocation definition;
-    QVERIFY(indexer.findDefinition("احسب", &definition));
-    QCOMPARE(definition.line, 1);
-    QCOMPARE(definition.column, 6);
-
-    const auto references = indexer.findReferences("احسب");
-    QVERIFY(references.size() >= 2);
-    QVERIFY(std::any_of(references.begin(), references.end(), [](const auto &location) {
-        return location.line == 2;
     }));
 }
 

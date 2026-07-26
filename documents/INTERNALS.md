@@ -32,9 +32,15 @@ Qalam IDE is built using **Qt 6 (C++23)** and follows a modular design. The proj
 
 #### 1. Text Editor (`source/texteditor`)
 The heart of Qalam is `TEditor`, a custom `QPlainTextEdit` subclass.
-- **`TLexer`:** A state-based lexer using `QStringView` for zero-copy tokenization. Tokens are used for syntax highlighting and auto-completion.
+- **`TLexer`:** A state-based lexer using `QStringView` for zero-copy syntax highlighting.
 - **`TSyntaxHighlighter`:** Integrates `TLexer` with Qt's `QSyntaxHighlighter` for real-time coloring.
-- **`AutoComplete`:** Provides context-aware suggestions using the Strategy pattern with 5 strategies: `KeywordStrategy`, `BuiltinStrategy`, `SnippetStrategy`, `PreprocessorStrategy`, `DynamicWordStrategy`.
+- **Completion UI:** `TEditor` requests `textDocument/completion` after Arabic
+  input, and displays only version-matched Baa-LSP results. It does not own a
+  copied keyword, builtin, or snippet list.
+- **Semantic tooltips:** delayed identifier hover requests and call-signature
+  requests flow through Baa-LSP. `TEditor` renders version-matched Markdown and
+  the active Arabic parameter, but owns no keyword, builtin, type, or signature
+  rules.
 - **`TBracketHandler`:** Handles bracket/quote auto-pairing, skip-over, and selection wrapping.
 - **`TSnippetManager`:** Manages code snippets with Tab/Enter placeholder navigation.
 - **`TAutoSave`:** Handles automatic backup to `.~` files.
@@ -53,9 +59,21 @@ The heart of Qalam is `TEditor`, a custom `QPlainTextEdit` subclass.
 #### 4. Managers (`source/managers`)
 - **`FileManager`:** Handles file open/save, recent files, drag-and-drop, and file size safety checks.
 - **`SessionManager`:** Saves and restores open files, active tab, folder path, and window geometry.
-- **`BuildManager`:** Integrates with both tooling layers. Saved `.baa`/`.baahd`
-  files use `baa --check --diagnostics=json` for non-codegen diagnostics. Build,
-  run, test, and clean requests search parent directories for `مشروع.تكوين`, ask
+- **`BaaLanguageClient`:** Owns LSP framing, JSON-RPC, the
+  Baa-LSP process lifecycle, document sessions, capabilities, and feature
+  requests. Baa-LSP—not Qalam—owns compiler invocation and UTF-8 byte to UTF-16
+  position conversion. The client caches hierarchical document symbols only
+  when their response matches the current document version and cancels obsolete
+  symbol requests. Cursor-sensitive completion flushes the newest full-text
+  document change before requesting exact UTF-16 edits, rejects obsolete
+  responses, and passes standard snippet tab stops to `TSnippetManager`. See
+  `documents/BAA_LSP_INTEGRATION_AR.md`. Hover and signature requests use the
+  same immediate full-text flush, cancellation, and document-version checks.
+  Project navigation starts at the nearest Takween root. Prepared rename
+  consumes versioned `WorkspaceEdit` results, previews their scope, applies
+  open-document edits as one undo block, and writes closed files atomically.
+- **`BuildManager`:** Owns project execution. Build, run, test, and clean requests
+  search parent directories for `مشروع.تكوين`, ask
   `takween-targets-v1` for capabilities, and invoke canonical Arabic Takween argv
   in that root. Project F5 selects an authoritative runnable target; standalone
   files retain direct Baa invocation.
@@ -66,7 +84,7 @@ The heart of Qalam is `TEditor`, a custom `QPlainTextEdit` subclass.
 - **`DiagnosticParser`:** Treats `diagnostics-json-v1` as the primary compiler
   contract and retains human-text patterns only as a compatibility fallback.
   The model preserves codes, categories, primary/end spans, and hints.
-- **Tool completion contract:** `BuildManager` emits the operation with the raw
+- **Tool completion contract:** `BuildManager` emits project operations with the raw
   process exit code and classifies `compiler-cli-v1` codes `0` through `5`.
   Qalam uses structured diagnostics first and creates a code-based fallback only
   when the structured model is empty. `run` and `test` remain operation-aware
@@ -77,17 +95,24 @@ The heart of Qalam is `TEditor`, a custom `QPlainTextEdit` subclass.
 
 ### Adding a new keyword
 
-Keywords are now data-driven from `qalam/resources/baa-language.json`:
+The Baa compiler owns keywords and completion metadata:
 
-1. Add the keyword to the `keywords` array in `baa-language.json`.
-2. The IDE will automatically pick it up for syntax highlighting and auto-completion.
-3. (Optional) Add a snippet to `TSnippetManager::setupNavigation()` if needed.
+1. Add the language word to Baa's central language profile and its parser rules.
+2. Add or adjust the Baa-owned completion record and contract test.
+3. Baa-LSP and Qalam consume `completion-data-json-v1`; do not add an editor alias.
+4. Until semantic highlighting replaces the local lexer profile, mirror the word
+   in `qalam/resources/baa-language.json` for coloring only.
 
 ### Adding a new source file
 
 1. Create the `.h` and `.cpp` files in the appropriate `source/` subdirectory.
 2. Add the files to `source/CMakeLists.txt` target sources.
 3. Run `cmake --preset windows-mingw` (or your platform's preset) to reconfigure.
+
+On Windows, registered tests run through a CMake environment wrapper that
+removes duplicate `Path`/`PATH` variables and supplies the configured Qt and
+compiler runtime directories. Keep new tests inside `add_qalam_test()` so this
+load-time protection remains automatic.
 
 ### Adding a setting
 

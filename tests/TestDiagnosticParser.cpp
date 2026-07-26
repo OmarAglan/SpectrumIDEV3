@@ -1,4 +1,5 @@
 #include "DiagnosticParser.h"
+#include "DiagnosticsModel.h"
 
 #include <QtTest/QtTest>
 
@@ -12,6 +13,7 @@ private slots:
     void parsesBaaJsonDiagnostics();
     void ignoresUnknownJsonSchema();
     void deduplicatesRepeatedDiagnostics();
+    void replacesOnlyOneAnalysisSource();
 };
 
 void TestDiagnosticParser::parsesColonError()
@@ -89,6 +91,31 @@ void TestDiagnosticParser::deduplicatesRepeatedDiagnostics()
 
     QCOMPARE(diagnostics.size(), 1);
     QCOMPARE(diagnostics[0].severity, QString("warning"));
+}
+
+void TestDiagnosticParser::replacesOnlyOneAnalysisSource()
+{
+    DiagnosticsModel model;
+    Diagnostic first;
+    first.file = "/tmp/first.baa";
+    first.message = "قديم";
+    first.source = "baa-lsp:/tmp/first.baa";
+    Diagnostic second;
+    second.file = "/tmp/second.baa";
+    second.message = "يبقى";
+    second.source = "baa-lsp:/tmp/second.baa";
+    model.setDiagnostics({first, second});
+
+    Diagnostic replacement;
+    replacement.file = "/tmp/first.baa";
+    replacement.message = "جديد";
+    model.replaceDiagnosticsFromSource("baa-lsp:/tmp/first.baa", {replacement});
+
+    QCOMPARE(model.count(), 2);
+    QCOMPARE(model.diagnosticsForFile("/tmp/first.baa").first().message, QString("جديد"));
+    QCOMPARE(model.diagnosticsForFile("/tmp/second.baa").first().message, QString("يبقى"));
+    QCOMPARE(model.diagnosticsForFile("/tmp/first.baa").first().source,
+             QString("baa-lsp:/tmp/first.baa"));
 }
 
 QTEST_MAIN(TestDiagnosticParser)

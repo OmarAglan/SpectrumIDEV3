@@ -43,6 +43,31 @@ void DiagnosticsModel::addDiagnostics(const QVector<Diagnostic> &diagnostics)
     if (changed) emit diagnosticsChanged();
 }
 
+void DiagnosticsModel::replaceDiagnosticsFromSource(
+    const QString &source,
+    const QVector<Diagnostic> &diagnostics)
+{
+    if (source.isEmpty()) return;
+    QVector<Diagnostic> updated;
+    updated.reserve(m_diagnostics.size() + diagnostics.size());
+
+    for (const Diagnostic &diagnostic : std::as_const(m_diagnostics)) {
+        if (diagnostic.source != source) updated.push_back(diagnostic);
+    }
+
+    QSet<QString> seen;
+    for (Diagnostic diagnostic : diagnostics) {
+        diagnostic.source = source;
+        const QString key = diagnostic.key();
+        if (seen.contains(key)) continue;
+        seen.insert(key);
+        updated.push_back(diagnostic);
+    }
+
+    m_diagnostics = updated;
+    emit diagnosticsChanged();
+}
+
 QVector<Diagnostic> DiagnosticsModel::diagnostics() const
 {
     return m_diagnostics;

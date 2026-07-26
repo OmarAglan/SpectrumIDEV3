@@ -4,6 +4,14 @@
 **Version:** 3.3.0
 **Codebase:** ~9,750 lines C++ across 67 files (Qt 6 + C++23)
 
+> **Active product direction:** Qalam is now the dedicated Baa-first IDE. The
+> executable architecture, milestones, and acceptance gates are defined in
+> [BAA_FIRST_IDE_PLAN.md](BAA_FIRST_IDE_PLAN.md). General multi-language work is
+> deferred until the Baa experience is admitted on Windows and Linux.
+> The permanent semantic boundary is the Baa-only language server described in
+> [BAA_LSP_INTEGRATION_AR.md](BAA_LSP_INTEGRATION_AR.md). The diagnostics slice
+> now uses that boundary exclusively; direct compiler analysis has been removed.
+
 ---
 
 ## Completed Work (Archive)
@@ -26,16 +34,18 @@ One deferred item from Phase 2:
 ### Current Strengths
 
 - **Well-factored Manager pattern** -- `FileManager`, `BuildManager`, `SessionManager`, `LayoutManager` cleanly separate concerns
-- **Clean Strategy pattern** for autocomplete (`ICompletionStrategy`) and themes (`SyntaxTheme`)
+- **Compiler-owned completion boundary** -- Qalam renders Baa-LSP results while
+  Baa owns keywords, directives, snippets, and symbols
 - **State-machine lexer** with solid `LexerState` interface and `QStringView` zero-copy tokenization
 - **RTL/Arabic-first design** throughout -- UI strings, layout direction, icon positioning
 - **Comprehensive `Constants.h`** -- organized namespaces for colors, fonts, layout, timing
 - **Centralized theme engine** (`QalamTheme`, 805 lines) providing consistent styling
 - **Session persistence** -- restores tabs, geometry, folder, preferences
 - **Modern signal/slot connections** -- 100% pointer-to-member syntax, zero string-based connections
-- **Smart pointer usage** -- `std::unique_ptr` for strategies/states, `std::shared_ptr` for themes, `QPointer` for cross-thread refs
+- **Smart pointer usage** -- `std::shared_ptr` for themes and `QPointer` for cross-process/UI lifetime guards
 - **Thread safety** -- `QMutex` in `ProcessWorker` and `TConsole`, proper thread lifecycle in `BuildManager`
-- **Structured Baa diagnostics** -- `diagnostics-json-v1` parser, span/code/hint model, and save-time `baa --check` path
+- **Live Baa diagnostics** -- versioned unsaved documents flow through Baa-LSP,
+  with stale-result rejection and span/code/hint presentation in Qalam
 - **Structured tooling failures** -- `compiler-cli-v1` exit codes are classified
   with explicit operation context when JSON diagnostics are empty; human messages
   are not parsed to determine the failure class
@@ -248,9 +258,9 @@ One deferred item from Phase 2:
 - [ ] 6.2.1 `TLexer` tests: single-line tokens, multi-line strings, edge cases, escape sequences, Arabic digits, operators
 - [ ] 6.2.2 `TSyntaxDefinition` tests: keyword loading from JSON, fallback defaults
 - [ ] 6.2.3 `LanguageDefinition` tests: singleton access, keyword/builtin lists
-- [ ] 6.2.4 `AutoComplete` strategy tests: each strategy returns correct completions, prefix matching, deduplication
+- [x] 6.2.4 Baa-LSP completion client test: version matching, exact edit range, Arabic label, and symbol kind
 - [ ] 6.2.5 `TBracketHandler` tests: pairing, skip-over, wrapping, edge cases
-- [ ] 6.2.6 `TSnippetManager` tests: insertion, placeholder navigation, indentation
+- [x] 6.2.6 `TSnippetManager` tests: standard placeholders, navigation, and indentation
 
 ### 6.3 Manager Unit Tests
 
@@ -352,23 +362,37 @@ One deferred item from Phase 2:
 
 ### 9.1 LSP Client Integration
 
-- [ ] 9.1.1 Implement LSP client protocol handler (JSON-RPC over stdio)
-- [ ] 9.1.2 Support `textDocument/completion` for intelligent autocomplete
-- [ ] 9.1.3 Support `textDocument/hover` for documentation tooltips
-- [ ] 9.1.4 Support `textDocument/definition` for go-to-definition
-- [ ] 9.1.5 Support `textDocument/references` for find-all-references
-- [ ] 9.1.6 Support `textDocument/diagnostic` for real-time error reporting
+- [x] 9.1.1 Implement LSP client protocol handler (JSON-RPC over stdio)
+- [x] 9.1.2 Support `textDocument/completion` with Arabic triggers, stale-request cancellation, exact edits, and snippets
+- [x] 9.1.3 Support compiler-backed `textDocument/hover` with delayed requests,
+  exact ranges, Markdown rendering, cancellation, and stale-version rejection
+- [x] 9.1.4 Support compiler-resolved `textDocument/definition` for F12,
+  including included headers and Arabic paths
+- [x] 9.1.5 Support scope-correct project-wide
+  `textDocument/references` in the search sidebar through Takween's source
+  closure and Baa-owned symbol identities
+- [x] 9.1.6 Support versioned `publishDiagnostics` for real-time error reporting
 - [ ] 9.1.7 Support `textDocument/formatting` for auto-format
-- [ ] 9.1.8 Support `textDocument/rename` for symbol rename
+- [x] 9.1.8 Support prepared, collision-checked Arabic
+  `textDocument/rename` with an edit preview, version checks, undoable open-file
+  changes, and atomic closed-file saves
+- [x] 9.1.9 Support hierarchical `textDocument/documentSymbol`
+- [x] 9.1.10 Support `textDocument/signatureHelp` with Arabic/ASCII comma
+  triggers, active-parameter display, and `Ctrl+Shift+Space`
 
 ### 9.2 Baa Language Server
 
-- [ ] 9.2.1 Design language server architecture for Baa
-- [ ] 9.2.2 Implement Baa parser for semantic analysis
-- [ ] 9.2.3 Implement symbol table and scope resolution
-- [ ] 9.2.4 Implement completion provider with context awareness
-- [ ] 9.2.5 Implement diagnostic provider (type errors, undefined variables)
-- [ ] 9.2.6 Package as standalone LSP binary
+- [x] 9.2.1 Design the standalone language server architecture for Baa
+- [x] 9.2.2 Delegate parsing and semantic analysis to the Baa compiler
+- [x] 9.2.3 Consume Baa's analyzed declaration bindings and scope resolution
+  without implementing a second semantic table
+- [ ] 9.2.4 Complete semantic context awareness for locals, includes, and signatures
+  - [x] Consume Baa-owned static metadata and version-matched document-global symbols
+  - [x] Consume `semantic-query-json-v1` for scope-correct hover, included
+    prototypes, and active call signatures during incomplete typing
+  - [ ] Extend completion itself with visible locals and explicitly included declarations
+- [x] 9.2.5 Implement compiler-backed diagnostic provider
+- [x] 9.2.6 Build as a standalone, Qt-free LSP binary
 
 ### 9.3 Git Integration
 

@@ -27,8 +27,11 @@ INCLUDEPATH += . \
 SOURCES += Qalam.cpp \
     main.cpp \
     ../source/core/CommandRegistry.cpp \
+    ../source/language/BaaLanguageClient.cpp \
+    ../source/language/BaaWorkspaceEdit.cpp \
     ../source/language/DiagnosticParser.cpp \
     ../source/language/DiagnosticsModel.cpp \
+    ../source/language/LspMessageFramer.cpp \
     ../source/workspace/WorkspaceIndexer.cpp \
     ../source/debug/BreakpointModel.cpp \
     ../source/components/TFlatButton.cpp \
@@ -49,7 +52,6 @@ SOURCES += Qalam.cpp \
     ../source/texteditor/TBracketHandler.cpp \
     ../source/texteditor/TEditor.cpp \
     ../source/texteditor/TSnippetManager.cpp \
-    ../source/texteditor/autocomplete/AutoComplete.cpp \
     ../source/texteditor/autocomplete/AutoCompleteUI.cpp \
     ../source/texteditor/highlighter/TLexer.cpp \
     ../source/texteditor/highlighter/TSyntaxDefinition.cpp \
@@ -66,9 +68,17 @@ SOURCES += Qalam.cpp \
 HEADERS += Qalam.h \
     Constants.h \
     ../source/core/CommandRegistry.h \
+    ../source/language/BaaLanguageClient.h \
+    ../source/language/BaaDocumentSymbol.h \
+    ../source/language/BaaCompletionItem.h \
+    ../source/language/BaaHover.h \
+    ../source/language/BaaLocation.h \
+    ../source/language/BaaSignatureHelp.h \
+    ../source/language/BaaWorkspaceEdit.h \
     ../source/language/Diagnostic.h \
     ../source/language/DiagnosticParser.h \
     ../source/language/DiagnosticsModel.h \
+    ../source/language/LspMessageFramer.h \
     ../source/workspace/WorkspaceIndexer.h \
     ../source/debug/BreakpointModel.h \
     ../source/components/TFlatButton.h \

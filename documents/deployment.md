@@ -70,7 +70,16 @@ Useful options:
 .\scripts\bootstrap-windows.ps1 -SkipQtInstall -QtRoot "C:\Qt"
 ```
 
-The packaging script runs `windeployqt.exe`, which copies the Qt runtime DLLs, platform plugins, styles, and related runtime files into the package folder.
+The packaging script runs `windeployqt.exe` for Qt libraries and plugins, then
+copies the exact MinGW runtime recorded in the build's `CMakeCache.txt`.
+It never selects compiler DLLs from the caller's `PATH`.
+
+To verify a built or packaged executable with no Qt or MinGW directories on
+`PATH`:
+
+```powershell
+.\scripts\test-windows-runtime.ps1 -Executable .\dist\Qalam-win64\Qalam.exe
+```
 
 ### Option B: manual PowerShell scripts
 
@@ -103,12 +112,15 @@ cmake --build --preset release-qt6102
 .\scripts\package-windows.ps1 -SkipBuild
 ```
 
-### Optional: deploy after every build
+### Runtime deployment during development
 
-This is convenient for local manual testing, but slower for normal development:
+Windows builds deploy the matching Qt and MinGW runtime beside Qalam by
+default. This makes the development executable independent of other compiler
+toolchains on `PATH`. To skip Qt deployment for an intentionally non-runnable
+intermediate build:
 
 ```powershell
-.\scripts\build-windows.ps1 -Configuration Release -DeployAfterBuild
+.\scripts\build-windows.ps1 -Configuration Release -SkipDeployAfterBuild
 ```
 
 ### Baa compiler location on Windows

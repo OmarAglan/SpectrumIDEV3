@@ -23,6 +23,7 @@
 #include <QSettings>
 #include <QFile>
 #include <QFileInfo>
+#include <QSaveFile>
 #include <QTextStream>
 #include <QStringConverter>
 #include <QDirIterator>
@@ -31,11 +32,14 @@
 #include <QInputDialog>
 #include <QSet>
 #include <QVector>
+#include <QVariant>
 #include <QTextBlock>
+#include <algorithm>
 #include "TSearchView.h"
 #include "CommandRegistry.h"
 #include "DiagnosticParser.h"
 #include "DiagnosticsModel.h"
+#include "BaaLanguageClient.h"
 #include "WorkspaceIndexer.h"
 #include "BreakpointModel.h"
 #include "TCommandPalette.h"
@@ -57,6 +61,8 @@ Qalam::Qalam(const QString& filePath, QWidget *parent)
     menuBar = new TMenuBar(this);
     m_fileManager = new FileManager(tabWidget, this, this);
     m_buildManager = new BuildManager(this);
+    m_languageClient = new BaaLanguageClient(this);
+    m_languageClient->setTakweenProgram(BuildManager::resolveTakweenProgram());
     m_sessionManager = new SessionManager(tabWidget, this);
     m_commandRegistry = new CommandRegistry(this);
     for (const auto &command : CommandRegistry::defaultCommands()) {
@@ -193,6 +199,10 @@ void Qalam::connectSignals()
         if (m_buildManager and m_buildManager->isRunning()) m_buildManager->stop();
     });
 
+    auto *renameShortcut = new QShortcut(QKeySequence("F2"), this);
+    connect(renameShortcut, &QShortcut::activated,
+            this, &Qalam::renameSymbol);
+
     // --- Menu bar signals ---
     connect(menuBar, &TMenuBar::newRequested, this, &Qalam::newFileFromUi);
     connect(menuBar, &TMenuBar::openFileRequested, this, [this]() { openFileFromUi(QString()); });
@@ -220,13 +230,151 @@ void Qalam::connectSignals()
     connect(this, &QalamWindow::commandCenterClicked, this, &Qalam::showCommandPalette);
 
     connect(m_buildManager, &BuildManager::outputChunk, this, &Qalam::handleBuildOutput);
-    connect(m_buildManager, &BuildManager::diagnosticsReady, this, [this](const QString &json) {
-        if (!m_diagnosticsModel) return;
-        QString fallbackFile;
-        if (TEditor *editor = currentEditor()) fallbackFile = editor->currentFilePath();
-        m_diagnosticsModel->setDiagnostics(
-            DiagnosticParser::parseCompilerOutput(json, fallbackFile, folderPath));
+    connect(m_languageClient, &BaaLanguageClient::diagnosticsPublished,
+            this, &Qalam::handleLanguageDiagnostics);
+    connect(m_languageClient, &BaaLanguageClient::completionPublished,
+            this, &Qalam::handleLanguageCompletion);
+    connect(m_languageClient, &BaaLanguageClient::hoverPublished,
+            this, [this](const QString &filePath, int documentVersion,
+                         int line, int character, const BaaHover &hover) {
+        TEditor *editor = currentEditor();
+        if (not editor ||
+            editor->property("qalam.lsp.version").toInt() != documentVersion)
+            return;
+        const QString editorPath = QDir::cleanPath(
+            QFileInfo(editor->currentFilePath()).absoluteFilePath());
+        if (editorPath != QDir::cleanPath(filePath)) return;
+        editor->showLanguageHover(hover, line, character);
     });
+    connect(m_languageClient, &BaaLanguageClient::signatureHelpPublished,
+            this, [this](const QString &filePath, int documentVersion,
+                         int line, int character,
+                         const BaaSignatureHelp &signatureHelp) {
+        TEditor *editor = currentEditor();
+        if (not editor ||
+            editor->property("qalam.lsp.version").toInt() != documentVersion)
+            return;
+        const QString editorPath = QDir::cleanPath(
+            QFileInfo(editor->currentFilePath()).absoluteFilePath());
+        if (editorPath != QDir::cleanPath(filePath)) return;
+        editor->showSignatureHelp(signatureHelp, line, character);
+    });
+    connect(m_languageClient, &BaaLanguageClient::definitionPublished,
+            this, [this](const QString &filePath, int documentVersion,
+                         int, int, const BaaLocation &definition) {
+        if (not languageDocumentVersionIsCurrent(filePath, documentVersion)) return;
+        if (definition.isValid()) {
+            goToLocation(definition.filePath,
+                         definition.line + 1,
+                         definition.character + 1);
+        } else if (m_layoutManager and m_layoutManager->statusBar()) {
+            m_layoutManager->statusBar()->showMessage(
+                QStringLiteral("لم يتم العثور على تعريف دلالي"), 3000);
+        }
+    });
+    connect(m_languageClient, &BaaLanguageClient::referencesPublished,
+            this, [this](const QString &filePath, int documentVersion,
+                         int, int, const QVector<BaaLocation> &references) {
+        if (not languageDocumentVersionIsCurrent(filePath, documentVersion)) return;
+        focusSearchInFiles();
+        auto *sidebar = m_layoutManager ? m_layoutManager->sidebar() : nullptr;
+        auto *searchView = sidebar ? sidebar->searchView() : nullptr;
+        if (not searchView) return;
+
+        searchView->clearResults();
+        QSet<QString> files;
+        for (const BaaLocation &location : references) {
+            if (not location.isValid()) continue;
+            files.insert(QDir::cleanPath(location.filePath));
+            const QString lineText = lineTextForLocation(location);
+            const int length = location.line == location.endLine
+                ? qMax(0, location.endCharacter - location.character) : 0;
+            searchView->addResult(
+                location.filePath, location.line + 1, location.character + 1,
+                lineText, length > 0
+                    ? lineText.mid(location.character, length) : QString());
+        }
+        searchView->setResultCount(files.size(), references.size());
+        if (m_layoutManager and m_layoutManager->statusBar()) {
+            m_layoutManager->statusBar()->showMessage(
+                QStringLiteral("تم العثور على %1 مرجعاً دلالياً")
+                    .arg(references.size()), 3000);
+        }
+    });
+    connect(m_languageClient, &BaaLanguageClient::renamePrepared,
+            this, [this](const QString &filePath, int documentVersion,
+                         int line, int character, const QString &placeholder,
+                         const BaaLocation &) {
+        if (not languageDocumentVersionIsCurrent(filePath, documentVersion))
+            return;
+        bool accepted = false;
+        const QString newName = QInputDialog::getText(
+            this,
+            QStringLiteral("إعادة تسمية رمز باء"),
+            QStringLiteral("الاسم العربي الجديد:"),
+            QLineEdit::Normal,
+            placeholder,
+            &accepted).trimmed();
+        if (not accepted or newName.isEmpty() or newName == placeholder)
+            return;
+        m_languageClient->requestRename(
+            filePath, line, character, newName);
+    });
+    connect(m_languageClient, &BaaLanguageClient::renameEditPublished,
+            this, [this](const QString &filePath, int documentVersion,
+                         int, int, const BaaWorkspaceEdit &edit) {
+        if (not languageDocumentVersionIsCurrent(filePath, documentVersion))
+            return;
+        const QMessageBox::StandardButton answer = QMessageBox::question(
+            this,
+            QStringLiteral("معاينة إعادة التسمية"),
+            QStringLiteral(
+                "سيتغير %1 موضعاً في %2 ملفاً.\n"
+                "تحقق Baa-LSP من هوية الرمز والتعارضات. هل تريد المتابعة؟")
+                .arg(edit.editCount())
+                .arg(edit.documents.size()),
+            QMessageBox::Yes | QMessageBox::No,
+            QMessageBox::Yes);
+        if (answer != QMessageBox::Yes) return;
+
+        QString error;
+        if (not applyWorkspaceEdit(edit, &error)) {
+            QMessageBox::warning(
+                this, QStringLiteral("تعذر تطبيق إعادة التسمية"), error);
+            return;
+        }
+        if (m_layoutManager and m_layoutManager->statusBar()) {
+            m_layoutManager->statusBar()->showMessage(
+                QStringLiteral("اكتملت إعادة تسمية %1 موضعاً بأمان")
+                    .arg(edit.editCount()), 4000);
+        }
+    });
+    connect(m_languageClient, &BaaLanguageClient::renameFailed,
+            this, [this](const QString &, const QString &message) {
+        if (not message.isEmpty())
+            QMessageBox::warning(
+                this, QStringLiteral("تعذر إعادة التسمية"), message);
+    });
+    connect(m_languageClient, &BaaLanguageClient::documentSymbolsPublished,
+            this, [this](const QString &filePath, int documentVersion,
+                         const QVector<BaaDocumentSymbol> &) {
+        TEditor *editor = currentEditor();
+        if (not editor or not editor->hasVisibleCompletion() or
+            editor->property("qalam.lsp.version").toInt() != documentVersion) return;
+        const QString editorPath = QDir::cleanPath(
+            QFileInfo(editor->currentFilePath()).absoluteFilePath());
+        if (editorPath != QDir::cleanPath(filePath)) return;
+        const QTextCursor cursor = editor->textCursor();
+        m_languageClient->requestCompletion(filePath,
+                                            cursor.blockNumber(),
+                                            cursor.positionInBlock());
+    });
+    connect(m_languageClient, &BaaLanguageClient::logMessage,
+            this, [this](const QString &message, int) {
+                if (m_layoutManager and m_layoutManager->statusBar() and !message.isEmpty()) {
+                    m_layoutManager->statusBar()->showMessage(message, 3500);
+                }
+            });
     connect(m_buildManager, &BuildManager::toolingFinished, this,
             [this](const QString &operation, int exitCode) {
         if (exitCode != 0 and exitCode != -2 and
@@ -287,11 +435,6 @@ void Qalam::connectSignals()
             }
         }
 
-        TEditor *editor = currentEditor();
-        if (editor and not editor->document()->isModified() and
-            !editor->currentFilePath().isEmpty()) {
-            m_buildManager->checkBaa(editor->currentFilePath());
-        }
     });
     connect(m_fileManager, &FileManager::openEditorsChanged, this, &Qalam::syncOpenEditors);
 
@@ -485,6 +628,8 @@ void Qalam::onCurrentTabChanged()
             }
         }, Qt::UniqueConnection);
         m_lastConnectedEditor = editor;
+        attachAnalysisToEditor(editor);
+        scheduleEditorAnalysis(editor);
 
         // Keep search panel pointing at the active editor
         searchBar->setEditor(editor);
@@ -758,6 +903,13 @@ void Qalam::closeTab(int index)
         }
     }
 
+    if (m_languageClient and !editor->currentFilePath().isEmpty()) {
+        m_languageClient->closeDocument(editor->currentFilePath());
+    }
+    if (m_diagnosticsModel and !editor->currentFilePath().isEmpty()) {
+        const QString sourceId = "baa-lsp:" + QDir::cleanPath(editor->currentFilePath());
+        m_diagnosticsModel->replaceDiagnosticsFromSource(sourceId, {});
+    }
     tabWidget->removeTab(index);
     editor->deleteLater();
     syncOpenEditors();
@@ -967,6 +1119,7 @@ bool Qalam::runCommandById(const QString &commandId)
     if (commandId == "view.debug") { openDebugPanel(); return true; }
     if (commandId == "code.definition") { goToDefinition(); return true; }
     if (commandId == "code.references") { findReferences(); return true; }
+    if (commandId == "code.rename") { renameSymbol(); return true; }
     if (commandId == "project.build") { buildTakweenProject(); return true; }
     if (commandId == "project.test") { testTakweenProject(); return true; }
     if (commandId == "run.baa") { runBaa(); return true; }
@@ -1087,84 +1240,219 @@ void Qalam::applyDiagnosticsToEditors()
     }
 }
 
-QString Qalam::symbolUnderCursor() const
+bool Qalam::languageDocumentVersionIsCurrent(const QString &filePath,
+                                             int documentVersion) const
 {
-    const TEditor *editor = const_cast<Qalam*>(this)->currentEditor();
-    if (!editor) return QString();
-
-    QTextCursor cursor = editor->textCursor();
-    const QString blockText = cursor.block().text();
-    int end = qBound(0, cursor.positionInBlock(), static_cast<int>(blockText.length()));
-    int start = end;
-    while (start > 0) {
-        const QChar ch = blockText.at(start - 1);
-        if (!(ch.isLetterOrNumber() || ch == '_' || ch == '#')) break;
-        --start;
+    const QString wanted = QDir::cleanPath(
+        QFileInfo(filePath).absoluteFilePath());
+    for (int index = 0; index < tabWidget->count(); ++index) {
+        const TEditor *editor = qobject_cast<TEditor*>(tabWidget->widget(index));
+        if (not editor) continue;
+        const QString current = QDir::cleanPath(
+            QFileInfo(editor->currentFilePath()).absoluteFilePath());
+        if (current == wanted and
+            editor->property("qalam.lsp.version").toInt() == documentVersion)
+            return true;
     }
-    while (end < blockText.length()) {
-        const QChar ch = blockText.at(end);
-        if (!(ch.isLetterOrNumber() || ch == '_' || ch == '#')) break;
-        ++end;
-    }
-    return blockText.mid(start, end - start).trimmed();
+    return false;
 }
 
-bool Qalam::findDefinitionLocation(const QString &symbol, QString *filePath, int *line, int *column) const
+QString Qalam::lineTextForLocation(const BaaLocation &location) const
 {
-    if (symbol.trimmed().isEmpty() || !m_workspaceIndexer) return false;
-
-    WorkspaceIndexer::SymbolLocation location;
-    if (!m_workspaceIndexer->findDefinition(symbol, &location)) {
-        return false;
+    const QString wanted = QDir::cleanPath(
+        QFileInfo(location.filePath).absoluteFilePath());
+    for (int index = 0; index < tabWidget->count(); ++index) {
+        const TEditor *editor = qobject_cast<TEditor*>(tabWidget->widget(index));
+        if (not editor) continue;
+        const QString current = QDir::cleanPath(
+            QFileInfo(editor->currentFilePath()).absoluteFilePath());
+        if (current != wanted) continue;
+        const QTextBlock block = editor->document()->findBlockByNumber(location.line);
+        return block.isValid() ? block.text() : QString();
     }
 
-    if (filePath) *filePath = location.file;
-    if (line) *line = location.line;
-    if (column) *column = location.column;
-    return true;
+    QFile file(wanted);
+    if (not file.open(QIODevice::ReadOnly | QIODevice::Text)) return QString();
+    QTextStream stream(&file);
+    stream.setEncoding(QStringConverter::Utf8);
+    for (int line = 0; not stream.atEnd(); ++line) {
+        const QString text = stream.readLine();
+        if (line == location.line) return text;
+    }
+    return QString();
 }
 
 void Qalam::goToDefinition()
 {
-    const QString symbol = symbolUnderCursor();
-    if (symbol.isEmpty()) {
-        if (m_layoutManager && m_layoutManager->statusBar()) {
-            m_layoutManager->statusBar()->showMessage("لا يوجد رمز تحت المؤشر");
+    TEditor *editor = currentEditor();
+    if (not editor or not m_languageClient or
+        not BaaLanguageClient::isBaaSourcePath(editor->currentFilePath())) {
+        if (m_layoutManager and m_layoutManager->statusBar()) {
+            m_layoutManager->statusBar()->showMessage(
+                QStringLiteral("الانتقال الدلالي متاح لملفات باء"), 3000);
         }
         return;
     }
-
-    QString file;
-    int line = 1;
-    int column = 1;
-    if (findDefinitionLocation(symbol, &file, &line, &column)) {
-        goToLocation(file, line, column);
-    } else if (m_layoutManager && m_layoutManager->statusBar()) {
-        m_layoutManager->statusBar()->showMessage("لم يتم العثور على تعريف: " + symbol);
-    }
+    scheduleEditorAnalysis(editor);
+    const QTextCursor cursor = editor->textCursor();
+    m_languageClient->requestDefinition(
+        editor->currentFilePath(),
+        cursor.blockNumber(),
+        cursor.positionInBlock());
 }
 
 void Qalam::findReferences()
 {
-    const QString symbol = symbolUnderCursor();
-    if (symbol.isEmpty()) {
-        if (m_layoutManager && m_layoutManager->statusBar()) {
-            m_layoutManager->statusBar()->showMessage("لا يوجد رمز تحت المؤشر");
+    TEditor *editor = currentEditor();
+    if (not editor or not m_languageClient or
+        not BaaLanguageClient::isBaaSourcePath(editor->currentFilePath())) {
+        if (m_layoutManager and m_layoutManager->statusBar()) {
+            m_layoutManager->statusBar()->showMessage(
+                QStringLiteral("المراجع الدلالية متاحة لملفات باء"), 3000);
         }
         return;
     }
+    scheduleEditorAnalysis(editor);
+    const QTextCursor cursor = editor->textCursor();
+    m_languageClient->requestReferences(
+        editor->currentFilePath(),
+        cursor.blockNumber(),
+        cursor.positionInBlock(),
+        true);
+}
 
-    focusSearchInFiles();
-    performProjectSearch(symbol, false, true, false);
-    if (m_workspaceIndexer) {
-        const auto references = m_workspaceIndexer->findReferences(symbol);
-        if (m_layoutManager && m_layoutManager->statusBar()) {
+void Qalam::renameSymbol()
+{
+    TEditor *editor = currentEditor();
+    if (not editor or not m_languageClient or
+        not BaaLanguageClient::isBaaSourcePath(editor->currentFilePath())) {
+        if (m_layoutManager and m_layoutManager->statusBar()) {
             m_layoutManager->statusBar()->showMessage(
-                QString("تم العثور على %1 مرجع/مراجع لـ: %2").arg(references.size()).arg(symbol));
+                QStringLiteral("إعادة التسمية الدلالية متاحة لملفات باء"),
+                3000);
         }
-    } else if (m_layoutManager && m_layoutManager->statusBar()) {
-        m_layoutManager->statusBar()->showMessage("تم البحث عن المراجع: " + symbol);
+        return;
     }
+    scheduleEditorAnalysis(editor);
+    const QTextCursor cursor = editor->textCursor();
+    m_languageClient->requestPrepareRename(
+        editor->currentFilePath(),
+        cursor.blockNumber(),
+        cursor.positionInBlock());
+}
+
+bool Qalam::applyWorkspaceEdit(const BaaWorkspaceEdit &workspaceEdit,
+                               QString *error)
+{
+    if (error) error->clear();
+    auto fail = [error](const QString &message) {
+        if (error) *error = message;
+        return false;
+    };
+    if (not workspaceEdit.isValid())
+        return fail(QStringLiteral("خطة إعادة التسمية فارغة."));
+
+    struct PreparedDocument
+    {
+        QString filePath;
+        TEditor *editor{};
+        QString originalText;
+        QString updatedText;
+        QVector<BaaTextEdit> edits;
+    };
+    QVector<PreparedDocument> prepared;
+    prepared.reserve(workspaceEdit.documents.size());
+    QSet<QString> seenFiles;
+
+    auto editorForPath = [this](const QString &filePath) -> TEditor * {
+        const QString wanted = QDir::cleanPath(
+            QFileInfo(filePath).absoluteFilePath());
+        for (int index = 0; index < tabWidget->count(); ++index) {
+            TEditor *editor =
+                qobject_cast<TEditor*>(tabWidget->widget(index));
+            if (not editor) continue;
+            const QString current = QDir::cleanPath(
+                QFileInfo(editor->currentFilePath()).absoluteFilePath());
+            if (current == wanted) return editor;
+        }
+        return nullptr;
+    };
+    for (const BaaDocumentEdit &documentEdit : workspaceEdit.documents) {
+        if (not documentEdit.isValid())
+            return fail(QStringLiteral("تحتوي الخطة على تعديل ملف غير صالح."));
+        const QString path = QDir::cleanPath(
+            QFileInfo(documentEdit.filePath).absoluteFilePath());
+        if (seenFiles.contains(path))
+            return fail(QStringLiteral("كررت الخطة ملفاً واحداً أكثر من مرة."));
+        seenFiles.insert(path);
+
+        PreparedDocument document;
+        document.filePath = path;
+        document.editor = editorForPath(path);
+        if (documentEdit.version >= 0) {
+            if (not document.editor)
+                return fail(QStringLiteral(
+                    "تغيرت حالة ملف مفتوح قبل تطبيق إعادة التسمية."));
+            if (document.editor->property("qalam.lsp.version").toInt() !=
+                documentEdit.version)
+                return fail(QStringLiteral(
+                    "تغير نص أحد الملفات بعد حساب إعادة التسمية."));
+        }
+
+        if (document.editor) {
+            document.originalText = document.editor->toPlainText();
+        } else {
+            QFile input(path);
+            if (not input.open(QIODevice::ReadOnly))
+                return fail(QStringLiteral("تعذر قراءة الملف: %1").arg(path));
+            const QByteArray bytes = input.readAll();
+            document.originalText = QString::fromUtf8(bytes);
+            if (document.originalText.toUtf8() != bytes)
+                return fail(QStringLiteral(
+                    "الملف ليس نص UTF-8 صالحاً: %1").arg(path));
+        }
+
+        QString editError;
+        if (not applyBaaTextEdits(
+                document.originalText,
+                documentEdit.edits,
+                &document.updatedText,
+                &document.edits,
+                &editError))
+            return fail(editError);
+        prepared.push_back(std::move(document));
+    }
+
+    for (const PreparedDocument &document : prepared) {
+        if (document.editor) continue;
+        QSaveFile output(document.filePath);
+        if (not output.open(QIODevice::WriteOnly))
+            return fail(QStringLiteral(
+                "تعذر فتح الملف للكتابة الآمنة: %1")
+                .arg(document.filePath));
+        const QByteArray bytes = document.updatedText.toUtf8();
+        if (output.write(bytes) != bytes.size() or not output.commit())
+            return fail(QStringLiteral(
+                "تعذر حفظ الملف بعد إعادة التسمية: %1")
+                .arg(document.filePath));
+    }
+
+    for (const PreparedDocument &document : prepared) {
+        if (not document.editor) continue;
+        QTextCursor cursor(document.editor->document());
+        cursor.beginEditBlock();
+        for (const BaaTextEdit &edit : document.edits) {
+            const int start = baaUtf16TextOffset(
+                document.originalText, edit.line, edit.character);
+            const int end = baaUtf16TextOffset(
+                document.originalText, edit.endLine, edit.endCharacter);
+            cursor.setPosition(start);
+            cursor.setPosition(end, QTextCursor::KeepAnchor);
+            cursor.insertText(edit.newText);
+        }
+        cursor.endEditBlock();
+    }
+    return true;
 }
 
 /* ----------------------------------- Help Menu Button ----------------------------------- */
@@ -1228,6 +1516,118 @@ void Qalam::onSidebarFileSelected(const QString &filePath)
 void Qalam::syncOpenEditors()
 {
     auto *sidebar = m_layoutManager->sidebar();
-    if (not sidebar or not sidebar->explorerView()) return;
-    m_sessionManager->syncOpenEditors(sidebar->explorerView());
+    if (sidebar and sidebar->explorerView()) {
+        m_sessionManager->syncOpenEditors(sidebar->explorerView());
+    }
+
+    for (int index = 0; index < tabWidget->count(); ++index) {
+        if (TEditor *editor = qobject_cast<TEditor*>(tabWidget->widget(index))) {
+            attachAnalysisToEditor(editor);
+        }
+    }
+    scheduleEditorAnalysis(currentEditor());
+}
+
+void Qalam::attachAnalysisToEditor(TEditor *editor)
+{
+    if (!editor or !m_languageClient) return;
+
+    if (!editor->property("qalam.lsp.attached").toBool()) {
+        editor->setProperty("qalam.lsp.attached", true);
+        connect(editor, &QPlainTextEdit::textChanged, this, [this, editor]() {
+            scheduleEditorAnalysis(editor);
+        });
+        connect(editor, &TEditor::completionRequested, this,
+                [this, editor](const QString &filePath, int line, int character) {
+            if (not m_languageClient or
+                not BaaLanguageClient::isBaaSourcePath(filePath)) return;
+            scheduleEditorAnalysis(editor);
+            m_languageClient->requestCompletion(filePath, line, character);
+        });
+        connect(editor, &TEditor::hoverRequested, this,
+                [this, editor](const QString &filePath, int line, int character) {
+            if (not m_languageClient or
+                not BaaLanguageClient::isBaaSourcePath(filePath)) return;
+            scheduleEditorAnalysis(editor);
+            m_languageClient->requestHover(filePath, line, character);
+        });
+        connect(editor, &TEditor::signatureHelpRequested, this,
+                [this, editor](const QString &filePath, int line, int character) {
+            if (not m_languageClient or
+                not BaaLanguageClient::isBaaSourcePath(filePath)) return;
+            scheduleEditorAnalysis(editor);
+            m_languageClient->requestSignatureHelp(filePath, line, character);
+        });
+    }
+}
+
+void Qalam::scheduleEditorAnalysis(TEditor *editor)
+{
+    if (!editor or !m_languageClient) return;
+    const QString filePath = editor->currentFilePath();
+    const QString normalizedPath = filePath.isEmpty()
+        ? QString()
+        : QDir::cleanPath(QFileInfo(filePath).absoluteFilePath());
+    const QString previousPath = editor->property("qalam.lsp.path").toString();
+    if (!previousPath.isEmpty() and previousPath != normalizedPath) {
+        m_languageClient->closeDocument(previousPath);
+        if (m_diagnosticsModel) {
+            m_diagnosticsModel->replaceDiagnosticsFromSource("baa-lsp:" + previousPath, {});
+        }
+    }
+    editor->setProperty("qalam.lsp.path", normalizedPath);
+    if (!BaaLanguageClient::isBaaSourcePath(filePath)) return;
+
+    const QString projectRoot =
+        BuildManager::findTakweenProjectRoot(normalizedPath);
+    const QString workspaceRoot =
+        projectRoot.isEmpty() ? folderPath : projectRoot;
+    const int version = m_languageClient->synchronizeDocument(
+        normalizedPath,
+        editor->toPlainText(),
+        editor->document()->revision(),
+        workspaceRoot);
+    editor->setProperty("qalam.lsp.version", version);
+}
+
+void Qalam::handleLanguageDiagnostics(const QString &filePath,
+                                      int documentVersion,
+                                      const QVector<Diagnostic> &diagnostics)
+{
+    if (!m_diagnosticsModel or !m_languageClient) return;
+
+    TEditor *matchingEditor = nullptr;
+    for (int index = 0; index < tabWidget->count(); ++index) {
+        TEditor *editor = qobject_cast<TEditor*>(tabWidget->widget(index));
+        if (!editor) continue;
+        const QString editorPath = QDir::cleanPath(
+            QFileInfo(editor->currentFilePath()).absoluteFilePath());
+        if (editorPath == QDir::cleanPath(filePath) and
+            editor->property("qalam.lsp.version").toInt() == documentVersion) {
+            matchingEditor = editor;
+            break;
+        }
+    }
+    if (!matchingEditor) return;
+    const QString sourceId = "baa-lsp:" + QDir::cleanPath(filePath);
+    m_diagnosticsModel->replaceDiagnosticsFromSource(sourceId, diagnostics);
+}
+
+void Qalam::handleLanguageCompletion(const QString &filePath,
+                                     int documentVersion,
+                                     int line,
+                                     int character,
+                                     const QVector<BaaCompletionItem> &items)
+{
+    for (int index = 0; index < tabWidget->count(); ++index) {
+        TEditor *editor = qobject_cast<TEditor*>(tabWidget->widget(index));
+        if (not editor) continue;
+        const QString editorPath = QDir::cleanPath(
+            QFileInfo(editor->currentFilePath()).absoluteFilePath());
+        if (editorPath == QDir::cleanPath(filePath) and
+            editor->property("qalam.lsp.version").toInt() == documentVersion) {
+            editor->showLanguageCompletions(items, line, character);
+            return;
+        }
+    }
 }

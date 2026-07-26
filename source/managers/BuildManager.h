@@ -38,12 +38,6 @@ public:
                            TConsole *console,
                            const QString &targetName = QString());
 
-    /// Run Baa's non-codegen structured diagnostic check for a saved source file.
-    void checkBaa(const QString &filePath);
-
-    /// Build the stable compiler arguments used by the editor check path.
-    static QStringList baaCheckArguments(const QString &filePath);
-
     /// Build argv for the supported Takween project commands, or an empty list.
     static QStringList takweenCommandArguments(const QString &command,
                                                const QString &targetName = QString());
@@ -69,6 +63,9 @@ public:
     /// Find the nearest Takween v0/v1 project root containing مشروع.تكوين.
     static QString findTakweenProjectRoot(const QString &filePath);
 
+    /// Resolve the Takween executable shared by builds and Baa-LSP project discovery.
+    static QString resolveTakweenProgram();
+
     /// Stop the currently running build process, if any.
     void stop();
 
@@ -82,8 +79,6 @@ signals:
     void buildFinished(int exitCode);
     /// Raw output chunks from the compiler/process, for diagnostics parsing.
     void outputChunk(const QString &text);
-    /// Complete diagnostics-json-v1 payload emitted by a fast Baa check.
-    void diagnosticsReady(const QString &json);
     /// Completion event with an explicit operation and unmodified process exit code.
     void toolingFinished(const QString &operation, int exitCode);
     /// Validated takween-build-events-v1 record.
@@ -96,7 +91,6 @@ signals:
 private:
     /// Resolve the compiler path from settings or default locations
     QString resolveCompilerPath() const;
-    QString resolveTakweenPath() const;
 
     /// Clean up existing thread/worker safely
     void cleanupBuild();
@@ -110,8 +104,6 @@ private:
 
     QPointer<ProcessWorker> m_worker;
     QPointer<QThread> m_buildThread;
-    QPointer<QProcess> m_checkProcess;
-    QString m_checkStdout;
     qint64 m_lastEventSequence{};
     bool m_terminalEventSeen{};
     bool m_eventProtocolFailed{};

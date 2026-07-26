@@ -1,8 +1,7 @@
 #pragma once
 
 #include <QPlainTextEdit>
-#include <QStringList>
-#include "autocomplete/AutoComplete.h"
+#include <QVector>
 
 // Handles snippet insertion (with indentation) and Tab/Enter navigation
 // through snippet placeholders. Extracted from TEditor.
@@ -10,9 +9,7 @@ class TSnippetManager {
 public:
     explicit TSnippetManager(QPlainTextEdit *editor);
 
-    // Insert a snippet at the given cursor position and set up placeholder navigation.
-    // The snippetId determines which placeholders to navigate through.
-    void insertSnippet(const QString &snippet, QTextCursor &tc, SnippetId snippetId);
+    void insertSnippet(const QString &snippet, QTextCursor &tc);
 
     // Try to navigate to the next snippet placeholder.
     // Returns true if navigation occurred (key event consumed).
@@ -22,8 +19,6 @@ public:
     bool hasActiveSnippet() const;
 
 private:
-    void setupNavigation(SnippetId snippetId);
-
     QPlainTextEdit *m_editor{};
-    QStringList m_targets{};
+    QVector<QTextCursor> m_targets{};
 };

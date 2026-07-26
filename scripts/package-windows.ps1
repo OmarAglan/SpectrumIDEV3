@@ -2,6 +2,7 @@ param(
     [string]$QtRoot = $env:QALAM_QT_DIR,
     [string]$BuildDir = 'build/windows-release',
     [string]$PackageDir = 'dist/Qalam-win64',
+    [string]$ZipPath = 'dist/Qalam-win64.zip',
     [switch]$SkipBuild
 )
 
@@ -15,6 +16,29 @@ if (!$SkipBuild) {
 $exe = Join-Path $BuildDir 'qalam/Qalam.exe'
 if (!(Test-Path $exe)) {
     throw "Qalam.exe was not found at $exe. Build the project first."
+}
+
+$cachePath = Join-Path $BuildDir 'CMakeCache.txt'
+if (!(Test-Path $cachePath)) {
+    throw "CMakeCache.txt was not found at $cachePath."
+}
+$compilerMatch = Select-String -Path $cachePath `
+    -Pattern '^CMAKE_CXX_COMPILER(?::[^=]+)?=(.+)$' |
+    Select-Object -First 1
+if (!$compilerMatch) {
+    throw "The configured C++ compiler was not recorded in $cachePath."
+}
+$compilerPath = $compilerMatch.Matches[0].Groups[1].Value.Trim()
+$compilerRuntimeDir = Split-Path -Parent $compilerPath
+$compilerRuntimeDlls = @(
+    'libgcc_s_seh-1.dll',
+    'libgcc_s_dw2-1.dll',
+    'libstdc++-6.dll',
+    'libwinpthread-1.dll'
+) | ForEach-Object { Join-Path $compilerRuntimeDir $_ } |
+    Where-Object { Test-Path $_ }
+if (!$compilerRuntimeDlls) {
+    throw "No MinGW runtime DLLs were found beside $compilerPath."
 }
 
 if (Test-Path $PackageDir) { Remove-Item $PackageDir -Recurse -Force }
@@ -36,16 +60,22 @@ if (!(Get-Command $windeployqt -ErrorAction SilentlyContinue)) {
     throw 'windeployqt.exe was not found. Set QALAM_QT_DIR to your Qt MinGW kit path.'
 }
 
-& $windeployqt --compiler-runtime --no-system-dxc-compiler --dir $PackageDir (Join-Path $PackageDir 'Qalam.exe')
+& $windeployqt --no-compiler-runtime --no-system-dxc-compiler --dir $PackageDir (Join-Path $PackageDir 'Qalam.exe')
+if ($LASTEXITCODE -ne 0) {
+    throw "windeployqt failed with exit code $LASTEXITCODE."
+}
+
+# windeployqt must not select a compiler runtime from PATH. Copy the exact
+# runtime recorded by CMake for this build instead.
+Copy-Item $compilerRuntimeDlls $PackageDir -Force
 
 # Optional: bundle the Baa compiler if the repository contains a local compiler folder.
 if (Test-Path 'baa') {
     Copy-Item 'baa' (Join-Path $PackageDir 'baa') -Recurse -Force
 }
 
-$zipPath = 'dist/Qalam-win64.zip'
-if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
-Compress-Archive -Path (Join-Path $PackageDir '*') -DestinationPath $zipPath
+if (Test-Path $ZipPath) { Remove-Item $ZipPath -Force }
+Compress-Archive -Path (Join-Path $PackageDir '*') -DestinationPath $ZipPath
 
 Write-Host "Packaged Qalam successfully:" -ForegroundColor Green
-Write-Host "  $zipPath"
+Write-Host "  $ZipPath"

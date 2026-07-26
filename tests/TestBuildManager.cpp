@@ -3,7 +3,6 @@
 #include <QtTest/QtTest>
 #include <QDir>
 #include <QFile>
-#include <QFileInfo>
 #include <QTemporaryDir>
 
 class TestBuildManager : public QObject
@@ -11,7 +10,6 @@ class TestBuildManager : public QObject
     Q_OBJECT
 
 private slots:
-    void buildsStableBaaCheckArguments();
     void buildsValidatedTakweenArguments();
     void filtersTakweenTargetsByCapability();
     void classifiesCompilerCliExitCodes();
@@ -19,17 +17,6 @@ private slots:
     void findsNearestTakweenProjectRoot();
     void returnsEmptyRootOutsideTakweenProject();
 };
-
-void TestBuildManager::buildsStableBaaCheckArguments()
-{
-    const QString path = QDir::cleanPath(QDir::temp().filePath("مشروع/الرئيسية.baa"));
-    const QStringList arguments = BuildManager::baaCheckArguments(path);
-
-    QCOMPARE(arguments.size(), 3);
-    QCOMPARE(arguments[0], QString("--check"));
-    QCOMPARE(arguments[1], QString("--diagnostics=json"));
-    QCOMPARE(arguments[2], QFileInfo(path).absoluteFilePath());
-}
 
 void TestBuildManager::buildsValidatedTakweenArguments()
 {

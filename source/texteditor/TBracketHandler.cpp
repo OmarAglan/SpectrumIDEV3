@@ -40,14 +40,19 @@ bool TBracketHandler::handleBracketCompletion(QChar openingBracket, QChar closin
         QString selectedText = cursor.selectedText();
         cursor.insertText(openingBracket + selectedText + closingBracket);
 
-        // Move cursor after the opening bracket to select the original text
-        cursor.movePosition(QTextCursor::Right, QTextCursor::MoveAnchor, selectedText.length() + 1);
-        cursor.movePosition(QTextCursor::Left, QTextCursor::KeepAnchor, selectedText.length());
+        // Use logical document order. Visual Left/Right reverses in an RTL
+        // editor and can place the caret outside the inserted pair.
+        cursor.movePosition(QTextCursor::PreviousCharacter,
+                            QTextCursor::MoveAnchor,
+                            selectedText.length() + 1);
+        cursor.movePosition(QTextCursor::NextCharacter,
+                            QTextCursor::KeepAnchor,
+                            selectedText.length());
         m_editor->setTextCursor(cursor);
     } else {
         // Insert both brackets and place cursor between them
         cursor.insertText(QString(openingBracket) + closingBracket);
-        cursor.movePosition(QTextCursor::Left, QTextCursor::MoveAnchor, 1);
+        cursor.movePosition(QTextCursor::PreviousCharacter);
         m_editor->setTextCursor(cursor);
     }
 
@@ -67,9 +72,12 @@ bool TBracketHandler::handleQuoteCompletion(QChar quoteChar) {
         QString selectedText = cursor.selectedText();
         cursor.insertText(quoteChar + selectedText + quoteChar);
 
-        // Move cursor after the opening quote to select the original text
-        cursor.movePosition(QTextCursor::Right, QTextCursor::MoveAnchor, selectedText.length() + 1);
-        cursor.movePosition(QTextCursor::Left, QTextCursor::KeepAnchor, selectedText.length());
+        cursor.movePosition(QTextCursor::PreviousCharacter,
+                            QTextCursor::MoveAnchor,
+                            selectedText.length() + 1);
+        cursor.movePosition(QTextCursor::NextCharacter,
+                            QTextCursor::KeepAnchor,
+                            selectedText.length());
         m_editor->setTextCursor(cursor);
         return true;
     }
@@ -79,7 +87,7 @@ bool TBracketHandler::handleQuoteCompletion(QChar quoteChar) {
         QChar nextChar = doc->characterAt(pos);
         if (nextChar == quoteChar) {
             // Just move cursor over the existing quote
-            cursor.movePosition(QTextCursor::Right);
+            cursor.movePosition(QTextCursor::NextCharacter);
             m_editor->setTextCursor(cursor);
             return true;
         }
@@ -87,7 +95,7 @@ bool TBracketHandler::handleQuoteCompletion(QChar quoteChar) {
 
     // Insert the quote pair
     cursor.insertText(QString(quoteChar) + quoteChar);
-    cursor.movePosition(QTextCursor::Left, QTextCursor::MoveAnchor, 1);
+    cursor.movePosition(QTextCursor::PreviousCharacter);
     m_editor->setTextCursor(cursor);
 
     return true;
@@ -103,7 +111,7 @@ bool TBracketHandler::handleBracketSkip(QChar typedChar) {
         QChar nextChar = doc->characterAt(pos);
         if (nextChar == typedChar) {
             // Just move the cursor over the existing bracket/quote
-            cursor.movePosition(QTextCursor::Right);
+            cursor.movePosition(QTextCursor::NextCharacter);
             m_editor->setTextCursor(cursor);
             return true;
         }

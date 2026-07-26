@@ -12,17 +12,43 @@
 #include <QUrl>
 #include <QHash>
 #include <QToolTip>
+#include <QTextDocument>
 #include "Constants.h"
 #include "highlighter/ThemeManager.h"
 #include "highlighter/TSyntaxDefinition.h"
 #include <QTextCharFormat>
 #include "ui/QalamTheme.h"
 
+#include <algorithm>
+
 
 namespace {
-bool isCompletionCharacter(QChar ch)
+bool isBaaCompletionCharacter(QChar ch)
 {
-    return ch.isLetterOrNumber() || ch == '_' || ch == '#';
+    const ushort value = ch.unicode();
+    return ch == '_' || ch == '#' ||
+           (value >= 0x0600 && value <= 0x06ff) ||
+           (value >= 0x0750 && value <= 0x077f) ||
+           (value >= 0x08a0 && value <= 0x08ff) ||
+           (value >= 0xfb50 && value <= 0xfdff) ||
+           (value >= 0xfe70 && value <= 0xfeff);
+}
+
+CompletionType completionTypeForItem(const BaaCompletionItem &item)
+{
+    if (item.label.startsWith('#')) return CompletionType::Preprocessor;
+    switch (item.kind) {
+    case 3: return CompletionType::Function;
+    case 5:
+    case 6: return CompletionType::Variable;
+    case 7:
+    case 13:
+    case 22:
+    case 25: return CompletionType::Type;
+    case 14: return CompletionType::Keyword;
+    case 15: return CompletionType::Snippet;
+    default: return CompletionType::Value;
+    }
 }
 }
 
@@ -53,6 +79,15 @@ TEditor::TEditor(QWidget* parent)
     connect(this, &TEditor::updateRequest, this, &TEditor::updateLineNumberArea);
     connect(this, &TEditor::cursorPositionChanged, this, &TEditor::highlightCurrentLine);
     connect(this->document(), &QTextDocument::contentsChanged, this, &TEditor::updateFoldRegions);
+    m_hoverTimer.setSingleShot(true);
+    m_hoverTimer.setInterval(320);
+    connect(&m_hoverTimer, &QTimer::timeout, this, [this]() {
+        if (m_hoverRequestLine < 0 || m_hoverRequestCharacter < 0 ||
+            currentFilePath().isEmpty()) return;
+        emit hoverRequested(currentFilePath(),
+                            m_hoverRequestLine,
+                            m_hoverRequestCharacter);
+    });
 
     updateLineNumberAreaWidth();
     highlightCurrentLine();
@@ -74,36 +109,6 @@ TEditor::TEditor(QWidget* parent)
     m_autoSave = new TAutoSave(this, this);
     connect(this->document(), &QTextDocument::contentsChanged, m_autoSave, &TAutoSave::onContentChanged);
     
-    // Initial index build
-    if (dynamicStrategy) {
-        dynamicStrategy->rebuildIndex(this->toPlainText());
-    }
-    
-    // Debounced timer to rebuild word index when text is deleted
-    // (so the index shrinks and doesn't grow forever)
-    m_indexRebuildTimer = new QTimer(this);
-    m_indexRebuildTimer->setSingleShot(true);
-    m_indexRebuildTimer->setInterval(2000); // 2 seconds after last deletion
-    connect(m_indexRebuildTimer, &QTimer::timeout, this, [this]() {
-        if (dynamicStrategy) {
-            dynamicStrategy->rebuildIndex(this->toPlainText());
-        }
-    });
-
-    // Connect document changes to update the autocomplete index
-    connect(this->document(), &QTextDocument::contentsChange, this, [this](int position, int charsRemoved, int charsAdded) {
-        if (dynamicStrategy && charsAdded > 0) {
-            QTextCursor cursor(this->document());
-            cursor.setPosition(position);
-            cursor.movePosition(QTextCursor::NextCharacter, QTextCursor::KeepAnchor, charsAdded);
-            dynamicStrategy->updateIndex(cursor.selectedText());
-        }
-        // Schedule a full rebuild when text is deleted so stale words are pruned
-        if (dynamicStrategy && charsRemoved > 0) {
-            m_indexRebuildTimer->start();
-        }
-    });
-
     installEventFilter(this);
 }
 
@@ -734,41 +739,130 @@ void TEditor::dragLeaveEvent(QDragLeaveEvent* event) {
 void TEditor::mouseMoveEvent(QMouseEvent *event) {
     Diagnostic diagnostic;
     if (hasDiagnosticAtPosition(event->position().toPoint(), &diagnostic)) {
+        m_hoverTimer.stop();
+        m_hoverRequestLine = -1;
+        m_hoverRequestCharacter = -1;
         const QString prefix = diagnostic.severity == "warning" ? "تحذير" : "خطأ";
         QToolTip::showText(event->globalPosition().toPoint(),
                            QString("%1: %2").arg(prefix, diagnostic.message),
                            viewport());
     } else {
-        const QTextCursor cursor = cursorForPosition(event->position().toPoint());
-        const QString blockText = cursor.block().text();
-        int end = qBound(0, cursor.positionInBlock(), static_cast<int>(blockText.length()));
-        int start = end;
-        while (start > 0 and isCompletionCharacter(blockText.at(start - 1))) --start;
-        while (end < blockText.length() and isCompletionCharacter(blockText.at(end))) ++end;
-        const QString word = blockText.mid(start, end - start);
-        const auto &lang = LanguageDefinition::instance();
-        if (lang.keywordSet.contains(word)) {
-            QToolTip::showText(event->globalPosition().toPoint(),
-                               QString("كلمة محجوزة في لغة باء: %1").arg(word),
-                               viewport());
-        } else if (lang.builtinSet.contains(word)) {
-            QToolTip::showText(event->globalPosition().toPoint(),
-                               QString("دالة مدمجة في لغة باء: %1").arg(word),
-                               viewport());
-        } else if (lang.preprocessorSet.contains(word)) {
-            QToolTip::showText(event->globalPosition().toPoint(),
-                               QString("تعليمة معالجة قبلية: %1").arg(word),
-                               viewport());
-        } else {
-            QToolTip::hideText();
-        }
+        scheduleLanguageHover(event->position().toPoint(),
+                              event->globalPosition().toPoint());
     }
     QPlainTextEdit::mouseMoveEvent(event);
 }
 
 void TEditor::leaveEvent(QEvent *event) {
-    QToolTip::hideText();
+    clearSemanticPresentation();
     QPlainTextEdit::leaveEvent(event);
+}
+
+void TEditor::scheduleLanguageHover(const QPoint &viewportPosition,
+                                    const QPoint &globalPosition)
+{
+    if (currentFilePath().isEmpty()) {
+        clearSemanticPresentation();
+        return;
+    }
+    const QTextCursor cursor = cursorForPosition(viewportPosition);
+    const QString text = cursor.block().text();
+    int character = qBound(0, cursor.positionInBlock(), text.size());
+    if (character < text.size() &&
+        isBaaCompletionCharacter(text.at(character))) {
+        // The insertion position already points inside the identifier.
+    } else if (character > 0 &&
+               isBaaCompletionCharacter(text.at(character - 1))) {
+        --character;
+    } else {
+        clearSemanticPresentation();
+        return;
+    }
+
+    const int line = cursor.blockNumber();
+    const bool changed = line != m_hoverRequestLine ||
+                         character != m_hoverRequestCharacter;
+    m_hoverRequestLine = line;
+    m_hoverRequestCharacter = character;
+    m_hoverGlobalPosition = globalPosition;
+    if (changed) QToolTip::hideText();
+    m_hoverTimer.start();
+}
+
+void TEditor::showLanguageHover(const BaaHover &hover,
+                                int requestLine,
+                                int requestCharacter)
+{
+    if (requestLine != m_hoverRequestLine ||
+        requestCharacter != m_hoverRequestCharacter) return;
+    if (!hover.isValid()) {
+        QToolTip::hideText();
+        return;
+    }
+
+    QTextDocument document;
+    document.setDefaultStyleSheet(
+        QStringLiteral("body{direction:rtl;text-align:right;"
+                       "font-family:'Noto Sans Arabic','Segoe UI';}"
+                       "pre{direction:rtl;text-align:right;"
+                       "background:#20242b;padding:8px;border-radius:5px;}"));
+    if (hover.contentKind == QStringLiteral("markdown"))
+        document.setMarkdown(hover.contents);
+    else
+        document.setPlainText(hover.contents);
+    document.setTextWidth(420);
+    QToolTip::showText(m_hoverGlobalPosition,
+                       document.toHtml(),
+                       viewport());
+}
+
+void TEditor::showSignatureHelp(const BaaSignatureHelp &signatureHelp,
+                                int requestLine,
+                                int requestCharacter)
+{
+    const QTextCursor cursor = textCursor();
+    if (cursor.blockNumber() != requestLine ||
+        cursor.positionInBlock() != requestCharacter) return;
+    if (!signatureHelp.isValid()) {
+        QToolTip::hideText();
+        return;
+    }
+
+    QString details;
+    if (!signatureHelp.parameters.isEmpty()) {
+        const int active = qBound(0, signatureHelp.activeParameter,
+                                  signatureHelp.parameters.size() - 1);
+        details = QStringLiteral(
+            "<div style='margin-top:6px;color:#9fc7ff'>"
+            "المعامل %1 من %2: <b>%3</b></div>")
+            .arg(active + 1)
+            .arg(signatureHelp.parameters.size())
+            .arg(signatureHelp.parameters.at(active).toHtmlEscaped());
+    }
+    const QString html = QStringLiteral(
+        "<div dir='rtl' style='text-align:right;white-space:pre-wrap'>"
+        "<b>%1</b>%2</div>")
+        .arg(signatureHelp.label.toHtmlEscaped(), details);
+    const QPoint position = viewport()->mapToGlobal(
+        cursorRect().bottomLeft() + QPoint(0, 5));
+    QToolTip::showText(position, html, viewport());
+}
+
+void TEditor::requestSignatureHelp()
+{
+    if (currentFilePath().isEmpty()) return;
+    const QTextCursor cursor = textCursor();
+    emit signatureHelpRequested(currentFilePath(),
+                                cursor.blockNumber(),
+                                cursor.positionInBlock());
+}
+
+void TEditor::clearSemanticPresentation()
+{
+    m_hoverTimer.stop();
+    m_hoverRequestLine = -1;
+    m_hoverRequestCharacter = -1;
+    QToolTip::hideText();
 }
 
 
@@ -849,16 +943,7 @@ void TEditor::updateHighlighterTheme(std::shared_ptr<SyntaxTheme> theme) {
 // --- autocomplete system ---
 
 void TEditor::setupAutoComplete() {
-    // set autocomplete system
     model = new CompletionModel(this);
-    strategies.push_back(std::make_unique<SnippetStrategy>());
-    strategies.push_back(std::make_unique<KeywordStrategy>());
-    strategies.push_back(std::make_unique<BuiltinStrategy>());
-    strategies.push_back(std::make_unique<PreprocessorStrategy>());
-    auto dynamic = std::make_unique<DynamicWordStrategy>();
-    dynamicStrategy = dynamic.get();
-    strategies.push_back(std::move(dynamic));
-
     QCompleter *completer = new QCompleter(this);
     setCompleter(completer);
 }
@@ -880,28 +965,17 @@ void TEditor::setCompleter(QCompleter *completer) {
     popup->setItemDelegate(new TModernCompletionDelegate(popup));
 
     // set dimensions
-    popup->setMinimumWidth(350);
-    popup->setMinimumHeight(200); // Taller to fit list + footer
+    popup->setMinimumWidth(320);
+    popup->setMinimumHeight(150);
 
 
     // To this lambda that captures the type:
     connect(c, QOverload<const QString &>::of(&QCompleter::activated),
-            this, [this](const QString &completion) {
-                // Get the current index from the completer popup
+            this, [this](const QString &) {
                 QModelIndex index = c->popup()->currentIndex();
-                if (index.isValid()) {
-                    // Get the type from the model
-                    CompletionType type = static_cast<CompletionType>(
-                        index.data(Qt::UserRole + 2).toInt());
-                    SnippetId snippetId = static_cast<SnippetId>(
-                        index.data(Qt::UserRole + 3).toInt());
-                    // Get the full completion item
-                    QString completionText = index.data(Qt::EditRole).toString();
-                    insertCompletion(completionText, type, snippetId);
-                } else {
-                    // Fallback to just the string without type
-                    insertCompletion(completion, CompletionType::DynamicWord, SnippetId::None);
-                }
+                if (not index.isValid()) return;
+                const CompletionItem *item = model->itemAt(index.row());
+                if (item) insertCompletion(*item);
             });
 }
 
@@ -913,9 +987,20 @@ void TEditor::focusOutEvent(QFocusEvent *e) {
 }
 
 void TEditor::keyPressEvent(QKeyEvent *e) {
+    const bool signatureShortcut =
+        (e->modifiers() & Qt::ControlModifier) &&
+        (e->modifiers() & Qt::ShiftModifier) &&
+        e->key() == Qt::Key_Space;
+    if (signatureShortcut) {
+        requestSignatureHelp();
+        e->accept();
+        return;
+    }
 
     // Bracket and quote auto-pairing (delegated to TBracketHandler)
     if (m_bracketHandler.handleAutoPairing(e)) {
+        if (e->text().contains('(')) requestSignatureHelp();
+        if (e->text().contains(')')) QToolTip::hideText();
         e->accept();
         return;
     }
@@ -976,45 +1061,91 @@ void TEditor::keyPressEvent(QKeyEvent *e) {
         }
     }
 
-    bool isShortcut = ((e->modifiers() & Qt::ControlModifier) && e->key() == Qt::Key_Space);
+    const bool isShortcut =
+        (e->modifiers() & Qt::ControlModifier) &&
+        !(e->modifiers() & Qt::ShiftModifier) &&
+        e->key() == Qt::Key_Space;
 
     QPlainTextEdit::keyPressEvent(e);
 
-    if (!isShortcut && e->text().isEmpty()) return;
+    if (isShortcut) {
+        performCompletion(true);
+        return;
+    }
+    if (e->key() == Qt::Key_Escape || e->text().contains(')')) {
+        QToolTip::hideText();
+    }
+    if (e->text().isEmpty()) return;
 
-    performCompletion();
+    bool hasArabicTrigger = false;
+    bool hasSignatureTrigger = false;
+    for (const QChar character : e->text()) {
+        if (isBaaCompletionCharacter(character)) {
+            hasArabicTrigger = true;
+        }
+        if (character == '(' || character == ',' || character == QChar(0x060c))
+            hasSignatureTrigger = true;
+    }
+    if (hasSignatureTrigger) requestSignatureHelp();
+    if (hasArabicTrigger) performCompletion();
+    else if (c and c->popup()) c->popup()->hide();
 }
 
-void TEditor::performCompletion() {
-    QString textUnder = textUnderCursor();
-    // Allow empty text for shortcut (Ctrl+Space) to show all
-    if (textUnder.length() < 1) {
-        // Optional: Trigger immediately on Ctrl+Space even if empty?
-        // For now, keep logic to hide if empty, unless you want "all suggestion" behavior.
+void TEditor::performCompletion(bool explicitRequest) {
+    if (not c or not model) return;
+    const QString prefix = textUnderCursor();
+    if (not explicitRequest and prefix.isEmpty()) {
         c->popup()->hide();
         return;
     }
-
-    std::vector<CompletionItem> allSuggestions;
-
-    // Avoid O(n) toPlainText() copy on every keystroke.
-    // No strategy uses the fullText parameter (DynamicWordStrategy
-    // queries its pre-built wordIndex instead).
-    static const QString empty;
-
-    for (const auto& strategy : strategies) {
-        auto res = strategy->getSuggestions(textUnder, empty);
-        allSuggestions.insert(allSuggestions.end(), res.begin(), res.end());
-    }
-
-    model->updateData(allSuggestions);
-
-    if (allSuggestions.empty()) {
+    if (currentFilePath().isEmpty()) {
         c->popup()->hide();
         return;
     }
+    c->popup()->hide();
+    const QTextCursor cursor = textCursor();
+    emit completionRequested(currentFilePath(), cursor.blockNumber(),
+                             cursor.positionInBlock());
+}
 
-    c->setCompletionPrefix(textUnder);
+void TEditor::showLanguageCompletions(const QVector<BaaCompletionItem> &items,
+                                      int line,
+                                      int character)
+{
+    const QTextCursor cursor = textCursor();
+    if (cursor.blockNumber() != line or cursor.positionInBlock() != character) return;
+
+    std::vector<CompletionItem> completions;
+    completions.reserve(static_cast<size_t>(items.size()));
+    for (const BaaCompletionItem &source : items) {
+        CompletionItem item;
+        item.label = source.label;
+        item.completion = source.newText;
+        item.description = source.detail;
+        item.type = completionTypeForItem(source);
+        item.snippet = source.insertTextFormat == 2;
+        item.startLine = source.startLine;
+        item.startCharacter = source.startCharacter;
+        item.endLine = source.endLine;
+        item.endCharacter = source.endCharacter;
+        completions.push_back(std::move(item));
+    }
+    model->updateData(completions);
+    if (completions.empty()) {
+        c->popup()->hide();
+        return;
+    }
+    c->setCompletionPrefix(QString());
+    showCompletionPopup();
+}
+
+bool TEditor::hasVisibleCompletion() const
+{
+    return c and c->popup() and c->popup()->isVisible();
+}
+
+void TEditor::showCompletionPopup()
+{
     QRect cr = cursorRect();
 
     QPoint widgetPos = this->viewport()->mapTo(this, cr.topRight());
@@ -1049,52 +1180,32 @@ QString TEditor::textUnderCursor() const {
     int end = qBound(0, cursor.positionInBlock(), static_cast<int>(blockText.length()));
     int start = end;
 
-    while (start > 0 and isCompletionCharacter(blockText.at(start - 1))) {
+    while (start > 0 and isBaaCompletionCharacter(blockText.at(start - 1))) {
         --start;
     }
 
     return blockText.mid(start, end - start);
 }
 
-void TEditor::insertCompletion(const QString &completion, CompletionType type, SnippetId snippetId) {
-    if (c->widget() != this) return;
-    QTextCursor tc = textCursor();
+int TEditor::documentPosition(int zeroBasedLine, int utf16Character) const
+{
+    const QTextBlock block = document()->findBlockByNumber(zeroBasedLine);
+    if (not block.isValid()) return -1;
+    return block.position() + qBound(0, utf16Character, block.text().length());
+}
 
-    // Replace the whole completion prefix, including Arabic letters and preprocessor '#'.
-    const int end = tc.position();
-    int start = end;
-    while (start > 0 and isCompletionCharacter(document()->characterAt(start - 1))) {
-        --start;
-    }
+void TEditor::insertCompletion(const CompletionItem &item) {
+    if (not c or c->widget() != this) return;
+    const int start = documentPosition(item.startLine, item.startCharacter);
+    const int end = documentPosition(item.endLine, item.endCharacter);
+    if (start < 0 or end < start) return;
+
+    QTextCursor tc = textCursor();
     tc.setPosition(start);
     tc.setPosition(end, QTextCursor::KeepAnchor);
-
-    switch (type) {
-    case CompletionType::Builtin:
-        insertBuiltinFunction(completion, tc);
-        break;
-    case CompletionType::Snippet:
-        m_snippetManager.insertSnippet(completion, tc, snippetId);
-        break;
-    case CompletionType::Keyword:
-    case CompletionType::Preprocessor:
-        insertWord(completion, tc);
-        break;
-    case CompletionType::DynamicWord:
-    default:
-        insertWord(completion, tc);
-        break;
+    if (item.snippet) m_snippetManager.insertSnippet(item.completion, tc);
+    else {
+        tc.insertText(item.completion);
+        setTextCursor(tc);
     }
-}
-void TEditor::insertWord(const QString& completion, QTextCursor& tc) {
-    tc.insertText(completion);
-    setTextCursor(tc);
-}
-void TEditor::insertBuiltinFunction(const QString& functionName, QTextCursor& tc) {
-    tc.insertText(functionName);
-    tc.insertText("()");
-    tc.movePosition(QTextCursor::Left, QTextCursor::MoveAnchor, 1);
-
-    // Perform the insertion
-    setTextCursor(tc);
 }

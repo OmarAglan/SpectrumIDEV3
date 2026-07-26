@@ -14,10 +14,14 @@
 #include <QVector>
 
 class BreakpointModel;
+class BaaLanguageClient;
+struct BaaWorkspaceEdit;
 class CommandRegistry;
 class DiagnosticsModel;
 class TWelcomePage;
 class WorkspaceIndexer;
+struct BaaLocation;
+struct Diagnostic;
 
 class Qalam : public QalamWindow
 {
@@ -67,6 +71,9 @@ private slots:
     void handleBuildOutput(const QString &text);
     void goToDefinition();
     void findReferences();
+    void renameSymbol();
+    bool applyWorkspaceEdit(const BaaWorkspaceEdit &edit,
+                            QString *error = nullptr);
     
     // VSCode-like component slots
     void onActivityViewChanged(TActivityBar::ViewType view);
@@ -90,8 +97,19 @@ private:
     void updateProblemsStatusBar();
     void rebuildProblemsPanel();
     void applyDiagnosticsToEditors();
-    QString symbolUnderCursor() const;
-    bool findDefinitionLocation(const QString &symbol, QString *filePath, int *line, int *column) const;
+    void attachAnalysisToEditor(TEditor *editor);
+    void scheduleEditorAnalysis(TEditor *editor);
+    void handleLanguageDiagnostics(const QString &filePath,
+                                   int documentVersion,
+                                   const QVector<Diagnostic> &diagnostics);
+    void handleLanguageCompletion(const QString &filePath,
+                                  int documentVersion,
+                                  int line,
+                                  int character,
+                                  const QVector<BaaCompletionItem> &items);
+    bool languageDocumentVersionIsCurrent(const QString &filePath,
+                                          int documentVersion) const;
+    QString lineTextForLocation(const BaaLocation &location) const;
     void runTakweenProjectCommand(const QString &command);
 
 private:
@@ -102,6 +120,7 @@ private:
 
     FileManager *m_fileManager{};
     BuildManager *m_buildManager{};
+    BaaLanguageClient *m_languageClient{};
     SessionManager *m_sessionManager{};
     LayoutManager *m_layoutManager{};
     CommandRegistry *m_commandRegistry{};

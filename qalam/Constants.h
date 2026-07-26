@@ -2,7 +2,7 @@
 #include <QString>
 
 namespace Constants {
-    const QString OrgName = "Alif";
+    const QString OrgName = "BaaEcosystem";
     const QString AppName = "Qalam";
     const QString AppVersion = "3.3.0";
     
@@ -12,6 +12,7 @@ namespace Constants {
     const QString SettingsKeyFontType = "editorFontType";
     const QString SettingsKeyTheme = "editorCodeTheme";
     const QString SettingsKeyCompilerPath = "compilerPath";
+    const QString SettingsKeyLanguageServerPath = "baaLspPath";
     const QString SettingsKeySidebarWidth = "sidebarWidth";
     const QString SettingsKeyPanelHeight = "panelHeight";
     const QString SettingsKeyShowWelcome = "ShowWelcomeOnStartup";

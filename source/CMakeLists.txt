@@ -3,11 +3,22 @@ add_library(qalam_core STATIC
     core/CommandRegistry.cpp
     core/CommandRegistry.h
     # Language / IDE services
+    language/BaaLanguageClient.cpp
+    language/BaaLanguageClient.h
+    language/BaaDocumentSymbol.h
+    language/BaaCompletionItem.h
+    language/BaaHover.h
+    language/BaaLocation.h
+    language/BaaSignatureHelp.h
+    language/BaaWorkspaceEdit.h
+    language/BaaWorkspaceEdit.cpp
     language/Diagnostic.h
     language/DiagnosticParser.cpp
     language/DiagnosticParser.h
     language/DiagnosticsModel.cpp
     language/DiagnosticsModel.h
+    language/LspMessageFramer.cpp
+    language/LspMessageFramer.h
     language/TakweenProtocol.cpp
     language/TakweenProtocol.h
     # Workspace services
@@ -24,7 +35,6 @@ add_library(qalam_core STATIC
     texteditor/highlighter/TLexer.cpp
     texteditor/highlighter/TSyntaxDefinition.cpp
     texteditor/highlighter/TSyntaxHighlighter.cpp
-    texteditor/autocomplete/AutoComplete.cpp
     texteditor/autocomplete/AutoCompleteUI.cpp
     # Components
     components/TFlatButton.cpp

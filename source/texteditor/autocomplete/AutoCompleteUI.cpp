@@ -11,9 +11,14 @@ void CompletionModel::updateData(const std::vector<CompletionItem>& items) {
     beginResetModel();
     m_data.clear();
     for (const auto& item : items) {
-        m_data.push_back({item.label, item.completion, item.description, item.type, item.snippetId});
+        m_data.push_back(item);
     }
     endResetModel();
+}
+
+const CompletionItem *CompletionModel::itemAt(int row) const {
+    if (row < 0 || static_cast<size_t>(row) >= m_data.size()) return nullptr;
+    return &m_data[static_cast<size_t>(row)];
 }
 
 int CompletionModel::rowCount(const QModelIndex &) const {
@@ -29,14 +34,13 @@ QVariant CompletionModel::data(const QModelIndex &index, int role) const {
     // Custom roles for the delegate
     if (role == Qt::UserRole + 1) return item.description;
     if (role == Qt::UserRole + 2) return static_cast<int>(item.type);
-    if (role == Qt::UserRole + 3) return static_cast<int>(item.snippetId);
 
     return QVariant();
 }
 
 // --- TCompletionPopup Implementation ---
 
-TCompletionPopup::TCompletionPopup(QWidget *parent) : QListView(parent), footerHeight(70) {
+TCompletionPopup::TCompletionPopup(QWidget *parent) : QListView(parent), footerHeight(52) {
     // 1. Visual Properties for the Container
     setWindowFlags(Qt::Popup | Qt::FramelessWindowHint | Qt::NoDropShadowWindowHint);
     // setAttribute(Qt::WA_TranslucentBackground);
@@ -70,7 +74,7 @@ TCompletionPopup::TCompletionPopup(QWidget *parent) : QListView(parent), footerH
         "   font-family: 'Tajawal'; "
         "}"
         );
-    infoLabel->setAlignment(Qt::AlignTop | Qt::AlignLeft);
+    infoLabel->setAlignment(Qt::AlignTop | Qt::AlignRight);
     infoLabel->setWordWrap(true);
     infoLabel->setLayoutDirection(Qt::RightToLeft); // Set RTL for label
 
@@ -94,11 +98,13 @@ void TCompletionPopup::currentChanged(const QModelIndex &current, const QModelIn
     QString typeStr, colorStr;
 
     switch(type) {
-    case Keyword: typeStr = "محجوزة"; colorStr = "#c678dd"; break;
-    case Snippet: typeStr = "كتلة"; colorStr = "#e06c75"; break;
-    case Builtin: typeStr = "ضمنية"; colorStr = "#82d448"; break;
-    case Preprocessor: typeStr = "معالج"; colorStr = "#d19a66"; break;
-    case DynamicWord: typeStr = "نص"; colorStr = "#abb2bf"; break;
+    case Keyword: typeStr = "كلمة محجوزة"; colorStr = "#c678dd"; break;
+    case Snippet: typeStr = "قالب"; colorStr = "#e06c75"; break;
+    case Function: typeStr = "دالة"; colorStr = "#82d448"; break;
+    case Variable: typeStr = "متغير"; colorStr = "#61afef"; break;
+    case Type: typeStr = "نوع"; colorStr = "#56b6c2"; break;
+    case Value: typeStr = "قيمة"; colorStr = "#abb2bf"; break;
+    case Preprocessor: typeStr = "معالجة قبلية"; colorStr = "#d19a66"; break;
     }
 
     QString html = QString("<div dir='rtl'>"
@@ -115,7 +121,7 @@ TModernCompletionDelegate::TModernCompletionDelegate(QObject *parent) : QStyledI
 
 QSize TModernCompletionDelegate::sizeHint(const QStyleOptionViewItem &option, const QModelIndex &) const {
     // Shorter rows now that description is at the bottom
-    return QSize(option.rect.width(), 32);
+    return QSize(option.rect.width(), 30);
 }
 
 void TModernCompletionDelegate::paint(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const {
@@ -132,11 +138,13 @@ void TModernCompletionDelegate::paint(QPainter *painter, const QStyleOptionViewI
     QString iconText;
 
     switch (type) {
-    case Keyword: iconColor = QColor(198, 120, 221); iconText = "{}"; break;      // Purple
-    case Snippet: iconColor = QColor(224, 108, 117); iconText = "<>"; break;      // Red
-    case Builtin: iconColor = QColor(130, 212, 72); iconText = "()"; break;       // Green
-    case Preprocessor: iconColor = QColor(209, 154, 102); iconText = "#"; break;  // Orange
-    case DynamicWord: iconColor = QColor(97, 175, 239); iconText = "أب"; break;   // Blue
+    case Keyword: iconColor = QColor(198, 120, 221); iconText = "ك"; break;
+    case Snippet: iconColor = QColor(224, 108, 117); iconText = "ق"; break;
+    case Function: iconColor = QColor(130, 212, 72); iconText = "د"; break;
+    case Variable: iconColor = QColor(97, 175, 239); iconText = "م"; break;
+    case Type: iconColor = QColor(86, 182, 194); iconText = "ن"; break;
+    case Value: iconColor = QColor(171, 178, 191); iconText = "ق"; break;
+    case Preprocessor: iconColor = QColor(209, 154, 102); iconText = "مق"; break;
     }
 
     // Draw Background
@@ -151,7 +159,7 @@ void TModernCompletionDelegate::paint(QPainter *painter, const QStyleOptionViewI
 
     // Icon text
     painter->setPen(iconColor);
-    painter->setFont(QFont("Consolas", 9, QFont::Bold));
+    painter->setFont(QFont("Tajawal", 9, QFont::Bold));
     painter->drawText(iconRect, Qt::AlignCenter, iconText);
 
     // Draw Label (Main Text)

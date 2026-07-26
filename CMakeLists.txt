@@ -7,6 +7,8 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
+include(cmake/WindowsRuntime.cmake)
+
 if(WIN32)
     enable_language(RC)
 endif()

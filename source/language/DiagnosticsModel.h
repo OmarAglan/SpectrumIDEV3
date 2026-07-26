@@ -15,6 +15,8 @@ public:
     void clear();
     void setDiagnostics(const QVector<Diagnostic> &diagnostics);
     void addDiagnostics(const QVector<Diagnostic> &diagnostics);
+    void replaceDiagnosticsFromSource(const QString &source,
+                                      const QVector<Diagnostic> &diagnostics);
 
     QVector<Diagnostic> diagnostics() const;
     QVector<Diagnostic> diagnosticsForFile(const QString &filePath) const;

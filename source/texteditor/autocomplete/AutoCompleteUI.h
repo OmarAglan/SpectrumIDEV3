@@ -7,27 +7,22 @@
 #include <QListView>
 #include <QLabel>
 
+#include <vector>
+
 
 
 // --- Custom Model ---
 class CompletionModel : public QAbstractListModel {
     Q_OBJECT
 public:
-    struct ModelItem {
-        QString label;
-        QString completion;
-        QString description;
-        CompletionType type;
-        SnippetId snippetId{SnippetId::None};
-    };
-
     explicit CompletionModel(QObject *parent = nullptr);
     void updateData(const std::vector<CompletionItem>& items);
+    const CompletionItem *itemAt(int row) const;
     int rowCount(const QModelIndex &parent = QModelIndex()) const override;
     QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override;
 
 private:
-    std::vector<ModelItem> m_data{};
+    std::vector<CompletionItem> m_data{};
 };
 
 // --- Rich Popup View (The "Container" for List + Footer) ---
