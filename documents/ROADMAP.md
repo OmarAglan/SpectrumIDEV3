@@ -46,6 +46,9 @@ One deferred item from Phase 2:
 - **Thread safety** -- `QMutex` in `ProcessWorker` and `TConsole`, proper thread lifecycle in `BuildManager`
 - **Live Baa diagnostics** -- versioned unsaved documents flow through Baa-LSP,
   with stale-result rejection and span/code/hint presentation in Qalam
+- **Compiler-owned semantic coloring** -- Baa `tokens-json-v1` flows through
+  Baa-LSP full semantic tokens and overlays Qalam's immediate local lexer only
+  for the matching document version
 - **Structured tooling failures** -- `compiler-cli-v1` exit codes are classified
   with explicit operation context when JSON diagnostics are empty; human messages
   are not parsed to determine the failure class
@@ -387,6 +390,10 @@ One deferred item from Phase 2:
 - [x] 9.1.12 Render a version-matched hierarchical symbol outline and search
   Takween-scoped `workspace/symbol` results through `Ctrl+T`, with local Arabic
   filtering and exact navigation
+- [x] 9.1.13 Render compiler-owned `textDocument/semanticTokens/full` for
+  types, keywords, modifiers, directives, comments, literals, numbers, and
+  operators, with UTF-16 decoding, stale-version rejection, and a tested local
+  lexical fallback
 
 ### 9.2 Baa Language Server
 

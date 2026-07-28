@@ -31,7 +31,12 @@
 ## Key Features (from the current implementation)
 
 ### Editor experience
-- **Custom syntax highlighting engine** (lexer + Qt highlighter) with stateful multi-line handling.
+- **Layered Baa highlighting**: the local lexer provides immediate,
+  stateful multi-line coloring, then version-checked
+  `textDocument/semanticTokens/full` results overlay compiler-owned types,
+  keywords, modifiers, directives, comments, literals, numbers, and operators.
+  Stale LSP results are discarded and the local layer remains available while
+  the server starts or is unavailable.
 - **Theme engine** (multiple built-in code themes).
 - **Arabic-first Baa-LSP completion** sourced from Baa's versioned metadata and
   cursor semantic query, including compiler builtins, parameters, visible
@@ -76,6 +81,9 @@
   without message parsing, and are previewed before Qalam applies them.
   Formatting comes from Baa's `format-json-v1`; Qalam does not maintain a
   competing formatter or silently apply stale edits.
+  Semantic coloring comes from Baa's `tokens-json-v1` through Baa-LSP; Qalam
+  keeps only an immediate lexical fallback and does not maintain a competing
+  semantic grammar.
   Projects containing `مشروع.تكوين` can be built, run,
   tested, and cleaned through Takween from the Run menu or command palette.
   Qalam asks `takween-targets-v1` for selectable targets and consumes

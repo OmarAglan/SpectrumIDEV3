@@ -20,6 +20,7 @@
 #include "BaaCompletionItem.h"
 #include "BaaHover.h"
 #include "BaaSignatureHelp.h"
+#include "BaaSemanticToken.h"
 
 
 class LineNumberArea;
@@ -41,6 +42,8 @@ public:
 
     void setDiagnostics(const QVector<Diagnostic> &diagnostics);
     void clearDiagnostics();
+    void setSemanticTokens(const QVector<BaaSemanticToken> &tokens);
+    void clearSemanticTokens();
 
     void lineNumberAreaPaintEvent(QPaintEvent* event);
     int lineNumberAreaWidth() const;

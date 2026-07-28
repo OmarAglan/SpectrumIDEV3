@@ -11,6 +11,7 @@ add_library(qalam_core STATIC
     language/BaaHover.h
     language/BaaLocation.h
     language/BaaSignatureHelp.h
+    language/BaaSemanticToken.h
     language/BaaWorkspaceEdit.h
     language/BaaWorkspaceEdit.cpp
     language/BaaWorkspaceSymbol.h

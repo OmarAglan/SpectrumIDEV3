@@ -5,6 +5,7 @@
 #include "BaaCompletionItem.h"
 #include "BaaHover.h"
 #include "BaaLocation.h"
+#include "BaaSemanticToken.h"
 #include "BaaSignatureHelp.h"
 #include "BaaWorkspaceEdit.h"
 #include "BaaWorkspaceSymbol.h"
@@ -18,6 +19,7 @@
 #include <QPointer>
 #include <QProcess>
 #include <QSet>
+#include <QStringList>
 #include <QTimer>
 
 class BaaLanguageClient : public QObject
@@ -42,6 +44,7 @@ public:
                             int editorRevision,
                             const QString &workspaceRoot = QString());
     void requestDocumentSymbols(const QString &filePath);
+    void requestSemanticTokens(const QString &filePath);
     void requestWorkspaceSymbols(const QString &query = QString());
     void requestCompletion(const QString &filePath, int line, int character);
     void requestHover(const QString &filePath, int line, int character);
@@ -78,6 +81,9 @@ signals:
     void documentSymbolsPublished(const QString &filePath,
                                   int documentVersion,
                                   const QVector<BaaDocumentSymbol> &symbols);
+    void semanticTokensPublished(const QString &filePath,
+                                 int documentVersion,
+                                 const QVector<BaaSemanticToken> &tokens);
     void workspaceSymbolsPublished(
         const QString &query,
         const QVector<BaaWorkspaceSymbol> &symbols);
@@ -162,6 +168,11 @@ private:
         QString filePath;
         int documentVersion{};
     };
+    struct PendingTokenRequest
+    {
+        QString filePath;
+        int documentVersion{};
+    };
     struct PendingCompletionRequest
     {
         QString filePath;
@@ -200,6 +211,7 @@ private:
     void sendInitialize();
     void sendDidOpen(Document &document);
     void cancelPendingSymbolRequests(const QString &filePath);
+    void cancelPendingTokenRequests(const QString &filePath);
     void cancelPendingCompletionRequests(const QString &filePath);
     void cancelPendingFormattingRequests(const QString &filePath);
     void cancelPendingSemanticRequests(const QString &filePath);
@@ -218,6 +230,8 @@ private:
     void handleNotification(const QJsonObject &message);
     void handlePublishDiagnostics(const QJsonObject &params);
     QVector<BaaDocumentSymbol> parseDocumentSymbols(const QJsonArray &items) const;
+    QVector<BaaSemanticToken> parseSemanticTokens(const QJsonValue &result,
+                                                   bool *valid) const;
     QVector<BaaWorkspaceSymbol> parseWorkspaceSymbols(
         const QJsonValue &result) const;
     QVector<BaaCompletionItem> parseCompletionItems(const QJsonValue &result) const;
@@ -243,6 +257,8 @@ private:
     QHash<QString, QVector<BaaDocumentSymbol>> m_documentSymbols;
     QHash<QString, int> m_symbolRequestedVersions;
     QHash<qint64, PendingSymbolRequest> m_pendingSymbolRequests;
+    QHash<QString, int> m_tokenRequestedVersions;
+    QHash<qint64, PendingTokenRequest> m_pendingTokenRequests;
     QHash<qint64, PendingWorkspaceSymbolRequest>
         m_pendingWorkspaceSymbolRequests;
     QHash<qint64, PendingCompletionRequest> m_pendingCompletionRequests;
@@ -255,6 +271,8 @@ private:
     qint64 m_initializeRequestId{};
     qint64 m_shutdownRequestId{};
     bool m_documentSymbolProvider{};
+    bool m_semanticTokenProvider{};
+    QStringList m_semanticTokenTypes;
     bool m_workspaceSymbolProvider{};
     bool m_completionProvider{};
     bool m_hoverProvider{};

@@ -171,6 +171,16 @@ void TEditor::clearDiagnostics() {
     viewport()->update();
 }
 
+void TEditor::setSemanticTokens(const QVector<BaaSemanticToken> &tokens)
+{
+    if (highlighter) highlighter->setSemanticTokens(tokens);
+}
+
+void TEditor::clearSemanticTokens()
+{
+    if (highlighter) highlighter->clearSemanticTokens();
+}
+
 void TEditor::updateFontSize(int size) {
     if (size < 10) {
         size = 18;

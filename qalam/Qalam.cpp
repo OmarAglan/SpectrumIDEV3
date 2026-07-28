@@ -258,6 +258,24 @@ void Qalam::connectSignals()
     connect(m_buildManager, &BuildManager::outputChunk, this, &Qalam::handleBuildOutput);
     connect(m_languageClient, &BaaLanguageClient::diagnosticsPublished,
             this, &Qalam::handleLanguageDiagnostics);
+    connect(m_languageClient, &BaaLanguageClient::semanticTokensPublished,
+            this, [this](const QString &filePath, int documentVersion,
+                         const QVector<BaaSemanticToken> &tokens) {
+        for (int index = 0; index < tabWidget->count(); ++index) {
+            TEditor *editor =
+                qobject_cast<TEditor*>(tabWidget->widget(index));
+            if (not editor or
+                editor->property("qalam.lsp.version").toInt() !=
+                    documentVersion)
+                continue;
+            const QString editorPath = QDir::cleanPath(
+                QFileInfo(editor->currentFilePath()).absoluteFilePath());
+            if (editorPath == QDir::cleanPath(filePath)) {
+                editor->setSemanticTokens(tokens);
+                return;
+            }
+        }
+    });
     connect(m_languageClient, &BaaLanguageClient::completionPublished,
             this, &Qalam::handleLanguageCompletion);
     connect(m_languageClient, &BaaLanguageClient::hoverPublished,
@@ -1868,12 +1886,14 @@ void Qalam::scheduleEditorAnalysis(TEditor *editor)
     const QString previousPath = editor->property("qalam.lsp.path").toString();
     if (!previousPath.isEmpty() and previousPath != normalizedPath) {
         m_languageClient->closeDocument(previousPath);
+        editor->clearSemanticTokens();
         if (m_diagnosticsModel) {
             m_diagnosticsModel->replaceDiagnosticsFromSource("baa-lsp:" + previousPath, {});
         }
     }
     editor->setProperty("qalam.lsp.path", normalizedPath);
     if (!BaaLanguageClient::isBaaSourcePath(filePath)) {
+        editor->clearSemanticTokens();
         if (editor == currentEditor() and m_layoutManager and
             m_layoutManager->sidebar() and
             m_layoutManager->sidebar()->explorerView()) {
@@ -1887,11 +1907,14 @@ void Qalam::scheduleEditorAnalysis(TEditor *editor)
         BuildManager::findTakweenProjectRoot(normalizedPath);
     const QString workspaceRoot =
         projectRoot.isEmpty() ? folderPath : projectRoot;
+    const int previousVersion =
+        editor->property("qalam.lsp.version").toInt();
     const int version = m_languageClient->synchronizeDocument(
         normalizedPath,
         editor->toPlainText(),
         editor->document()->revision(),
         workspaceRoot);
+    if (version != previousVersion) editor->clearSemanticTokens();
     editor->setProperty("qalam.lsp.version", version);
     if (editor == currentEditor() and m_layoutManager and
         m_layoutManager->sidebar() and

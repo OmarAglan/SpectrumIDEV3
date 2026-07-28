@@ -29,6 +29,7 @@ void TestBaaLanguageClient::synchronizesDocumentsAndRejectsStaleDiagnostics()
     int publicationCount = 0;
     int lastVersion = 0;
     int symbolVersion = 0;
+    int semanticTokenVersion = 0;
     bool workspaceSymbolsReady = false;
     int completionVersion = 0;
     int hoverVersion = 0;
@@ -41,6 +42,7 @@ void TestBaaLanguageClient::synchronizesDocumentsAndRejectsStaleDiagnostics()
     int renameEditVersion = 0;
     QVector<Diagnostic> lastDiagnostics;
     QVector<BaaDocumentSymbol> lastSymbols;
+    QVector<BaaSemanticToken> lastSemanticTokens;
     QVector<BaaWorkspaceSymbol> lastWorkspaceSymbols;
     QVector<BaaCompletionItem> lastCompletions;
     BaaHover lastHover;
@@ -67,6 +69,14 @@ void TestBaaLanguageClient::synchronizesDocumentsAndRejectsStaleDiagnostics()
                 symbolVersion = version;
                 lastSymbols = symbols;
             });
+    connect(&client, &BaaLanguageClient::semanticTokensPublished, this,
+            [&](const QString &publishedPath, int version,
+                const QVector<BaaSemanticToken> &tokens) {
+                QCOMPARE(QDir::cleanPath(publishedPath),
+                         QDir::cleanPath(filePath));
+                semanticTokenVersion = version;
+                lastSemanticTokens = tokens;
+            });
 
     QCOMPARE(client.synchronizeDocument(filePath,
         QStringLiteral("صحيح الرئيسية() {\n    مفقود = ١.\n}\n"), 7, workspace.path()), 1);
@@ -86,6 +96,17 @@ void TestBaaLanguageClient::synchronizesDocumentsAndRejectsStaleDiagnostics()
     QCOMPARE(lastSymbols.first().column, 6);
     QCOMPARE(client.documentSymbols(filePath).first().detail,
              QStringLiteral("-> صحيح"));
+
+    QTRY_COMPARE_WITH_TIMEOUT(semanticTokenVersion, 1, 5000);
+    QCOMPARE(lastSemanticTokens.size(), 2);
+    QCOMPARE(lastSemanticTokens.first().line, 0);
+    QCOMPARE(lastSemanticTokens.first().character, 0);
+    QCOMPARE(lastSemanticTokens.first().length, 4);
+    QCOMPARE(lastSemanticTokens.first().type, QStringLiteral("type"));
+    QCOMPARE(lastSemanticTokens.last().line, 1);
+    QCOMPARE(lastSemanticTokens.last().character, 12);
+    QCOMPARE(lastSemanticTokens.last().length, 1);
+    QCOMPARE(lastSemanticTokens.last().type, QStringLiteral("number"));
 
     connect(&client, &BaaLanguageClient::workspaceSymbolsPublished, this,
             [&](const QString &query,
@@ -327,6 +348,7 @@ void TestBaaLanguageClient::synchronizesDocumentsAndRejectsStaleDiagnostics()
     QTRY_COMPARE_WITH_TIMEOUT(lastVersion, 2, 5000);
     QCOMPARE(publicationCount, 2);
     QTRY_COMPARE_WITH_TIMEOUT(symbolVersion, 2, 5000);
+    QTRY_COMPARE_WITH_TIMEOUT(semanticTokenVersion, 2, 5000);
 
     client.closeDocument(filePath);
     client.stop();

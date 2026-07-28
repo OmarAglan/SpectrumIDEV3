@@ -87,6 +87,17 @@ int main(int argc, char *argv[])
                             {"positionEncoding", "utf-16"},
                             {"textDocumentSync", QJsonObject{{"openClose", true}, {"change", 1}}},
                             {"documentSymbolProvider", true},
+                            {"semanticTokensProvider", QJsonObject{
+                                {"legend", QJsonObject{
+                                    {"tokenTypes", QJsonArray{
+                                        "type", "macro", "keyword",
+                                        "modifier", "comment", "string",
+                                        "number", "operator"
+                                    }},
+                                    {"tokenModifiers", QJsonArray{}}
+                                }},
+                                {"full", true}
+                            }},
                             {"workspaceSymbolProvider", true},
                             {"hoverProvider", true},
                             {"definitionProvider", true},
@@ -135,6 +146,18 @@ int main(int argc, char *argv[])
                 send(output, QJsonObject{
                     {"jsonrpc", "2.0"}, {"id", id},
                     {"result", QJsonArray{symbol}}
+                });
+            } else if (method ==
+                       "textDocument/semanticTokens/full") {
+                send(output, QJsonObject{
+                    {"jsonrpc", "2.0"},
+                    {"id", id},
+                    {"result", QJsonObject{
+                        {"data", QJsonArray{
+                            0, 0, 4, 0, 0,
+                            1, 12, 1, 6, 0
+                        }}
+                    }}
                 });
             } else if (method == "workspace/symbol") {
                 if (params.value("query").toString() ==

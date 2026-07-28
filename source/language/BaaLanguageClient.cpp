@@ -13,6 +13,7 @@
 #include <QUrl>
 
 #include <algorithm>
+#include <limits>
 
 namespace {
 QString normalizedFilePath(const QString &filePath)
@@ -76,11 +77,13 @@ int BaaLanguageClient::synchronizeDocument(const QString &filePath,
 
     if (it->text == text and it->editorRevision == editorRevision) return it->version;
     cancelPendingSymbolRequests(path);
+    cancelPendingTokenRequests(path);
     cancelPendingCompletionRequests(path);
     cancelPendingFormattingRequests(path);
     cancelPendingSemanticRequests(path);
     m_documentSymbols.remove(path);
     m_symbolRequestedVersions.remove(path);
+    m_tokenRequestedVersions.remove(path);
     it->text = text;
     it->editorRevision = editorRevision;
     ++it->version;
@@ -106,6 +109,24 @@ void BaaLanguageClient::requestDocumentSymbols(const QString &filePath)
                      QJsonObject{{QStringLiteral("uri"), document->uri}}}});
     m_pendingSymbolRequests.insert(requestId, {path, document->version});
     m_symbolRequestedVersions.insert(path, document->version);
+}
+
+void BaaLanguageClient::requestSemanticTokens(const QString &filePath)
+{
+    if (m_state != State::Ready or not m_semanticTokenProvider) return;
+    const QString path = normalizedFilePath(filePath);
+    auto document = m_documents.find(path);
+    if (document == m_documents.end() or not document->opened) return;
+    if (m_tokenRequestedVersions.value(path) == document->version) return;
+
+    flushPendingChange(path, document.value());
+    cancelPendingTokenRequests(path);
+    const qint64 requestId = sendRequest(
+        QStringLiteral("textDocument/semanticTokens/full"),
+        QJsonObject{{QStringLiteral("textDocument"),
+                     QJsonObject{{QStringLiteral("uri"), document->uri}}}});
+    m_pendingTokenRequests.insert(requestId, {path, document->version});
+    m_tokenRequestedVersions.insert(path, document->version);
 }
 
 void BaaLanguageClient::requestWorkspaceSymbols(const QString &query)
@@ -347,6 +368,7 @@ void BaaLanguageClient::closeDocument(const QString &filePath)
     auto it = m_documents.find(path);
     if (it == m_documents.end()) return;
     cancelPendingSymbolRequests(path);
+    cancelPendingTokenRequests(path);
     cancelPendingCompletionRequests(path);
     cancelPendingFormattingRequests(path);
     cancelPendingSemanticRequests(path);
@@ -361,6 +383,7 @@ void BaaLanguageClient::closeDocument(const QString &filePath)
     m_documents.erase(it);
     m_documentSymbols.remove(path);
     m_symbolRequestedVersions.remove(path);
+    m_tokenRequestedVersions.remove(path);
 }
 
 void BaaLanguageClient::stop()
@@ -586,6 +609,25 @@ void BaaLanguageClient::sendInitialize()
                 {QStringLiteral("documentSymbol"), QJsonObject{
                     {QStringLiteral("hierarchicalDocumentSymbolSupport"), true}
                 }},
+                {QStringLiteral("semanticTokens"), QJsonObject{
+                    {QStringLiteral("requests"), QJsonObject{
+                        {QStringLiteral("full"), true}
+                    }},
+                    {QStringLiteral("tokenTypes"), QJsonArray{
+                        QStringLiteral("type"),
+                        QStringLiteral("macro"),
+                        QStringLiteral("keyword"),
+                        QStringLiteral("modifier"),
+                        QStringLiteral("comment"),
+                        QStringLiteral("string"),
+                        QStringLiteral("number"),
+                        QStringLiteral("operator")
+                    }},
+                    {QStringLiteral("tokenModifiers"), QJsonArray{}},
+                    {QStringLiteral("formats"), QJsonArray{
+                        QStringLiteral("relative")
+                    }}
+                }},
                 {QStringLiteral("completion"), QJsonObject{
                     {QStringLiteral("completionItem"), QJsonObject{
                         {QStringLiteral("snippetSupport"), true}
@@ -664,6 +706,20 @@ void BaaLanguageClient::cancelPendingSymbolRequests(const QString &filePath)
         sendNotification(QStringLiteral("$/cancelRequest"),
                          QJsonObject{{QStringLiteral("id"), requestId}});
         m_pendingSymbolRequests.remove(requestId);
+    }
+}
+
+void BaaLanguageClient::cancelPendingTokenRequests(const QString &filePath)
+{
+    QList<qint64> requestIds;
+    for (auto it = m_pendingTokenRequests.cbegin();
+         it != m_pendingTokenRequests.cend(); ++it) {
+        if (it->filePath == filePath) requestIds.push_back(it.key());
+    }
+    for (qint64 requestId : requestIds) {
+        sendNotification(QStringLiteral("$/cancelRequest"),
+                         QJsonObject{{QStringLiteral("id"), requestId}});
+        m_pendingTokenRequests.remove(requestId);
     }
 }
 
@@ -777,6 +833,30 @@ void BaaLanguageClient::handleResponse(const QJsonObject &message)
             capabilities.value(QStringLiteral("documentSymbolProvider"));
         m_documentSymbolProvider = documentSymbolProvider.isObject() or
             documentSymbolProvider.toBool(false);
+        m_semanticTokenProvider = false;
+        m_semanticTokenTypes.clear();
+        const QJsonObject semanticTokenProvider =
+            capabilities.value(QStringLiteral("semanticTokensProvider"))
+                .toObject();
+        if (not semanticTokenProvider.isEmpty()) {
+            const QJsonValue full =
+                semanticTokenProvider.value(QStringLiteral("full"));
+            const QJsonArray rawTypes =
+                semanticTokenProvider.value(QStringLiteral("legend"))
+                    .toObject()
+                    .value(QStringLiteral("tokenTypes"))
+                    .toArray();
+            for (const QJsonValue &type : rawTypes) {
+                if (not type.isString() or type.toString().isEmpty()) {
+                    m_semanticTokenTypes.clear();
+                    break;
+                }
+                m_semanticTokenTypes.push_back(type.toString());
+            }
+            m_semanticTokenProvider =
+                (full.toBool(false) or full.isObject()) and
+                not m_semanticTokenTypes.isEmpty();
+        }
         const QJsonValue workspaceSymbolProvider =
             capabilities.value(QStringLiteral("workspaceSymbolProvider"));
         m_workspaceSymbolProvider = workspaceSymbolProvider.isObject() or
@@ -851,6 +931,41 @@ void BaaLanguageClient::handleResponse(const QJsonObject &message)
         emit documentSymbolsPublished(pending.filePath,
                                       pending.documentVersion,
                                       symbols);
+        return;
+    }
+    auto tokenRequest = m_pendingTokenRequests.find(id);
+    if (tokenRequest != m_pendingTokenRequests.end()) {
+        const PendingTokenRequest pending = tokenRequest.value();
+        m_pendingTokenRequests.erase(tokenRequest);
+
+        const auto document = m_documents.constFind(pending.filePath);
+        if (document == m_documents.cend() or
+            document->version != pending.documentVersion) return;
+        if (message.contains(QStringLiteral("error"))) {
+            m_tokenRequestedVersions.remove(pending.filePath);
+            const QJsonObject error =
+                message.value(QStringLiteral("error")).toObject();
+            const int code = error.value(QStringLiteral("code")).toInt();
+            if (code != -32800 and code != -32801) {
+                emit logMessage(
+                    error.value(QStringLiteral("message")).toString(), 2);
+            }
+            return;
+        }
+        bool valid = false;
+        const QVector<BaaSemanticToken> tokens =
+            parseSemanticTokens(message.value(QStringLiteral("result")),
+                                &valid);
+        if (not valid) {
+            m_tokenRequestedVersions.remove(pending.filePath);
+            emit logMessage(
+                QStringLiteral(
+                    "أعاد Baa-LSP رموز تلوين دلالي غير صالحة."),
+                2);
+            return;
+        }
+        emit semanticTokensPublished(
+            pending.filePath, pending.documentVersion, tokens);
         return;
     }
     auto workspaceSymbolRequest =
@@ -1091,6 +1206,67 @@ void BaaLanguageClient::handlePublishDiagnostics(const QJsonObject &params)
     }
     emit diagnosticsPublished(path, version, diagnostics);
     requestDocumentSymbols(path);
+    requestSemanticTokens(path);
+}
+
+QVector<BaaSemanticToken> BaaLanguageClient::parseSemanticTokens(
+    const QJsonValue &result,
+    bool *valid) const
+{
+    if (valid) *valid = false;
+    QVector<BaaSemanticToken> tokens;
+    if (not result.isObject()) return tokens;
+    const QJsonValue dataValue =
+        result.toObject().value(QStringLiteral("data"));
+    if (not dataValue.isArray()) return tokens;
+    const QJsonArray data = dataValue.toArray();
+    if (data.size() % 5 != 0) return tokens;
+
+    int line = 0;
+    int character = 0;
+    tokens.reserve(data.size() / 5);
+    for (qsizetype index = 0; index < data.size(); index += 5) {
+        for (qsizetype field = 0; field < 5; ++field) {
+            if (not data.at(index + field).isDouble()) return {};
+        }
+        const qint64 deltaLine = data.at(index).toInteger(-1);
+        const qint64 deltaCharacter = data.at(index + 1).toInteger(-1);
+        const qint64 length = data.at(index + 2).toInteger(-1);
+        const qint64 typeIndex = data.at(index + 3).toInteger(-1);
+        const qint64 modifiers = data.at(index + 4).toInteger(-1);
+        if (deltaLine < 0 or deltaCharacter < 0 or length <= 0 or
+            typeIndex < 0 or typeIndex >= m_semanticTokenTypes.size() or
+            modifiers < 0)
+            return {};
+        if (deltaLine > 0) {
+            if (deltaLine > std::numeric_limits<int>::max() or
+                deltaLine > std::numeric_limits<int>::max() - line or
+                deltaCharacter > std::numeric_limits<int>::max())
+                return {};
+            line += static_cast<int>(deltaLine);
+            character = static_cast<int>(deltaCharacter);
+        } else {
+            if (deltaCharacter >
+                std::numeric_limits<int>::max() - character)
+                return {};
+            character += static_cast<int>(deltaCharacter);
+        }
+        if (line < 0 or character < 0 or
+            length > std::numeric_limits<int>::max() or
+            modifiers > std::numeric_limits<int>::max())
+            return {};
+        BaaSemanticToken token;
+        token.line = line;
+        token.character = character;
+        token.length = static_cast<int>(length);
+        token.type = m_semanticTokenTypes.at(
+            static_cast<qsizetype>(typeIndex));
+        token.modifiers = static_cast<int>(modifiers);
+        if (not token.isValid()) return {};
+        tokens.push_back(std::move(token));
+    }
+    if (valid) *valid = true;
+    return tokens;
 }
 
 QVector<BaaDocumentSymbol> BaaLanguageClient::parseDocumentSymbols(
@@ -1434,6 +1610,8 @@ void BaaLanguageClient::handleProcessFinished(int exitCode, QProcess::ExitStatus
     m_initializeRequestId = 0;
     m_shutdownRequestId = 0;
     m_documentSymbolProvider = false;
+    m_semanticTokenProvider = false;
+    m_semanticTokenTypes.clear();
     m_workspaceSymbolProvider = false;
     m_completionProvider = false;
     m_hoverProvider = false;
@@ -1445,11 +1623,13 @@ void BaaLanguageClient::handleProcessFinished(int exitCode, QProcess::ExitStatus
     m_renameProvider = false;
     m_prepareRenameProvider = false;
     m_pendingSymbolRequests.clear();
+    m_pendingTokenRequests.clear();
     m_pendingWorkspaceSymbolRequests.clear();
     m_pendingCompletionRequests.clear();
     m_pendingFormattingRequests.clear();
     m_pendingSemanticRequests.clear();
     m_symbolRequestedVersions.clear();
+    m_tokenRequestedVersions.clear();
     m_documentSymbols.clear();
     for (auto it = m_documents.begin(); it != m_documents.end(); ++it) it->opened = false;
     setState(expected ? State::Stopped : State::Error);

@@ -65,11 +65,14 @@ The first LSP slice now provides:
 - compiler-backed hover and signature help from `semantic-query-json-v1`, with
   scope-correct declarations, included prototypes, active parameters, and
   incomplete-call behavior;
+- compiler-owned semantic highlighting from `tokens-json-v1` through
+  `textDocument/semanticTokens/full`, with UTF-8-to-UTF-16 conversion,
+  document-version rejection, and an immediate local lexical fallback;
 
-The next language-intelligence gaps are semantic tokens, folding and selection
+The next language-intelligence gaps are semantic folding and selection
 ranges from compiler-owned structure, dynamic workspace-folder refresh, and
-production restart and packaging behavior. `--dump-symbols=json` is implemented
-and consumed; a structured token stream remains a future compiler contract.
+production restart and packaging behavior. `--dump-symbols=json` and
+`--dump-tokens=json` are implemented and consumed.
 
 ## Target Architecture
 
@@ -78,7 +81,8 @@ and consumed; a structured token stream remains a future compiler contract.
 Runs synchronously and never waits for a compiler process:
 
 - text input, caret, selection, undo, and bidi behavior;
-- lexical highlighting and bracket matching;
+- immediate lexical highlighting, followed by the last accepted
+  compiler-owned semantic-token overlay, and bracket matching;
 - bracket matching, indentation, and rendering of the last accepted language result;
 - indentation and formatting application;
 - visible cached results from the last accepted compiler analysis.

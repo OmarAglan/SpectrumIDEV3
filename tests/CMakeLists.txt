@@ -48,6 +48,7 @@ add_qalam_test(test_symbol_outline_view TestSymbolOutlineView.cpp)
 
 add_qalam_test(test_lsp_message_framer TestLspMessageFramer.cpp)
 add_qalam_test(test_editor_semantic_requests TestEditorSemanticRequests.cpp)
+add_qalam_test(test_syntax_highlighter TestSyntaxHighlighter.cpp)
 add_qalam_test(test_workspace_edit TestWorkspaceEdit.cpp)
 
 add_executable(qalam_fake_baa_lsp
