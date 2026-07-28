@@ -7,6 +7,7 @@
 #include "BaaLocation.h"
 #include "BaaSignatureHelp.h"
 #include "BaaWorkspaceEdit.h"
+#include "BaaWorkspaceSymbol.h"
 #include "Diagnostic.h"
 #include "LspMessageFramer.h"
 
@@ -41,6 +42,7 @@ public:
                             int editorRevision,
                             const QString &workspaceRoot = QString());
     void requestDocumentSymbols(const QString &filePath);
+    void requestWorkspaceSymbols(const QString &query = QString());
     void requestCompletion(const QString &filePath, int line, int character);
     void requestHover(const QString &filePath, int line, int character);
     void requestSignatureHelp(const QString &filePath, int line, int character);
@@ -76,6 +78,13 @@ signals:
     void documentSymbolsPublished(const QString &filePath,
                                   int documentVersion,
                                   const QVector<BaaDocumentSymbol> &symbols);
+    void workspaceSymbolsPublished(
+        const QString &query,
+        const QVector<BaaWorkspaceSymbol> &symbols);
+    void workspaceSymbolsFailed(
+        const QString &query,
+        int code,
+        const QString &message);
     void completionPublished(const QString &filePath,
                              int documentVersion,
                              int line,
@@ -160,6 +169,10 @@ private:
         int line{};
         int character{};
     };
+    struct PendingWorkspaceSymbolRequest
+    {
+        QString query;
+    };
     struct PendingFormattingRequest
     {
         QString filePath;
@@ -205,6 +218,8 @@ private:
     void handleNotification(const QJsonObject &message);
     void handlePublishDiagnostics(const QJsonObject &params);
     QVector<BaaDocumentSymbol> parseDocumentSymbols(const QJsonArray &items) const;
+    QVector<BaaWorkspaceSymbol> parseWorkspaceSymbols(
+        const QJsonValue &result) const;
     QVector<BaaCompletionItem> parseCompletionItems(const QJsonValue &result) const;
     BaaHover parseHover(const QJsonValue &result) const;
     BaaSignatureHelp parseSignatureHelp(const QJsonValue &result) const;
@@ -228,6 +243,8 @@ private:
     QHash<QString, QVector<BaaDocumentSymbol>> m_documentSymbols;
     QHash<QString, int> m_symbolRequestedVersions;
     QHash<qint64, PendingSymbolRequest> m_pendingSymbolRequests;
+    QHash<qint64, PendingWorkspaceSymbolRequest>
+        m_pendingWorkspaceSymbolRequests;
     QHash<qint64, PendingCompletionRequest> m_pendingCompletionRequests;
     QHash<qint64, PendingFormattingRequest> m_pendingFormattingRequests;
     QHash<qint64, PendingSemanticRequest> m_pendingSemanticRequests;
@@ -238,6 +255,7 @@ private:
     qint64 m_initializeRequestId{};
     qint64 m_shutdownRequestId{};
     bool m_documentSymbolProvider{};
+    bool m_workspaceSymbolProvider{};
     bool m_completionProvider{};
     bool m_hoverProvider{};
     bool m_signatureHelpProvider{};

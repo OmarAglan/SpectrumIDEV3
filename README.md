@@ -40,6 +40,10 @@
 - **Compiler-backed hover and signature help** with Arabic declarations,
   scope-correct shadowing, included prototypes, active parameters, and
   stale-result cancellation while editing.
+- **Visible Baa symbol navigation** with a hierarchical outline for the current
+  document and `Ctrl+T` project-symbol search. Both consume Baa-LSP results;
+  Takween defines the project source closure and Baa owns every symbol identity,
+  kind, detail, and location.
 - **Safe compiler-owned quick fixes** through `Ctrl+.` or the editor context
   menu, with an Arabic preview and version-checked workspace edits.
 - **Canonical Baa formatting** through `Shift+Alt+F`, the command palette, or
@@ -65,6 +69,9 @@
   completion, hover, and call-signature help use that same language-service
   boundary. Project-wide definition, references, and collision-checked Arabic
   rename combine Takween's source closure with Baa's structured symbol identities.
+  The explorer displays the current document's hierarchical symbol outline,
+  while `Ctrl+T` searches a cached compiler-owned workspace-symbol index and
+  navigates to exact UTF-16 locations, including unsaved open documents.
   Quick fixes come from Baa's structured diagnostic edits, pass through Baa-LSP
   without message parsing, and are previewed before Qalam applies them.
   Formatting comes from Baa's `format-json-v1`; Qalam does not maintain a

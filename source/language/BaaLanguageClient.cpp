@@ -108,6 +108,23 @@ void BaaLanguageClient::requestDocumentSymbols(const QString &filePath)
     m_symbolRequestedVersions.insert(path, document->version);
 }
 
+void BaaLanguageClient::requestWorkspaceSymbols(const QString &query)
+{
+    if (m_state != State::Ready or not m_workspaceSymbolProvider) return;
+    flushDocumentChanges();
+    for (auto request = m_pendingWorkspaceSymbolRequests.cbegin();
+         request != m_pendingWorkspaceSymbolRequests.cend(); ++request) {
+        sendNotification(
+            QStringLiteral("$/cancelRequest"),
+            QJsonObject{{QStringLiteral("id"), request.key()}});
+    }
+    m_pendingWorkspaceSymbolRequests.clear();
+    const qint64 requestId = sendRequest(
+        QStringLiteral("workspace/symbol"),
+        QJsonObject{{QStringLiteral("query"), query}});
+    m_pendingWorkspaceSymbolRequests.insert(requestId, {query});
+}
+
 void BaaLanguageClient::requestCompletion(const QString &filePath,
                                           int line,
                                           int character)
@@ -560,6 +577,9 @@ void BaaLanguageClient::sendInitialize()
             {QStringLiteral("workspace"), QJsonObject{
                 {QStringLiteral("workspaceEdit"), QJsonObject{
                     {QStringLiteral("documentChanges"), true}
+                }},
+                {QStringLiteral("symbol"), QJsonObject{
+                    {QStringLiteral("dynamicRegistration"), false}
                 }}
             }},
             {QStringLiteral("textDocument"), QJsonObject{
@@ -757,6 +777,10 @@ void BaaLanguageClient::handleResponse(const QJsonObject &message)
             capabilities.value(QStringLiteral("documentSymbolProvider"));
         m_documentSymbolProvider = documentSymbolProvider.isObject() or
             documentSymbolProvider.toBool(false);
+        const QJsonValue workspaceSymbolProvider =
+            capabilities.value(QStringLiteral("workspaceSymbolProvider"));
+        m_workspaceSymbolProvider = workspaceSymbolProvider.isObject() or
+            workspaceSymbolProvider.toBool(false);
         const QJsonValue completionProvider =
             capabilities.value(QStringLiteral("completionProvider"));
         m_completionProvider = completionProvider.isObject() or
@@ -827,6 +851,31 @@ void BaaLanguageClient::handleResponse(const QJsonObject &message)
         emit documentSymbolsPublished(pending.filePath,
                                       pending.documentVersion,
                                       symbols);
+        return;
+    }
+    auto workspaceSymbolRequest =
+        m_pendingWorkspaceSymbolRequests.find(id);
+    if (workspaceSymbolRequest !=
+        m_pendingWorkspaceSymbolRequests.end()) {
+        const PendingWorkspaceSymbolRequest pending =
+            workspaceSymbolRequest.value();
+        m_pendingWorkspaceSymbolRequests.erase(workspaceSymbolRequest);
+        if (message.contains(QStringLiteral("error"))) {
+            const QJsonObject error =
+                message.value(QStringLiteral("error")).toObject();
+            const int code = error.value(QStringLiteral("code")).toInt();
+            const QString errorMessage =
+                error.value(QStringLiteral("message")).toString();
+            if (code != -32800 and code != -32801) {
+                emit logMessage(errorMessage, 2);
+            }
+            emit workspaceSymbolsFailed(
+                pending.query, code, errorMessage);
+            return;
+        }
+        const QVector<BaaWorkspaceSymbol> symbols =
+            parseWorkspaceSymbols(message.value(QStringLiteral("result")));
+        emit workspaceSymbolsPublished(pending.query, symbols);
         return;
     }
     auto completionRequest = m_pendingCompletionRequests.find(id);
@@ -1068,6 +1117,46 @@ QVector<BaaDocumentSymbol> BaaLanguageClient::parseDocumentSymbols(
             end.value(QStringLiteral("character")).toInt(symbol.column - 1) + 1);
         symbol.children = parseDocumentSymbols(
             item.value(QStringLiteral("children")).toArray());
+        if (symbol.isValid()) symbols.push_back(std::move(symbol));
+    }
+    return symbols;
+}
+
+QVector<BaaWorkspaceSymbol> BaaLanguageClient::parseWorkspaceSymbols(
+    const QJsonValue &result) const
+{
+    QVector<BaaWorkspaceSymbol> symbols;
+    if (not result.isArray()) return symbols;
+    const QJsonArray items = result.toArray();
+    symbols.reserve(items.size());
+    for (const QJsonValue &value : items) {
+        if (not value.isObject()) continue;
+        const QJsonObject item = value.toObject();
+        const QJsonObject location =
+            item.value(QStringLiteral("location")).toObject();
+        const QJsonObject range =
+            location.value(QStringLiteral("range")).toObject();
+        const QJsonObject start =
+            range.value(QStringLiteral("start")).toObject();
+        const QJsonObject end =
+            range.value(QStringLiteral("end")).toObject();
+        BaaWorkspaceSymbol symbol;
+        symbol.name =
+            item.value(QStringLiteral("name")).toString().trimmed();
+        symbol.kind = item.value(QStringLiteral("kind")).toInt();
+        symbol.containerName =
+            item.value(QStringLiteral("containerName")).toString().trimmed();
+        symbol.filePath = QUrl(
+            location.value(QStringLiteral("uri")).toString()).toLocalFile();
+        symbol.line = start.value(QStringLiteral("line")).toInt(-1);
+        symbol.character =
+            start.value(QStringLiteral("character")).toInt(-1);
+        symbol.endLine =
+            end.value(QStringLiteral("line")).toInt(symbol.line);
+        symbol.endCharacter =
+            end.value(QStringLiteral("character")).toInt(symbol.character);
+        symbol.detail = item.value(QStringLiteral("data")).toObject()
+                            .value(QStringLiteral("detail")).toString().trimmed();
         if (symbol.isValid()) symbols.push_back(std::move(symbol));
     }
     return symbols;
@@ -1345,6 +1434,7 @@ void BaaLanguageClient::handleProcessFinished(int exitCode, QProcess::ExitStatus
     m_initializeRequestId = 0;
     m_shutdownRequestId = 0;
     m_documentSymbolProvider = false;
+    m_workspaceSymbolProvider = false;
     m_completionProvider = false;
     m_hoverProvider = false;
     m_signatureHelpProvider = false;
@@ -1355,6 +1445,7 @@ void BaaLanguageClient::handleProcessFinished(int exitCode, QProcess::ExitStatus
     m_renameProvider = false;
     m_prepareRenameProvider = false;
     m_pendingSymbolRequests.clear();
+    m_pendingWorkspaceSymbolRequests.clear();
     m_pendingCompletionRequests.clear();
     m_pendingFormattingRequests.clear();
     m_pendingSemanticRequests.clear();

@@ -40,6 +40,10 @@ void TestCommandRegistry::exposesDefaultCommands()
         return command.id == "code.format" and
             command.shortcut == "Shift+Alt+F";
     }));
+    QVERIFY(std::any_of(commands.begin(), commands.end(), [](const auto &command) {
+        return command.id == "code.workspaceSymbols" and
+            command.shortcut == "Ctrl+T";
+    }));
 }
 
 QTEST_MAIN(TestCommandRegistry)

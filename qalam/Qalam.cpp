@@ -30,6 +30,8 @@
 #include <QRegularExpression>
 #include <QKeyEvent>
 #include <QInputDialog>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QSet>
 #include <QVector>
 #include <QVariant>
@@ -212,6 +214,11 @@ void Qalam::connectSignals()
     connect(formatShortcut, &QShortcut::activated,
             this, &Qalam::formatDocument);
 
+    auto *workspaceSymbolsShortcut =
+        new QShortcut(QKeySequence("Ctrl+T"), this);
+    connect(workspaceSymbolsShortcut, &QShortcut::activated,
+            this, &Qalam::showWorkspaceSymbols);
+
     // --- Menu bar signals ---
     connect(menuBar, &TMenuBar::newRequested, this, &Qalam::newFileFromUi);
     connect(menuBar, &TMenuBar::openFileRequested, this, [this]() { openFileFromUi(QString()); });
@@ -237,6 +244,16 @@ void Qalam::connectSignals()
     connect(menuBar, &TMenuBar::goToDefinitionRequested, this, &Qalam::goToDefinition);
     connect(menuBar, &TMenuBar::findReferencesRequested, this, &Qalam::findReferences);
     connect(this, &QalamWindow::commandCenterClicked, this, &Qalam::showCommandPalette);
+    if (m_layoutManager and m_layoutManager->sidebar() and
+        m_layoutManager->sidebar()->explorerView()) {
+        connect(
+            m_layoutManager->sidebar()->explorerView(),
+            &TExplorerView::outlineSymbolActivated,
+            this,
+            [this](const QString &filePath, int line, int column) {
+                goToLocation(filePath, line, column);
+            });
+    }
 
     connect(m_buildManager, &BuildManager::outputChunk, this, &Qalam::handleBuildOutput);
     connect(m_languageClient, &BaaLanguageClient::diagnosticsPublished,
@@ -451,17 +468,25 @@ void Qalam::connectSignals()
     });
     connect(m_languageClient, &BaaLanguageClient::documentSymbolsPublished,
             this, [this](const QString &filePath, int documentVersion,
-                         const QVector<BaaDocumentSymbol> &) {
+                         const QVector<BaaDocumentSymbol> &symbols) {
         TEditor *editor = currentEditor();
-        if (not editor or not editor->hasVisibleCompletion() or
+        if (not editor or
             editor->property("qalam.lsp.version").toInt() != documentVersion) return;
         const QString editorPath = QDir::cleanPath(
             QFileInfo(editor->currentFilePath()).absoluteFilePath());
         if (editorPath != QDir::cleanPath(filePath)) return;
-        const QTextCursor cursor = editor->textCursor();
-        m_languageClient->requestCompletion(filePath,
-                                            cursor.blockNumber(),
-                                            cursor.positionInBlock());
+        if (m_layoutManager and m_layoutManager->sidebar() and
+            m_layoutManager->sidebar()->explorerView()) {
+            m_layoutManager->sidebar()->explorerView()->setOutlineSymbols(
+                filePath, symbols);
+        }
+        if (editor->hasVisibleCompletion()) {
+            const QTextCursor cursor = editor->textCursor();
+            m_languageClient->requestCompletion(
+                filePath,
+                cursor.blockNumber(),
+                cursor.positionInBlock());
+        }
     });
     connect(m_languageClient, &BaaLanguageClient::logMessage,
             this, [this](const QString &message, int) {
@@ -731,10 +756,31 @@ void Qalam::onCurrentTabChanged()
             m_layoutManager->breadcrumb()->setVisible(!editor->currentFilePath().isEmpty());
         }
         applyDiagnosticsToEditors();
+        if (m_layoutManager and m_layoutManager->sidebar() and
+            m_layoutManager->sidebar()->explorerView()) {
+            const QString filePath = QDir::cleanPath(
+                QFileInfo(editor->currentFilePath()).absoluteFilePath());
+            if (BaaLanguageClient::isBaaSourcePath(filePath)) {
+                m_layoutManager->sidebar()->explorerView()
+                    ->setOutlineSymbols(
+                        filePath,
+                        m_languageClient
+                            ? m_languageClient->documentSymbols(filePath)
+                            : QVector<BaaDocumentSymbol>{});
+            } else {
+                m_layoutManager->sidebar()->explorerView()
+                    ->clearOutlineSymbols();
+            }
+        }
     } else {
         searchBar->setEditor(nullptr);
         if (m_layoutManager->breadcrumb()) {
             m_layoutManager->breadcrumb()->hide();
+        }
+        if (m_layoutManager and m_layoutManager->sidebar() and
+            m_layoutManager->sidebar()->explorerView()) {
+            m_layoutManager->sidebar()->explorerView()
+                ->clearOutlineSymbols();
         }
     }
 }
@@ -1213,6 +1259,10 @@ bool Qalam::runCommandById(const QString &commandId)
     if (commandId == "view.debug") { openDebugPanel(); return true; }
     if (commandId == "code.definition") { goToDefinition(); return true; }
     if (commandId == "code.references") { findReferences(); return true; }
+    if (commandId == "code.workspaceSymbols") {
+        showWorkspaceSymbols();
+        return true;
+    }
     if (commandId == "code.rename") { renameSymbol(); return true; }
     if (commandId == "code.quickFix") { quickFix(); return true; }
     if (commandId == "code.format") { formatDocument(); return true; }
@@ -1284,6 +1334,118 @@ void Qalam::showQuickOpen()
         }
     });
     palette->show();
+}
+
+void Qalam::showWorkspaceSymbols()
+{
+    if (not m_languageClient) return;
+    if (m_workspaceSymbolPalette)
+        m_workspaceSymbolPalette->close();
+    if (m_languageClient->state() != BaaLanguageClient::State::Ready) {
+        if (m_layoutManager and m_layoutManager->statusBar()) {
+            m_layoutManager->statusBar()->showMessage(
+                QStringLiteral(
+                    "افتح ملف باء وانتظر اتصال خادم اللغة قبل البحث عن الرموز."),
+                4000);
+        }
+        return;
+    }
+
+    auto *palette = new TCommandPalette(this);
+    m_workspaceSymbolPalette = palette;
+    palette->setAttribute(Qt::WA_DeleteOnClose);
+    palette->setWindowTitle(QStringLiteral("رموز مساحة العمل"));
+    palette->setPlaceholderText(
+        QStringLiteral("ابحث عن دالة أو نوع أو متغير عربي..."));
+    palette->setEmptyText(
+        QStringLiteral("جار فهرسة رموز مشروع تكوين..."));
+    palette->setEntries({});
+    connect(palette, &QObject::destroyed, this, [this, palette]() {
+        if (m_workspaceSymbolPalette == palette)
+            m_workspaceSymbolPalette = nullptr;
+    });
+    connect(
+        palette,
+        &TCommandPalette::entryActivated,
+        this,
+        [this](const QString &id, const QString &payload) {
+            if (id != QStringLiteral("workspace.symbol")) return;
+            const QJsonDocument document =
+                QJsonDocument::fromJson(payload.toUtf8());
+            if (not document.isObject()) return;
+            const QJsonObject location = document.object();
+            goToLocation(
+                location.value(QStringLiteral("file")).toString(),
+                location.value(QStringLiteral("line")).toInt() + 1,
+                location.value(QStringLiteral("character")).toInt() + 1);
+        });
+    connect(
+        m_languageClient,
+        &BaaLanguageClient::workspaceSymbolsPublished,
+        palette,
+        [this, palette](
+            const QString &,
+            const QVector<BaaWorkspaceSymbol> &symbols) {
+            if (m_workspaceSymbolPalette != palette) return;
+            QVector<TCommandPalette::Entry> entries;
+            entries.reserve(symbols.size());
+            for (const BaaWorkspaceSymbol &symbol : symbols) {
+                const QString relativePath = folderPath.isEmpty()
+                    ? QFileInfo(symbol.filePath).fileName()
+                    : QDir(folderPath).relativeFilePath(symbol.filePath);
+                QStringList context;
+                if (not symbol.containerName.isEmpty())
+                    context.push_back(symbol.containerName);
+                if (not symbol.detail.isEmpty())
+                    context.push_back(symbol.detail);
+                context.push_back(relativePath);
+                const QJsonObject location{
+                    {QStringLiteral("file"), symbol.filePath},
+                    {QStringLiteral("line"), symbol.line},
+                    {QStringLiteral("character"), symbol.character}
+                };
+                entries.push_back({
+                    QStringLiteral("workspace.symbol"),
+                    symbol.name,
+                    context.join(QStringLiteral(" — ")),
+                    QStringLiteral("سطر %1").arg(symbol.line + 1),
+                    QString::fromUtf8(
+                        QJsonDocument(location)
+                            .toJson(QJsonDocument::Compact))
+                });
+            }
+            palette->setEmptyText(
+                QStringLiteral("لا توجد رموز مطابقة"));
+            palette->setEntries(entries);
+        });
+    connect(
+        m_languageClient,
+        &BaaLanguageClient::workspaceSymbolsFailed,
+        palette,
+        [this, palette](const QString &, int code, const QString &) {
+            if (m_workspaceSymbolPalette != palette) return;
+            palette->setEmptyText(
+                code == -32800 or code == -32801
+                    ? QStringLiteral(
+                          "تغير المستند أثناء الفهرسة؛ أغلق البحث وأعد فتحه.")
+                    : QStringLiteral(
+                          "تعذر تحميل رموز المشروع من خادم اللغة."));
+            palette->setEntries({});
+        });
+    connect(
+        m_languageClient,
+        &BaaLanguageClient::stateChanged,
+        palette,
+        [this, palette](BaaLanguageClient::State state) {
+            if (m_workspaceSymbolPalette != palette or
+                state == BaaLanguageClient::State::Ready)
+                return;
+            palette->setEmptyText(
+                QStringLiteral("انقطع اتصال خادم اللغة."));
+            palette->setEntries({});
+        });
+    palette->show();
+    m_languageClient->requestWorkspaceSymbols();
 }
 
 void Qalam::updateProblemsStatusBar()
@@ -1711,7 +1873,15 @@ void Qalam::scheduleEditorAnalysis(TEditor *editor)
         }
     }
     editor->setProperty("qalam.lsp.path", normalizedPath);
-    if (!BaaLanguageClient::isBaaSourcePath(filePath)) return;
+    if (!BaaLanguageClient::isBaaSourcePath(filePath)) {
+        if (editor == currentEditor() and m_layoutManager and
+            m_layoutManager->sidebar() and
+            m_layoutManager->sidebar()->explorerView()) {
+            m_layoutManager->sidebar()->explorerView()
+                ->clearOutlineSymbols();
+        }
+        return;
+    }
 
     const QString projectRoot =
         BuildManager::findTakweenProjectRoot(normalizedPath);
@@ -1723,6 +1893,13 @@ void Qalam::scheduleEditorAnalysis(TEditor *editor)
         editor->document()->revision(),
         workspaceRoot);
     editor->setProperty("qalam.lsp.version", version);
+    if (editor == currentEditor() and m_layoutManager and
+        m_layoutManager->sidebar() and
+        m_layoutManager->sidebar()->explorerView()) {
+        m_layoutManager->sidebar()->explorerView()->setOutlineSymbols(
+            normalizedPath,
+            m_languageClient->documentSymbols(normalizedPath));
+    }
 }
 
 void Qalam::handleLanguageDiagnostics(const QString &filePath,

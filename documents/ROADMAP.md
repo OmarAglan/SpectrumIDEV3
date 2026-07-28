@@ -236,7 +236,8 @@ One deferred item from Phase 2:
 
 - [ ] 5.8.1 Add matching bracket highlight at cursor position (colored box/underline)
 - [ ] 5.8.2 Fix auto-save silent failure -- show warning on `file.open()` failure (`TAutoSave.cpp:35`)
-- [ ] 5.8.3 Add Go-to-Definition for Baa symbols (local scope, same file)
+- [x] 5.8.3 Add Go-to-Definition for Baa symbols (compiler-resolved across the
+  Takween source closure)
 - [ ] 5.8.4 Add matching tag/bracket highlight on hover
 
 ---
@@ -383,6 +384,9 @@ One deferred item from Phase 2:
   triggers, active-parameter display, and `Ctrl+Shift+Space`
 - [x] 9.1.11 Support compiler-owned safe `textDocument/codeAction` fixes with
   `Ctrl+.`, an Arabic preview, exact versioned edits, and stale-edit refusal
+- [x] 9.1.12 Render a version-matched hierarchical symbol outline and search
+  Takween-scoped `workspace/symbol` results through `Ctrl+T`, with local Arabic
+  filtering and exact navigation
 
 ### 9.2 Baa Language Server
 

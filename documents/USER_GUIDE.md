@@ -31,6 +31,10 @@ The editor supports:
   Baa's semantic analysis, including declarations in headers. `Shift+F12`
   lists scope-correct references across the Takween project in the search
   sidebar. Qalam does not guess from equal-looking identifier text.
+- **Symbol outline and project symbols:** the explorer's **المخطط** section
+  shows the current document hierarchy and filters it as you type. Press
+  `Ctrl+T` to search Baa-owned functions, types, globals, fields, and enum
+  members across the Takween source closure, then open the exact location.
 - **Safe rename:** press `F2` on a Baa symbol, enter an Arabic name, and review
   the number of affected files and locations. Qalam applies only
   compiler-resolved occurrences and refuses stale or colliding edits.
@@ -57,7 +61,17 @@ The embedded console allows you to interact with the system and view compiler ou
 - The console runs your default shell (cmd.exe on Windows, bash on Linux).
 
 ### File Explorer
-The right sidebar shows your project files. You can double-click a file to open it or drag and drop files from your system.
+The right sidebar shows your project files. You can double-click a file to open
+it or drag and drop files from your system. The **المخطط** section below the
+files shows the hierarchical symbols in the current Baa document. Its results
+follow the current unsaved document version.
+
+### Project Symbols (`Ctrl+T`)
+Press `Ctrl+T` after the Baa language server is ready. Qalam loads the
+compiler-owned workspace index once and filters it locally while you type
+Arabic. The list includes the symbol detail, container, relative file, and line.
+Selecting a result opens its exact location. If the language server is not
+ready, Qalam reports that state instead of leaving an unfinished search open.
 
 ### Sidebar Search (`Ctrl+Shift+F`)
 Search across all files in the opened folder (project-wide search).
@@ -102,6 +116,7 @@ Adjust the editor font size and family in Settings:
 | | `F12` | Go to a Baa declaration | ✓ Working |
 | | `Shift+F12` | List compiler-resolved Baa references | ✓ Working |
 | | `F2` | Safely rename a Baa symbol across the project | ✓ Working |
+| | `Ctrl+T` | Search compiler-owned project symbols | ✓ Working |
 | | `Ctrl+Tab` | Next Tab | ✓ Working |
 | | `Ctrl+Shift+Tab` | Previous Tab | ✓ Working |
 | **View** | `F6` | Toggle Console | ✓ Working |
@@ -194,7 +209,7 @@ Qalam IDE is actively developed. See [ROADMAP.md](ROADMAP.md) for planned featur
 - Multi-cursor editing
 - Split editor
 - Minimap
-- Scope-aware local completion and code actions through Baa-LSP
+- Semantic tokens, folding ranges, and selection ranges through Baa-LSP
 - Git integration
 - Debugger
 

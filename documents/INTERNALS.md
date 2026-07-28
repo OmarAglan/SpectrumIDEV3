@@ -66,7 +66,11 @@ The heart of Qalam is `TEditor`, a custom `QPlainTextEdit` subclass.
   requests. Baa-LSP—not Qalam—owns compiler invocation and UTF-8 byte to UTF-16
   position conversion. The client caches hierarchical document symbols only
   when their response matches the current document version and cancels obsolete
-  symbol requests. Cursor-sensitive completion flushes the newest full-text
+  symbol requests. `TSymbolOutlineView` renders that version-matched hierarchy
+  for the current editor. Project-symbol search requests `workspace/symbol`
+  once, then lets `TCommandPalette` filter the returned Baa-owned index locally;
+  Qalam does not scan manifests or parse source for semantic symbols.
+  Cursor-sensitive completion flushes the newest full-text
   document change before requesting compiler-scoped symbols and exact UTF-16
   edits, rejects obsolete responses, and passes standard snippet tab stops to
   `TSnippetManager`. See

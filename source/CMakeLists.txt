@@ -13,6 +13,7 @@ add_library(qalam_core STATIC
     language/BaaSignatureHelp.h
     language/BaaWorkspaceEdit.h
     language/BaaWorkspaceEdit.cpp
+    language/BaaWorkspaceSymbol.h
     language/Diagnostic.h
     language/DiagnosticParser.cpp
     language/DiagnosticParser.h
@@ -54,6 +55,8 @@ add_library(qalam_core STATIC
     # Sidebar
     sidebar/TExplorerView.cpp
     sidebar/TSearchView.cpp
+    sidebar/TSymbolOutlineView.cpp
+    sidebar/TSymbolOutlineView.h
     # UI Components
     ui/QalamTheme.cpp
     ui/TTitleBar.cpp

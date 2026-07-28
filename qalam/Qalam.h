@@ -10,6 +10,7 @@
 #include "../ui/QalamWindow.h"
 
 #include "TActivityBar.h"
+#include <QPointer>
 #include <QStringList>
 #include <QVector>
 
@@ -19,6 +20,7 @@ struct BaaWorkspaceEdit;
 class CommandRegistry;
 class DiagnosticsModel;
 class TWelcomePage;
+class TCommandPalette;
 class WorkspaceIndexer;
 struct BaaLocation;
 struct Diagnostic;
@@ -65,6 +67,7 @@ private slots:
     void goToLine();
     void showCommandPalette();
     void showQuickOpen();
+    void showWorkspaceSymbols();
     void focusSearchInFiles();
     void openProblemsPanel();
     void openDebugPanel();
@@ -132,5 +135,6 @@ private:
 
     SearchPanel *searchBar{};
     TWelcomePage *m_welcomePage{};
+    QPointer<TCommandPalette> m_workspaceSymbolPalette;
     TEditor *m_lastConnectedEditor{}; // Track editor for cursor position disconnect
 };

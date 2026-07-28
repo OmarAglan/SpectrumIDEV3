@@ -59,6 +59,7 @@ int main(int argc, char *argv[])
 
     LspMessageFramer framer;
     std::array<char, 4096> buffer{};
+    QString currentUri;
     while (true) {
 #if defined(Q_OS_WIN)
         const int count = _read(_fileno(stdin), buffer.data(),
@@ -86,6 +87,7 @@ int main(int argc, char *argv[])
                             {"positionEncoding", "utf-16"},
                             {"textDocumentSync", QJsonObject{{"openClose", true}, {"change", 1}}},
                             {"documentSymbolProvider", true},
+                            {"workspaceSymbolProvider", true},
                             {"hoverProvider", true},
                             {"definitionProvider", true},
                             {"referencesProvider", true},
@@ -110,9 +112,11 @@ int main(int argc, char *argv[])
                 });
             } else if (method == "textDocument/didOpen") {
                 const QJsonObject document = params.value("textDocument").toObject();
+                currentUri = document.value("uri").toString();
                 publish(output, document.value("uri").toString(), document.value("version").toInt());
             } else if (method == "textDocument/didChange") {
                 const QJsonObject document = params.value("textDocument").toObject();
+                currentUri = document.value("uri").toString();
                 const int version = document.value("version").toInt();
                 publish(output, document.value("uri").toString(), version - 1);
                 publish(output, document.value("uri").toString(), version);
@@ -131,6 +135,55 @@ int main(int argc, char *argv[])
                 send(output, QJsonObject{
                     {"jsonrpc", "2.0"}, {"id", id},
                     {"result", QJsonArray{symbol}}
+                });
+            } else if (method == "workspace/symbol") {
+                if (params.value("query").toString() ==
+                    QStringLiteral("خطأ")) {
+                    send(output, QJsonObject{
+                        {"jsonrpc", "2.0"},
+                        {"id", id},
+                        {"error", QJsonObject{
+                            {"code", -32801},
+                            {"message", "Workspace index changed"}
+                        }}
+                    });
+                    continue;
+                }
+                const QJsonObject mainRange{
+                    {"start", QJsonObject{{"line", 0}, {"character", 5}}},
+                    {"end", QJsonObject{{"line", 0}, {"character", 13}}}
+                };
+                const QJsonObject fieldRange{
+                    {"start", QJsonObject{{"line", 1}, {"character", 4}}},
+                    {"end", QJsonObject{{"line", 1}, {"character", 14}}}
+                };
+                send(output, QJsonObject{
+                    {"jsonrpc", "2.0"}, {"id", id},
+                    {"result", QJsonArray{
+                        QJsonObject{
+                            {"name", "الرئيسية"},
+                            {"kind", 12},
+                            {"location", QJsonObject{
+                                {"uri", currentUri}, {"range", mainRange}
+                            }},
+                            {"data", QJsonObject{
+                                {"baaKind", "function"},
+                                {"detail", "صحيح الرئيسية()"}
+                            }}
+                        },
+                        QJsonObject{
+                            {"name", "قيمة_عضو"},
+                            {"kind", 8},
+                            {"containerName", "سجل"},
+                            {"location", QJsonObject{
+                                {"uri", currentUri}, {"range", fieldRange}
+                            }},
+                            {"data", QJsonObject{
+                                {"baaKind", "field"},
+                                {"detail", "صحيح"}
+                            }}
+                        }
+                    }}
                 });
             } else if (method == "textDocument/completion") {
                 const QJsonObject position = params.value("position").toObject();

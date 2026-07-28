@@ -29,6 +29,7 @@ void TestBaaLanguageClient::synchronizesDocumentsAndRejectsStaleDiagnostics()
     int publicationCount = 0;
     int lastVersion = 0;
     int symbolVersion = 0;
+    bool workspaceSymbolsReady = false;
     int completionVersion = 0;
     int hoverVersion = 0;
     int signatureVersion = 0;
@@ -40,6 +41,7 @@ void TestBaaLanguageClient::synchronizesDocumentsAndRejectsStaleDiagnostics()
     int renameEditVersion = 0;
     QVector<Diagnostic> lastDiagnostics;
     QVector<BaaDocumentSymbol> lastSymbols;
+    QVector<BaaWorkspaceSymbol> lastWorkspaceSymbols;
     QVector<BaaCompletionItem> lastCompletions;
     BaaHover lastHover;
     BaaSignatureHelp lastSignature;
@@ -84,6 +86,52 @@ void TestBaaLanguageClient::synchronizesDocumentsAndRejectsStaleDiagnostics()
     QCOMPARE(lastSymbols.first().column, 6);
     QCOMPARE(client.documentSymbols(filePath).first().detail,
              QStringLiteral("-> صحيح"));
+
+    connect(&client, &BaaLanguageClient::workspaceSymbolsPublished, this,
+            [&](const QString &query,
+                const QVector<BaaWorkspaceSymbol> &symbols) {
+                QCOMPARE(query, QStringLiteral("ر"));
+                workspaceSymbolsReady = true;
+                lastWorkspaceSymbols = symbols;
+            });
+    client.requestWorkspaceSymbols(QStringLiteral("ر"));
+    QTRY_VERIFY_WITH_TIMEOUT(workspaceSymbolsReady, 5000);
+    QCOMPARE(lastWorkspaceSymbols.size(), 2);
+    const auto workspaceMain = std::ranges::find_if(
+        lastWorkspaceSymbols,
+        [](const BaaWorkspaceSymbol &symbol) {
+            return symbol.name == QStringLiteral("الرئيسية");
+        });
+    QVERIFY(workspaceMain != lastWorkspaceSymbols.cend());
+    QCOMPARE(QDir::cleanPath(workspaceMain->filePath),
+             QDir::cleanPath(filePath));
+    QCOMPARE(workspaceMain->kind, 12);
+    QCOMPARE(workspaceMain->line, 0);
+    QCOMPARE(workspaceMain->character, 5);
+    QCOMPARE(workspaceMain->detail,
+             QStringLiteral("صحيح الرئيسية()"));
+    const auto workspaceField = std::ranges::find_if(
+        lastWorkspaceSymbols,
+        [](const BaaWorkspaceSymbol &symbol) {
+            return symbol.name == QStringLiteral("قيمة_عضو");
+        });
+    QVERIFY(workspaceField != lastWorkspaceSymbols.cend());
+    QCOMPARE(workspaceField->containerName, QStringLiteral("سجل"));
+    QCOMPARE(workspaceField->kind, 8);
+
+    bool workspaceSymbolsFailed = false;
+    connect(
+        &client,
+        &BaaLanguageClient::workspaceSymbolsFailed,
+        this,
+        [&](const QString &query, int code, const QString &message) {
+            QCOMPARE(query, QStringLiteral("خطأ"));
+            QCOMPARE(code, -32801);
+            QCOMPARE(message, QStringLiteral("Workspace index changed"));
+            workspaceSymbolsFailed = true;
+        });
+    client.requestWorkspaceSymbols(QStringLiteral("خطأ"));
+    QTRY_VERIFY_WITH_TIMEOUT(workspaceSymbolsFailed, 5000);
 
     connect(&client, &BaaLanguageClient::completionPublished, this,
             [&](const QString &publishedPath, int version, int line, int character,

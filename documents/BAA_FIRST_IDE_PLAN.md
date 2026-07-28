@@ -57,18 +57,19 @@ The first LSP slice now provides:
 - Arabic and space-containing path coverage in both client and server tests;
 - compiler-owned hierarchical document symbols with UTF-16 ranges, per-version
   caching, cancellation, and authoritative same-document F12 locations;
+- a visible, filterable document outline and `Ctrl+T` workspace-symbol search
+  backed by Takween's exact source closure and Baa's symbol trees, including
+  unsaved open documents;
 - Arabic-triggered completion from `completion-data-json-v1`, merged with
   version-matched document-global symbols and applied through exact text edits;
 - compiler-backed hover and signature help from `semantic-query-json-v1`, with
   scope-correct declarations, included prototypes, active parameters, and
   incomplete-call behavior;
 
-The next language-intelligence gaps are:
-
-- scope-aware local/include completion, workspace definitions, references,
-  rename, and a visible outline are not available;
-- `--dump-symbols=json` is implemented and consumed; a structured token stream
-  remains a future compiler contract.
+The next language-intelligence gaps are semantic tokens, folding and selection
+ranges from compiler-owned structure, dynamic workspace-folder refresh, and
+production restart and packaging behavior. `--dump-symbols=json` is implemented
+and consumed; a structured token stream remains a future compiler contract.
 
 ## Target Architecture
 
@@ -169,8 +170,9 @@ Acceptance:
 - Implement and test Baa's versioned symbol output. **Complete for
   `symbols-json-v1`.**
 - Add document and workspace symbol indexes sourced from the compiler.
-  **Document cache and Takween-aware navigation index complete; a user-facing
-  workspace-symbol search remains pending.**
+  **Complete: the explorer shows a version-matched hierarchical document
+  outline, and `Ctrl+T` searches a cached Takween-closure workspace index using
+  Baa-owned names, kinds, details, containers, and exact locations.**
 - Implement exact go-to-definition and references. **Complete across the
   Takween project source closure, including headers, shadowed locals,
   cancellation, stale-version rejection, F12 navigation, and a structured

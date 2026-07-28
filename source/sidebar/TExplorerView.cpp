@@ -1,4 +1,5 @@
 #include "TExplorerView.h"
+#include "TSymbolOutlineView.h"
 #include "../ui/QalamTheme.h"
 #include "Constants.h"
 #include <QScrollArea>
@@ -65,7 +66,7 @@ void TExplorerView::setupUi()
     });
     
     m_mainLayout->addWidget(m_folderHeader);
-    m_mainLayout->addWidget(m_treeView, 1);  // Tree takes remaining space
+    m_mainLayout->addWidget(m_treeView, 2);
     
     // ========== No Folder Open State ==========
     m_noFolderWidget = new QWidget();
@@ -89,6 +90,19 @@ void TExplorerView::setupUi()
     noFolderLayout->addStretch();
     
     m_mainLayout->addWidget(m_noFolderWidget);
+
+    // ========== Current document outline ==========
+    m_outlineHeader = createSectionHeader(
+        QStringLiteral("المخطط"), true);
+    m_outlineView = new TSymbolOutlineView(this);
+    m_outlineView->setMinimumHeight(120);
+    m_mainLayout->addWidget(m_outlineHeader);
+    m_mainLayout->addWidget(m_outlineView, 1);
+    connect(
+        m_outlineView,
+        &TSymbolOutlineView::symbolActivated,
+        this,
+        &TExplorerView::outlineSymbolActivated);
     
     // Initially show no folder state
     m_treeView->hide();
@@ -242,6 +256,18 @@ void TExplorerView::clearOpenEditors()
     }
 }
 
+void TExplorerView::setOutlineSymbols(
+    const QString &filePath,
+    const QVector<BaaDocumentSymbol> &symbols)
+{
+    if (m_outlineView) m_outlineView->setSymbols(filePath, symbols);
+}
+
+void TExplorerView::clearOutlineSymbols()
+{
+    if (m_outlineView) m_outlineView->clearSymbols();
+}
+
 bool TExplorerView::eventFilter(QObject *watched, QEvent *event)
 {
     if (event->type() == QEvent::Enter) {
@@ -274,6 +300,16 @@ bool TExplorerView::eventFilter(QObject *watched, QEvent *event)
             m_noFolderWidget->setVisible(m_folderExpanded && m_rootPath.isEmpty());
             if (auto *arrow = m_folderHeader->findChild<QLabel*>("sectionArrow")) {
                 arrow->setText(m_folderExpanded ? "▾" : "▸");
+            }
+            return true;
+        }
+
+        if (watched == m_outlineHeader) {
+            m_outlineExpanded = !m_outlineExpanded;
+            m_outlineView->setVisible(m_outlineExpanded);
+            if (auto *arrow =
+                    m_outlineHeader->findChild<QLabel*>("sectionArrow")) {
+                arrow->setText(m_outlineExpanded ? "▾" : "▸");
             }
             return true;
         }

@@ -8,6 +8,10 @@
 #include <QPushButton>
 #include <QEvent>
 
+#include "BaaDocumentSymbol.h"
+
+class TSymbolOutlineView;
+
 /**
  * @brief Explorer View - File tree with collapsible sections
  * 
@@ -30,9 +34,14 @@ public:
     void removeOpenEditor(const QString &filePath);
     void updateOpenEditor(const QString &filePath, bool modified);
     void clearOpenEditors();
+    void setOutlineSymbols(
+        const QString &filePath,
+        const QVector<BaaDocumentSymbol> &symbols);
+    void clearOutlineSymbols();
 
     QTreeView* treeView() const { return m_treeView; }
     QFileSystemModel* fileSystemModel() const { return m_fileSystemModel; }
+    TSymbolOutlineView *outlineView() const { return m_outlineView; }
 
 protected:
     bool eventFilter(QObject *watched, QEvent *event) override;
@@ -42,6 +51,8 @@ signals:
     void openEditorClicked(const QString &filePath);
     void openEditorCloseRequested(const QString &filePath);
     void openFolderRequested();  // Emitted when "Open Folder" button is clicked
+    void outlineSymbolActivated(
+        const QString &filePath, int line, int column);
 
 private:
     void setupUi();
@@ -64,6 +75,10 @@ private:
     QTreeView *m_treeView = nullptr;
     QFileSystemModel *m_fileSystemModel = nullptr;
     bool m_folderExpanded = true;
+
+    QWidget *m_outlineHeader{};
+    TSymbolOutlineView *m_outlineView{};
+    bool m_outlineExpanded{true};
     
     // No folder open state
     QWidget *m_noFolderWidget = nullptr;
