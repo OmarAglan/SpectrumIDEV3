@@ -621,7 +621,12 @@ void BaaLanguageClient::sendInitialize()
                         QStringLiteral("comment"),
                         QStringLiteral("string"),
                         QStringLiteral("number"),
-                        QStringLiteral("operator")
+                        QStringLiteral("operator"),
+                        QStringLiteral("function"),
+                        QStringLiteral("variable"),
+                        QStringLiteral("parameter"),
+                        QStringLiteral("property"),
+                        QStringLiteral("enumMember")
                     }},
                     {QStringLiteral("tokenModifiers"), QJsonArray{}},
                     {QStringLiteral("formats"), QJsonArray{

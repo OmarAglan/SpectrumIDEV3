@@ -40,11 +40,16 @@ void TestSyntaxHighlighter::overlaysCompilerTokensAndRestoresLocalHighlighting()
     QCOMPARE(foregroundAt(document, 0), QColor(156, 220, 254));
 
     highlighter.setSemanticTokens({
-        BaaSemanticToken{0, 0, 3, QStringLiteral("keyword"), 0},
+        BaaSemanticToken{0, 0, 3, QStringLiteral("function"), 0},
         BaaSemanticToken{0, 4, 1, QStringLiteral("number"), 0}
     });
-    QCOMPARE(foregroundAt(document, 0), QColor(197, 134, 192));
+    QCOMPARE(foregroundAt(document, 0), QColor(220, 220, 170));
     QCOMPARE(foregroundAt(document, 4), QColor(181, 206, 168));
+
+    highlighter.setSemanticTokens({
+        BaaSemanticToken{0, 0, 3, QStringLiteral("property"), 0}
+    });
+    QCOMPARE(foregroundAt(document, 0), QColor(156, 220, 254));
 
     highlighter.clearSemanticTokens();
     QCOMPARE(foregroundAt(document, 0), QColor(156, 220, 254));

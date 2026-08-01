@@ -92,7 +92,9 @@ int main(int argc, char *argv[])
                                     {"tokenTypes", QJsonArray{
                                         "type", "macro", "keyword",
                                         "modifier", "comment", "string",
-                                        "number", "operator"
+                                        "number", "operator", "function",
+                                        "variable", "parameter", "property",
+                                        "enumMember"
                                     }},
                                     {"tokenModifiers", QJsonArray{}}
                                 }},
@@ -155,6 +157,7 @@ int main(int argc, char *argv[])
                     {"result", QJsonObject{
                         {"data", QJsonArray{
                             0, 0, 4, 0, 0,
+                            0, 5, 8, 8, 0,
                             1, 12, 1, 6, 0
                         }}
                     }}

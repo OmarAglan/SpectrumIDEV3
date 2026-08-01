@@ -98,11 +98,15 @@ void TestBaaLanguageClient::synchronizesDocumentsAndRejectsStaleDiagnostics()
              QStringLiteral("-> صحيح"));
 
     QTRY_COMPARE_WITH_TIMEOUT(semanticTokenVersion, 1, 5000);
-    QCOMPARE(lastSemanticTokens.size(), 2);
+    QCOMPARE(lastSemanticTokens.size(), 3);
     QCOMPARE(lastSemanticTokens.first().line, 0);
     QCOMPARE(lastSemanticTokens.first().character, 0);
     QCOMPARE(lastSemanticTokens.first().length, 4);
     QCOMPARE(lastSemanticTokens.first().type, QStringLiteral("type"));
+    QCOMPARE(lastSemanticTokens.at(1).line, 0);
+    QCOMPARE(lastSemanticTokens.at(1).character, 5);
+    QCOMPARE(lastSemanticTokens.at(1).length, 8);
+    QCOMPARE(lastSemanticTokens.at(1).type, QStringLiteral("function"));
     QCOMPARE(lastSemanticTokens.last().line, 1);
     QCOMPARE(lastSemanticTokens.last().character, 12);
     QCOMPARE(lastSemanticTokens.last().length, 1);

@@ -12,6 +12,12 @@ TokenType formatTypeForSemanticToken(const QString &type)
     if (type == QStringLiteral("string")) return TokenType::String;
     if (type == QStringLiteral("number")) return TokenType::Number;
     if (type == QStringLiteral("operator")) return TokenType::Operator;
+    if (type == QStringLiteral("function")) return TokenType::Function;
+    if (type == QStringLiteral("variable") or
+        type == QStringLiteral("parameter") or
+        type == QStringLiteral("property") or
+        type == QStringLiteral("enumMember"))
+        return TokenType::Identifier;
     return TokenType::None;
 }
 }
