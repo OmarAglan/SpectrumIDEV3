@@ -9,9 +9,11 @@ add_library(qalam_core STATIC
     language/BaaDocumentSymbol.h
     language/BaaCompletionItem.h
     language/BaaHover.h
+    language/BaaFoldingRange.h
     language/BaaLocation.h
     language/BaaSignatureHelp.h
     language/BaaSemanticToken.h
+    language/BaaSelectionRange.h
     language/BaaWorkspaceEdit.h
     language/BaaWorkspaceEdit.cpp
     language/BaaWorkspaceSymbol.h

@@ -4,8 +4,10 @@
 #include "BaaDocumentSymbol.h"
 #include "BaaCompletionItem.h"
 #include "BaaHover.h"
+#include "BaaFoldingRange.h"
 #include "BaaLocation.h"
 #include "BaaSemanticToken.h"
+#include "BaaSelectionRange.h"
 #include "BaaSignatureHelp.h"
 #include "BaaWorkspaceEdit.h"
 #include "BaaWorkspaceSymbol.h"
@@ -45,6 +47,10 @@ public:
                             const QString &workspaceRoot = QString());
     void requestDocumentSymbols(const QString &filePath);
     void requestSemanticTokens(const QString &filePath);
+    void requestFoldingRanges(const QString &filePath);
+    void requestSelectionRanges(const QString &filePath,
+                                int line,
+                                int character);
     void requestWorkspaceSymbols(const QString &query = QString());
     void requestCompletion(const QString &filePath, int line, int character);
     void requestHover(const QString &filePath, int line, int character);
@@ -84,6 +90,14 @@ signals:
     void semanticTokensPublished(const QString &filePath,
                                  int documentVersion,
                                  const QVector<BaaSemanticToken> &tokens);
+    void foldingRangesPublished(const QString &filePath,
+                                int documentVersion,
+                                const QVector<BaaFoldingRange> &ranges);
+    void selectionRangesPublished(const QString &filePath,
+                                  int documentVersion,
+                                  int line,
+                                  int character,
+                                  const QVector<BaaSelectionRange> &ranges);
     void workspaceSymbolsPublished(
         const QString &query,
         const QVector<BaaWorkspaceSymbol> &symbols);
@@ -173,6 +187,18 @@ private:
         QString filePath;
         int documentVersion{};
     };
+    struct PendingFoldingRequest
+    {
+        QString filePath;
+        int documentVersion{};
+    };
+    struct PendingSelectionRequest
+    {
+        QString filePath;
+        int documentVersion{};
+        int line{};
+        int character{};
+    };
     struct PendingCompletionRequest
     {
         QString filePath;
@@ -212,6 +238,8 @@ private:
     void sendDidOpen(Document &document);
     void cancelPendingSymbolRequests(const QString &filePath);
     void cancelPendingTokenRequests(const QString &filePath);
+    void cancelPendingFoldingRequests(const QString &filePath);
+    void cancelPendingStructureRequests(const QString &filePath);
     void cancelPendingCompletionRequests(const QString &filePath);
     void cancelPendingFormattingRequests(const QString &filePath);
     void cancelPendingSemanticRequests(const QString &filePath);
@@ -232,6 +260,10 @@ private:
     QVector<BaaDocumentSymbol> parseDocumentSymbols(const QJsonArray &items) const;
     QVector<BaaSemanticToken> parseSemanticTokens(const QJsonValue &result,
                                                    bool *valid) const;
+    QVector<BaaFoldingRange> parseFoldingRanges(const QJsonValue &result,
+                                                bool *valid) const;
+    QVector<BaaSelectionRange> parseSelectionRanges(const QJsonValue &result,
+                                                    bool *valid) const;
     QVector<BaaWorkspaceSymbol> parseWorkspaceSymbols(
         const QJsonValue &result) const;
     QVector<BaaCompletionItem> parseCompletionItems(const QJsonValue &result) const;
@@ -259,6 +291,9 @@ private:
     QHash<qint64, PendingSymbolRequest> m_pendingSymbolRequests;
     QHash<QString, int> m_tokenRequestedVersions;
     QHash<qint64, PendingTokenRequest> m_pendingTokenRequests;
+    QHash<QString, int> m_foldingRequestedVersions;
+    QHash<qint64, PendingFoldingRequest> m_pendingFoldingRequests;
+    QHash<qint64, PendingSelectionRequest> m_pendingSelectionRequests;
     QHash<qint64, PendingWorkspaceSymbolRequest>
         m_pendingWorkspaceSymbolRequests;
     QHash<qint64, PendingCompletionRequest> m_pendingCompletionRequests;
@@ -272,6 +307,8 @@ private:
     qint64 m_shutdownRequestId{};
     bool m_documentSymbolProvider{};
     bool m_semanticTokenProvider{};
+    bool m_foldingRangeProvider{};
+    bool m_selectionRangeProvider{};
     QStringList m_semanticTokenTypes;
     bool m_workspaceSymbolProvider{};
     bool m_completionProvider{};

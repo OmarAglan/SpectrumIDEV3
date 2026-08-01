@@ -9,6 +9,7 @@
 #include <QMenu>
 #include <QAction>
 #include <QFile>
+#include <QFileInfo>
 #include <QUrl>
 #include <QHash>
 #include <QToolTip>
@@ -179,6 +180,93 @@ void TEditor::setSemanticTokens(const QVector<BaaSemanticToken> &tokens)
 void TEditor::clearSemanticTokens()
 {
     if (highlighter) highlighter->clearSemanticTokens();
+}
+
+void TEditor::setFoldingRanges(const QVector<BaaFoldingRange> &ranges)
+{
+    QVector<FoldRegion> converted;
+    converted.reserve(ranges.size());
+    const int blocks = document()->blockCount();
+    for (const BaaFoldingRange &range : ranges) {
+        if (not range.isValid() or range.startLine >= blocks or
+            range.endLine >= blocks)
+            continue;
+        converted.push_back({range.startLine, range.endLine, false});
+    }
+    replaceFoldRegions(converted);
+}
+
+void TEditor::clearFoldingRanges()
+{
+    replaceFoldRegions({});
+}
+
+void TEditor::useLocalFoldingRanges()
+{
+    updateFoldRegions();
+}
+
+void TEditor::applySemanticSelectionRanges(
+    const QVector<BaaSelectionRange> &ranges,
+    int requestLine,
+    int requestCharacter)
+{
+    if (requestLine != m_selectionRequestLine or
+        requestCharacter != m_selectionRequestCharacter)
+        return;
+    const QTextCursor cursor = textCursor();
+    const int requestPosition =
+        documentPosition(requestLine, requestCharacter);
+    if (requestPosition < 0 or requestPosition < cursor.selectionStart() or
+        requestPosition > cursor.selectionEnd())
+        return;
+    m_semanticSelectionRanges = ranges;
+    m_semanticSelectionHistory.clear();
+    expandSemanticSelection();
+}
+
+void TEditor::expandSemanticSelection()
+{
+    QTextCursor cursor = textCursor();
+    const int selectionStart = cursor.selectionStart();
+    const int selectionEnd = cursor.selectionEnd();
+    bool cachedChainContainsSelection = false;
+    for (const BaaSelectionRange &range : m_semanticSelectionRanges) {
+        if (not range.isValid()) continue;
+        const int start = documentPosition(range.line, range.character);
+        const int end = documentPosition(range.endLine, range.endCharacter);
+        if (start < 0 or end < start or start > selectionStart or
+            end < selectionEnd)
+            continue;
+        cachedChainContainsSelection = true;
+        if (start == selectionStart and end == selectionEnd) continue;
+        m_semanticSelectionHistory.push_back({selectionStart, selectionEnd});
+        cursor.setPosition(start);
+        cursor.setPosition(end, QTextCursor::KeepAnchor);
+        setTextCursor(cursor);
+        return;
+    }
+
+    if (cachedChainContainsSelection) return;
+    if (currentFilePath().isEmpty()) return;
+    const QTextBlock block = cursor.block();
+    m_selectionRequestLine = block.blockNumber();
+    m_selectionRequestCharacter = cursor.position() - block.position();
+    m_semanticSelectionRanges.clear();
+    m_semanticSelectionHistory.clear();
+    emit selectionRangeRequested(
+        currentFilePath(), m_selectionRequestLine,
+        m_selectionRequestCharacter);
+}
+
+void TEditor::shrinkSemanticSelection()
+{
+    if (m_semanticSelectionHistory.isEmpty()) return;
+    const QPair<int, int> previous = m_semanticSelectionHistory.takeLast();
+    QTextCursor cursor = textCursor();
+    cursor.setPosition(previous.first);
+    cursor.setPosition(previous.second, QTextCursor::KeepAnchor);
+    setTextCursor(cursor);
 }
 
 void TEditor::updateFontSize(int size) {
@@ -557,87 +645,151 @@ bool TEditor::hasDiagnosticAtPosition(const QPoint &position, Diagnostic *diagno
 }
 
 void TEditor::updateFoldRegions() {
+    m_semanticSelectionRanges.clear();
+    m_semanticSelectionHistory.clear();
+    m_selectionRequestLine = -1;
+    m_selectionRequestCharacter = -1;
 
-    QHash<int, bool> previousFoldStates;
-    for (const FoldRegion& region : foldRegions) {
-        previousFoldStates[region.startBlockNumber] = region.folded;
+    const QString suffix = QFileInfo(currentFilePath()).suffix().toLower();
+    if (not currentFilePath().isEmpty() and
+        suffix != QStringLiteral("baa") and
+        suffix != QStringLiteral("baahd")) {
+        replaceFoldRegions({});
+        return;
     }
 
-    foldRegions.clear();
-
-    for (QTextBlock visibleBlock = document()->firstBlock(); visibleBlock.isValid(); visibleBlock = visibleBlock.next()) {
-        visibleBlock.setVisible(true);
-    }
-
-    QTextBlock block = document()->firstBlock();
-    while (block.isValid()) {
-        QString text = block.text();
-
-        QString trimmed = text.trimmed();
-        if (trimmed.startsWith("دالة ") || trimmed.startsWith("صنف ")) {
-            int start = block.blockNumber();
-
-            int startIndent = 0;
-            for (QChar c : text) {
-                if (c == '\t') startIndent += 4;
-                else if (c == ' ') startIndent += 1;
-                else break;
-            }
-
-            QTextBlock next = block.next();
-            int end = start;
-
-            while (next.isValid()) {
-                QString nextText = next.text();
-                QString nextTrim = nextText.trimmed();
-
-                if (nextTrim.isEmpty()) {
-                    next = next.next();
-                    continue;
-                }
-
-                int nextIndent = 0;
-                for (QChar c : nextText) {
-                    if (c == '\t') nextIndent += 4;
-                    else if (c == ' ') nextIndent += 1;
-                    else break;
-                }
-
-                if (nextTrim.startsWith("دالة ") || nextTrim.startsWith("صنف ")) {
-                    if (nextIndent <= startIndent)
-                        break;
-                }
-
-                if (nextIndent <= startIndent)
-                    break;
-
-                end = next.blockNumber();
-                next = next.next();
-            }
-
-            if (end > start) {
-                FoldRegion region{};
-                region.startBlockNumber = start;
-                region.endBlockNumber = end;
-                region.folded = false;
-                if (previousFoldStates.contains(region.startBlockNumber))
-                    region.folded = previousFoldStates[region.startBlockNumber];
-                foldRegions.append(region);
-            }
+    struct Delimiter
+    {
+        QChar value;
+        int line{};
+    };
+    enum class ScanState { Code, String, Character, LineComment, BlockComment };
+    QVector<Delimiter> stack;
+    QVector<FoldRegion> local;
+    const QString source = toPlainText();
+    ScanState state = ScanState::Code;
+    bool escaped = false;
+    int line = 0;
+    for (qsizetype index = 0; index < source.size(); ++index) {
+        const QChar current = source.at(index);
+        const QChar next = index + 1 < source.size()
+            ? source.at(index + 1) : QChar();
+        if (current == '\n') {
+            ++line;
+            if (state == ScanState::LineComment) state = ScanState::Code;
+            if (state == ScanState::String or state == ScanState::Character)
+                escaped = false;
+            continue;
         }
-        block = block.next();
+        if (state == ScanState::LineComment) continue;
+        if (state == ScanState::BlockComment) {
+            if (current == '*' and next == '/') {
+                state = ScanState::Code;
+                ++index;
+            }
+            continue;
+        }
+        if (state == ScanState::String or state == ScanState::Character) {
+            if (escaped) {
+                escaped = false;
+                continue;
+            }
+            if (current == '\\') {
+                escaped = true;
+                continue;
+            }
+            if ((state == ScanState::String and current == '"') or
+                (state == ScanState::Character and current == '\''))
+                state = ScanState::Code;
+            continue;
+        }
+        if (current == '/' and next == '/') {
+            state = ScanState::LineComment;
+            ++index;
+            continue;
+        }
+        if (current == '/' and next == '*') {
+            state = ScanState::BlockComment;
+            ++index;
+            continue;
+        }
+        if (current == '"') {
+            state = ScanState::String;
+            continue;
+        }
+        if (current == '\'') {
+            state = ScanState::Character;
+            continue;
+        }
+        if (current == '(' or current == '[' or current == '{') {
+            stack.push_back({current, line});
+            continue;
+        }
+        QChar expected;
+        if (current == ')') expected = '(';
+        else if (current == ']') expected = '[';
+        else if (current == '}') expected = '{';
+        else continue;
+        qsizetype match = stack.size();
+        while (match > 0 and stack.at(match - 1).value != expected) --match;
+        if (match == 0) continue;
+        const Delimiter opening = stack.at(match - 1);
+        stack.resize(match - 1);
+        if (opening.line < line)
+            local.push_back({opening.line, line, false});
     }
+    replaceFoldRegions(local);
+}
 
-    if (lineNumberArea)
-        lineNumberArea->update();
+void TEditor::replaceFoldRegions(const QVector<FoldRegion> &regions)
+{
+    QHash<QString, bool> previousStates;
+    for (const FoldRegion &region : foldRegions) {
+        previousStates.insert(
+            QString::number(region.startBlockNumber) + QLatin1Char(':') +
+                QString::number(region.endBlockNumber),
+            region.folded);
+    }
+    foldRegions = regions;
+    std::ranges::sort(foldRegions, [](const FoldRegion &left,
+                                     const FoldRegion &right) {
+        if (left.startBlockNumber != right.startBlockNumber)
+            return left.startBlockNumber < right.startBlockNumber;
+        return left.endBlockNumber > right.endBlockNumber;
+    });
+    auto duplicate = std::unique(
+        foldRegions.begin(), foldRegions.end(),
+        [](const FoldRegion &left, const FoldRegion &right) {
+            return left.startBlockNumber == right.startBlockNumber and
+                   left.endBlockNumber == right.endBlockNumber;
+        });
+    foldRegions.erase(duplicate, foldRegions.end());
+    for (FoldRegion &region : foldRegions) {
+        const QString key =
+            QString::number(region.startBlockNumber) + QLatin1Char(':') +
+            QString::number(region.endBlockNumber);
+        region.folded = previousStates.value(key, false);
+    }
+    applyFoldVisibility();
+}
 
-    for (const FoldRegion& region : foldRegions) {
-        QTextBlock block = document()->findBlockByNumber(region.startBlockNumber + 1);
-        while (block.isValid() && block.blockNumber() <= region.endBlockNumber) {
-            block.setVisible(!region.folded);
+void TEditor::applyFoldVisibility()
+{
+    for (QTextBlock block = document()->firstBlock(); block.isValid();
+         block = block.next())
+        block.setVisible(true);
+    for (const FoldRegion &region : foldRegions) {
+        if (not region.folded) continue;
+        QTextBlock block =
+            document()->findBlockByNumber(region.startBlockNumber + 1);
+        while (block.isValid() and
+               block.blockNumber() <= region.endBlockNumber) {
+            block.setVisible(false);
             block = block.next();
         }
     }
+    document()->markContentsDirty(0, document()->characterCount());
+    if (lineNumberArea) lineNumberArea->update();
     viewport()->update();
 }
 
@@ -645,32 +797,7 @@ void TEditor::toggleFold(int blockNumber) {
     for (FoldRegion &region : foldRegions) {
         if (region.startBlockNumber == blockNumber) {
             region.folded = !region.folded;
-
-            QTextBlock block = document()->findBlockByNumber(region.startBlockNumber + 1);
-            while (block.isValid() && block.blockNumber() <= region.endBlockNumber) {
-                block.setVisible(!region.folded);
-                block = block.next();
-            }
-
-            if (!region.folded) {
-                for (FoldRegion &subRegion : foldRegions) {
-                    if (subRegion.startBlockNumber > region.startBlockNumber &&
-                        subRegion.endBlockNumber <= region.endBlockNumber) {
-                        QTextBlock subBlock = document()->findBlockByNumber(subRegion.startBlockNumber + 1);
-                        bool allVisible = true;
-                        while (subBlock.isValid() && subBlock.blockNumber() <= subRegion.endBlockNumber) {
-                            if (!subBlock.isVisible()) {
-                                allVisible = false;
-                                break;
-                            }
-                            subBlock = subBlock.next();
-                        }
-                        subRegion.folded = !allVisible;
-                    }
-                }
-            }
-
-            viewport()->update();
+            applyFoldVisibility();
             break;
         }
     }
@@ -1009,6 +1136,16 @@ void TEditor::focusOutEvent(QFocusEvent *e) {
 }
 
 void TEditor::keyPressEvent(QKeyEvent *e) {
+    const Qt::KeyboardModifiers selectionModifiers =
+        e->modifiers() & ~Qt::KeypadModifier;
+    if (selectionModifiers ==
+            (Qt::ShiftModifier | Qt::AltModifier) and
+        (e->key() == Qt::Key_Right or e->key() == Qt::Key_Left)) {
+        if (e->key() == Qt::Key_Right) expandSemanticSelection();
+        else shrinkSemanticSelection();
+        e->accept();
+        return;
+    }
     const bool signatureShortcut =
         (e->modifiers() & Qt::ControlModifier) &&
         (e->modifiers() & Qt::ShiftModifier) &&

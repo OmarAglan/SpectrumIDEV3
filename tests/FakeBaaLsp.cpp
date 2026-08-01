@@ -87,6 +87,8 @@ int main(int argc, char *argv[])
                             {"positionEncoding", "utf-16"},
                             {"textDocumentSync", QJsonObject{{"openClose", true}, {"change", 1}}},
                             {"documentSymbolProvider", true},
+                            {"foldingRangeProvider", true},
+                            {"selectionRangeProvider", true},
                             {"semanticTokensProvider", QJsonObject{
                                 {"legend", QJsonObject{
                                     {"tokenTypes", QJsonArray{
@@ -161,6 +163,51 @@ int main(int argc, char *argv[])
                             1, 12, 1, 6, 0
                         }}
                     }}
+                });
+            } else if (method == "textDocument/foldingRange") {
+                send(output, QJsonObject{
+                    {"jsonrpc", "2.0"},
+                    {"id", id},
+                    {"result", QJsonArray{QJsonObject{
+                        {"startLine", 0},
+                        {"startCharacter", 15},
+                        {"endLine", 2},
+                        {"endCharacter", 1},
+                        {"kind", "region"}
+                    }}}
+                });
+            } else if (method == "textDocument/selectionRange") {
+                const QJsonObject documentRange{
+                    {"start", QJsonObject{{"line", 0}, {"character", 0}}},
+                    {"end", QJsonObject{{"line", 3}, {"character", 0}}}
+                };
+                const QJsonObject groupRange{
+                    {"start", QJsonObject{{"line", 0}, {"character", 15}}},
+                    {"end", QJsonObject{{"line", 2}, {"character", 1}}}
+                };
+                const QJsonObject lineRange{
+                    {"start", QJsonObject{{"line", 1}, {"character", 4}}},
+                    {"end", QJsonObject{{"line", 1}, {"character", 13}}}
+                };
+                const QJsonObject tokenRange{
+                    {"start", QJsonObject{{"line", 1}, {"character", 4}}},
+                    {"end", QJsonObject{{"line", 1}, {"character", 9}}}
+                };
+                send(output, QJsonObject{
+                    {"jsonrpc", "2.0"},
+                    {"id", id},
+                    {"result", QJsonArray{QJsonObject{
+                        {"range", tokenRange},
+                        {"parent", QJsonObject{
+                            {"range", lineRange},
+                            {"parent", QJsonObject{
+                                {"range", groupRange},
+                                {"parent", QJsonObject{
+                                    {"range", documentRange}
+                                }}
+                            }}
+                        }}
+                    }}}
                 });
             } else if (method == "workspace/symbol") {
                 if (params.value("query").toString() ==

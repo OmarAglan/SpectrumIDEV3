@@ -6,6 +6,9 @@ accent family. The mark contains no Latin text.
 
 ## Files
 
+- `qalam/resources/branding/baa-language-logo.png`: exact copy of the official
+  Baa language logo used by the repository front page; its canonical source is
+  `Baa/resources/Logo.png` in the Baa compiler repository.
 - `qalam/resources/branding/QalamLogo-final-v2.png`: transparent master.
 - `qalam/resources/branding/icons/`: PNG application sizes from 16 to 512 px.
 - `qalam/resources/QalamLogo.png`: Qt application/welcome logo.

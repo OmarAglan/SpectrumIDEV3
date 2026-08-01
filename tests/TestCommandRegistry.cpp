@@ -44,6 +44,14 @@ void TestCommandRegistry::exposesDefaultCommands()
         return command.id == "code.workspaceSymbols" and
             command.shortcut == "Ctrl+T";
     }));
+    QVERIFY(std::any_of(commands.begin(), commands.end(), [](const auto &command) {
+        return command.id == "code.expandSelection" and
+            command.shortcut == "Shift+Alt+Right";
+    }));
+    QVERIFY(std::any_of(commands.begin(), commands.end(), [](const auto &command) {
+        return command.id == "code.shrinkSelection" and
+            command.shortcut == "Shift+Alt+Left";
+    }));
 }
 
 QTEST_MAIN(TestCommandRegistry)

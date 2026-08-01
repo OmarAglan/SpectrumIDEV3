@@ -30,6 +30,8 @@ void TestBaaLanguageClient::synchronizesDocumentsAndRejectsStaleDiagnostics()
     int lastVersion = 0;
     int symbolVersion = 0;
     int semanticTokenVersion = 0;
+    int foldingVersion = 0;
+    int selectionVersion = 0;
     bool workspaceSymbolsReady = false;
     int completionVersion = 0;
     int hoverVersion = 0;
@@ -43,6 +45,8 @@ void TestBaaLanguageClient::synchronizesDocumentsAndRejectsStaleDiagnostics()
     QVector<Diagnostic> lastDiagnostics;
     QVector<BaaDocumentSymbol> lastSymbols;
     QVector<BaaSemanticToken> lastSemanticTokens;
+    QVector<BaaFoldingRange> lastFoldingRanges;
+    QVector<BaaSelectionRange> lastSelectionRanges;
     QVector<BaaWorkspaceSymbol> lastWorkspaceSymbols;
     QVector<BaaCompletionItem> lastCompletions;
     BaaHover lastHover;
@@ -76,6 +80,25 @@ void TestBaaLanguageClient::synchronizesDocumentsAndRejectsStaleDiagnostics()
                          QDir::cleanPath(filePath));
                 semanticTokenVersion = version;
                 lastSemanticTokens = tokens;
+            });
+    connect(&client, &BaaLanguageClient::foldingRangesPublished, this,
+            [&](const QString &publishedPath, int version,
+                const QVector<BaaFoldingRange> &ranges) {
+                QCOMPARE(QDir::cleanPath(publishedPath),
+                         QDir::cleanPath(filePath));
+                foldingVersion = version;
+                lastFoldingRanges = ranges;
+            });
+    connect(&client, &BaaLanguageClient::selectionRangesPublished, this,
+            [&](const QString &publishedPath, int version,
+                int line, int character,
+                const QVector<BaaSelectionRange> &ranges) {
+                QCOMPARE(QDir::cleanPath(publishedPath),
+                         QDir::cleanPath(filePath));
+                QCOMPARE(line, 1);
+                QCOMPARE(character, 4);
+                selectionVersion = version;
+                lastSelectionRanges = ranges;
             });
 
     QCOMPARE(client.synchronizeDocument(filePath,
@@ -111,6 +134,23 @@ void TestBaaLanguageClient::synchronizesDocumentsAndRejectsStaleDiagnostics()
     QCOMPARE(lastSemanticTokens.last().character, 12);
     QCOMPARE(lastSemanticTokens.last().length, 1);
     QCOMPARE(lastSemanticTokens.last().type, QStringLiteral("number"));
+
+    QTRY_COMPARE_WITH_TIMEOUT(foldingVersion, 1, 5000);
+    QCOMPARE(lastFoldingRanges.size(), 1);
+    QCOMPARE(lastFoldingRanges.first().startLine, 0);
+    QCOMPARE(lastFoldingRanges.first().startCharacter, 15);
+    QCOMPARE(lastFoldingRanges.first().endLine, 2);
+    QCOMPARE(lastFoldingRanges.first().endCharacter, 1);
+    QCOMPARE(lastFoldingRanges.first().kind, QStringLiteral("region"));
+
+    client.requestSelectionRanges(filePath, 1, 4);
+    QTRY_COMPARE_WITH_TIMEOUT(selectionVersion, 1, 5000);
+    QCOMPARE(lastSelectionRanges.size(), 4);
+    QCOMPARE(lastSelectionRanges.first().line, 1);
+    QCOMPARE(lastSelectionRanges.first().character, 4);
+    QCOMPARE(lastSelectionRanges.first().endCharacter, 9);
+    QCOMPARE(lastSelectionRanges.last().line, 0);
+    QCOMPARE(lastSelectionRanges.last().endLine, 3);
 
     connect(&client, &BaaLanguageClient::workspaceSymbolsPublished, this,
             [&](const QString &query,
@@ -353,6 +393,7 @@ void TestBaaLanguageClient::synchronizesDocumentsAndRejectsStaleDiagnostics()
     QCOMPARE(publicationCount, 2);
     QTRY_COMPARE_WITH_TIMEOUT(symbolVersion, 2, 5000);
     QTRY_COMPARE_WITH_TIMEOUT(semanticTokenVersion, 2, 5000);
+    QTRY_COMPARE_WITH_TIMEOUT(foldingVersion, 2, 5000);
 
     client.closeDocument(filePath);
     client.stop();

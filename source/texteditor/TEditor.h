@@ -19,6 +19,8 @@
 #include "Constants.h"
 #include "BaaCompletionItem.h"
 #include "BaaHover.h"
+#include "BaaFoldingRange.h"
+#include "BaaSelectionRange.h"
 #include "BaaSignatureHelp.h"
 #include "BaaSemanticToken.h"
 
@@ -44,6 +46,16 @@ public:
     void clearDiagnostics();
     void setSemanticTokens(const QVector<BaaSemanticToken> &tokens);
     void clearSemanticTokens();
+    void setFoldingRanges(const QVector<BaaFoldingRange> &ranges);
+    void clearFoldingRanges();
+    void useLocalFoldingRanges();
+    int foldingRangeCount() const { return foldRegions.size(); }
+    void applySemanticSelectionRanges(
+        const QVector<BaaSelectionRange> &ranges,
+        int requestLine,
+        int requestCharacter);
+    void expandSemanticSelection();
+    void shrinkSemanticSelection();
 
     void lineNumberAreaPaintEvent(QPaintEvent* event);
     int lineNumberAreaWidth() const;
@@ -109,6 +121,8 @@ private:
 
     void updateFoldRegions();
     void toggleFold(int blockNum);
+    void replaceFoldRegions(const QVector<FoldRegion> &regions);
+    void applyFoldVisibility();
     void applyEditorDecorations();
     Diagnostic diagnosticAtPosition(const QPoint &position) const;
     bool hasDiagnosticAtPosition(const QPoint &position, Diagnostic *diagnostic) const;
@@ -137,6 +151,10 @@ private:
     int m_hoverRequestLine{-1};
     int m_hoverRequestCharacter{-1};
     QPoint m_hoverGlobalPosition;
+    QVector<BaaSelectionRange> m_semanticSelectionRanges;
+    QVector<QPair<int, int>> m_semanticSelectionHistory;
+    int m_selectionRequestLine{-1};
+    int m_selectionRequestCharacter{-1};
 
 private slots:
     void updateLineNumberAreaWidth();
@@ -149,6 +167,7 @@ signals:
     void completionRequested(QString filePath, int line, int character);
     void hoverRequested(QString filePath, int line, int character);
     void signatureHelpRequested(QString filePath, int line, int character);
+    void selectionRangeRequested(QString filePath, int line, int character);
 };
 
 

@@ -276,6 +276,37 @@ void Qalam::connectSignals()
             }
         }
     });
+    connect(m_languageClient, &BaaLanguageClient::foldingRangesPublished,
+            this, [this](const QString &filePath, int documentVersion,
+                         const QVector<BaaFoldingRange> &ranges) {
+        for (int index = 0; index < tabWidget->count(); ++index) {
+            TEditor *editor =
+                qobject_cast<TEditor*>(tabWidget->widget(index));
+            if (not editor or
+                editor->property("qalam.lsp.version").toInt() !=
+                    documentVersion)
+                continue;
+            const QString editorPath = QDir::cleanPath(
+                QFileInfo(editor->currentFilePath()).absoluteFilePath());
+            if (editorPath == QDir::cleanPath(filePath)) {
+                editor->setFoldingRanges(ranges);
+                return;
+            }
+        }
+    });
+    connect(m_languageClient, &BaaLanguageClient::selectionRangesPublished,
+            this, [this](const QString &filePath, int documentVersion,
+                         int line, int character,
+                         const QVector<BaaSelectionRange> &ranges) {
+        TEditor *editor = currentEditor();
+        if (not editor or
+            editor->property("qalam.lsp.version").toInt() != documentVersion)
+            return;
+        const QString editorPath = QDir::cleanPath(
+            QFileInfo(editor->currentFilePath()).absoluteFilePath());
+        if (editorPath != QDir::cleanPath(filePath)) return;
+        editor->applySemanticSelectionRanges(ranges, line, character);
+    });
     connect(m_languageClient, &BaaLanguageClient::completionPublished,
             this, &Qalam::handleLanguageCompletion);
     connect(m_languageClient, &BaaLanguageClient::hoverPublished,
@@ -1284,6 +1315,14 @@ bool Qalam::runCommandById(const QString &commandId)
     if (commandId == "code.rename") { renameSymbol(); return true; }
     if (commandId == "code.quickFix") { quickFix(); return true; }
     if (commandId == "code.format") { formatDocument(); return true; }
+    if (commandId == "code.expandSelection") {
+        if (TEditor *editor = currentEditor()) editor->expandSemanticSelection();
+        return true;
+    }
+    if (commandId == "code.shrinkSelection") {
+        if (TEditor *editor = currentEditor()) editor->shrinkSemanticSelection();
+        return true;
+    }
     if (commandId == "project.build") { buildTakweenProject(); return true; }
     if (commandId == "project.test") { testTakweenProject(); return true; }
     if (commandId == "run.baa") { runBaa(); return true; }
@@ -1869,6 +1908,16 @@ void Qalam::attachAnalysisToEditor(TEditor *editor)
             scheduleEditorAnalysis(editor);
             m_languageClient->requestSignatureHelp(filePath, line, character);
         });
+        connect(editor, &TEditor::selectionRangeRequested, this,
+                [this, editor](const QString &filePath,
+                               int line,
+                               int character) {
+            if (not m_languageClient or
+                not BaaLanguageClient::isBaaSourcePath(filePath)) return;
+            scheduleEditorAnalysis(editor);
+            m_languageClient->requestSelectionRanges(
+                filePath, line, character);
+        });
         connect(editor, &TEditor::quickFixRequested,
                 this, &Qalam::quickFix);
         connect(editor, &TEditor::formatRequested,
@@ -1887,6 +1936,7 @@ void Qalam::scheduleEditorAnalysis(TEditor *editor)
     if (!previousPath.isEmpty() and previousPath != normalizedPath) {
         m_languageClient->closeDocument(previousPath);
         editor->clearSemanticTokens();
+        editor->clearFoldingRanges();
         if (m_diagnosticsModel) {
             m_diagnosticsModel->replaceDiagnosticsFromSource("baa-lsp:" + previousPath, {});
         }
@@ -1894,6 +1944,7 @@ void Qalam::scheduleEditorAnalysis(TEditor *editor)
     editor->setProperty("qalam.lsp.path", normalizedPath);
     if (!BaaLanguageClient::isBaaSourcePath(filePath)) {
         editor->clearSemanticTokens();
+        editor->clearFoldingRanges();
         if (editor == currentEditor() and m_layoutManager and
             m_layoutManager->sidebar() and
             m_layoutManager->sidebar()->explorerView()) {
@@ -1914,7 +1965,10 @@ void Qalam::scheduleEditorAnalysis(TEditor *editor)
         editor->toPlainText(),
         editor->document()->revision(),
         workspaceRoot);
-    if (version != previousVersion) editor->clearSemanticTokens();
+    if (version != previousVersion) {
+        editor->clearSemanticTokens();
+        editor->useLocalFoldingRanges();
+    }
     editor->setProperty("qalam.lsp.version", version);
     if (editor == currentEditor() and m_layoutManager and
         m_layoutManager->sidebar() and
