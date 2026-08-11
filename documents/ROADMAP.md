@@ -312,7 +312,9 @@ One deferred item from Phase 2:
 **Cross-platform packaging receipt (2026-08-11):** Windows and Linux combined
 artifacts passed and were uploaded by
 [run 31506739091](https://github.com/OmarAglan/Qalam-IDE/actions/runs/31506739091).
-The workflow pins Baa-LSP commit `a3c1846421d3719bcc4d77fb75ab92b32b619876`.
+The current workflow pins Baa-LSP commit
+`c72997e88ad2e7ccd75c547bd49abedd68e133aa`; its combined artifacts passed in
+[run 31509433467](https://github.com/OmarAglan/Qalam-IDE/actions/runs/31509433467).
 - [ ] 7.2.2 Add `clang-format --dry-run --Werror` check step
 - [ ] 7.2.3 Add `clang-tidy` static analysis step
 - [ ] 7.2.4 Add build warnings as errors (`-Werror`) for CI builds
@@ -417,6 +419,10 @@ The workflow pins Baa-LSP commit `a3c1846421d3719bcc4d77fb75ab92b32b619876`.
 - [x] 9.1.17 Publish multiple dynamic Takween workspace folders and watched
   `مشروع.تكوين`/`تكوين.قفل` changes through standard LSP notifications without
   parsing project files in Qalam
+
+  Cross-platform receipt:
+  [Baa-LSP 31509393734](https://github.com/OmarAglan/Baa-LSP/actions/runs/31509393734)
+  and [Qalam 31509433467](https://github.com/OmarAglan/Qalam-IDE/actions/runs/31509433467).
 
 ### 9.2 Baa Language Server
 

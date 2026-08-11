@@ -254,7 +254,7 @@ The workflow pins Baa-LSP commit
 workspace folders and manifest/lock refresh.
 
 The admitted receipt is
-[run 31506739091](https://github.com/OmarAglan/Qalam-IDE/actions/runs/31506739091),
+[run 31509433467](https://github.com/OmarAglan/Qalam-IDE/actions/runs/31509433467),
 which uploaded `Qalam-win64` and `Qalam-linux-x86_64` after both jobs passed.
 
 ---
