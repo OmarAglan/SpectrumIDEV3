@@ -75,9 +75,10 @@ The first LSP slice now provides:
 
 The next language-intelligence gaps are dynamic workspace-folder refresh,
 compiler-owned inlay hints, telemetry-free structured server logs, and
-the hosted cross-platform packaging receipt. The package pipeline now places
-Baa-LSP at Qalam's built-in discovery path and verifies the combined Windows
-artifact without external Qt/MinGW paths. Qalam also restarts a crashed
+the versioned Baa SDK/tool distribution. Cross-platform packaging is admitted:
+the pipeline places Baa-LSP at Qalam's built-in discovery path, publishes
+combined Windows/Linux artifacts, and verifies the Windows package without
+external Qt/MinGW paths. Qalam also restarts a crashed
 Baa-LSP process with a
 bounded backoff, reopens the newest in-memory document versions, and suppresses
 automatic restart after three consecutive failures until the client is reset.

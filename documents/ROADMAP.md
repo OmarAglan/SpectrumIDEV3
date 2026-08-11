@@ -308,6 +308,11 @@ One deferred item from Phase 2:
 - [x] 7.2.1 Configure Linux CI with `QALAM_BUILD_TESTS=ON` and run `ctest --output-on-failure`
 - [x] 7.2.1a Verify the combined Windows Qalam + Baa-LSP package with Qt and
   MinGW paths removed; require Baa-LSP `--version` and Qalam startup
+
+**Cross-platform packaging receipt (2026-08-11):** Windows and Linux combined
+artifacts passed and were uploaded by
+[run 31506739091](https://github.com/OmarAglan/Qalam-IDE/actions/runs/31506739091).
+The workflow pins Baa-LSP commit `a3c1846421d3719bcc4d77fb75ab92b32b619876`.
 - [ ] 7.2.2 Add `clang-format --dry-run --Werror` check step
 - [ ] 7.2.3 Add `clang-tidy` static analysis step
 - [ ] 7.2.4 Add build warnings as errors (`-Werror`) for CI builds

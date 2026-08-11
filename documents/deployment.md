@@ -250,6 +250,10 @@ Both jobs build the pinned Baa-LSP revision and publish combined Qalam + Baa-LSP
 artifacts. Windows uploads a runtime-complete ZIP; Linux uploads a `.tar.gz`
 whose Qt libraries are provided by the target distribution.
 
+The admitted receipt is
+[run 31506739091](https://github.com/OmarAglan/Qalam-IDE/actions/runs/31506739091),
+which uploaded `Qalam-win64` and `Qalam-linux-x86_64` after both jobs passed.
+
 ---
 
 ## Known Issues / Next Work
