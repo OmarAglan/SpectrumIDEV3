@@ -249,6 +249,9 @@ The repository includes `.github/workflows/build.yml` for Windows and Linux.
 Both jobs build the pinned Baa-LSP revision and publish combined Qalam + Baa-LSP
 artifacts. Windows uploads a runtime-complete ZIP; Linux uploads a `.tar.gz`
 whose Qt libraries are provided by the target distribution.
+The workflow pins Baa-LSP commit
+`c72997e88ad2e7ccd75c547bd49abedd68e133aa`, including dynamic Takween
+workspace folders and manifest/lock refresh.
 
 The admitted receipt is
 [run 31506739091](https://github.com/OmarAglan/Qalam-IDE/actions/runs/31506739091),

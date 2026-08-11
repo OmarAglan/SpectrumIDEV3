@@ -61,6 +61,17 @@ bool shouldCrashAfterOpen()
     marker.close();
     return true;
 }
+
+void recordWorkspaceMessage(const QJsonObject &message)
+{
+    const QString path =
+        QString::fromUtf8(qgetenv("QALAM_FAKE_LSP_WORKSPACE_LOG"));
+    if (path.isEmpty()) return;
+    QFile log(path);
+    if (not log.open(QIODevice::WriteOnly | QIODevice::Append)) return;
+    log.write(QJsonDocument(message).toJson(QJsonDocument::Compact));
+    log.write("\n");
+}
 }
 
 int main(int argc, char *argv[])
@@ -96,6 +107,7 @@ int main(int argc, char *argv[])
             const QJsonObject params = message.value("params").toObject();
 
             if (method == "initialize") {
+                recordWorkspaceMessage(message);
                 send(output, QJsonObject{
                     {"jsonrpc", "2.0"}, {"id", id},
                     {"result", QJsonObject{
@@ -119,6 +131,12 @@ int main(int argc, char *argv[])
                                 {"full", true}
                             }},
                             {"workspaceSymbolProvider", true},
+                            {"workspace", QJsonObject{
+                                {"workspaceFolders", QJsonObject{
+                                    {"supported", true},
+                                    {"changeNotifications", true}
+                                }}
+                            }},
                             {"hoverProvider", true},
                             {"definitionProvider", true},
                             {"referencesProvider", true},
@@ -152,6 +170,9 @@ int main(int argc, char *argv[])
                 const int version = document.value("version").toInt();
                 publish(output, document.value("uri").toString(), version - 1);
                 publish(output, document.value("uri").toString(), version);
+            } else if (method == "workspace/didChangeWorkspaceFolders" or
+                       method == "workspace/didChangeWatchedFiles") {
+                recordWorkspaceMessage(message);
             } else if (method == "textDocument/documentSymbol") {
                 const QJsonObject range{
                     {"start", QJsonObject{{"line", 0}, {"character", 5}}},

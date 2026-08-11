@@ -1,12 +1,71 @@
 #include "BaaLanguageClient.h"
 
 #include <QDir>
+#include <QFile>
 #include <QFileInfo>
+#include <QJsonDocument>
 #include <QScopeGuard>
 #include <QTemporaryDir>
 #include <QTest>
+#include <QUrl>
 
 #include <algorithm>
+
+namespace {
+QList<QJsonObject> workspaceMessages(const QString &path)
+{
+    QFile file(path);
+    if (not file.open(QIODevice::ReadOnly)) return {};
+    QList<QJsonObject> messages;
+    for (const QByteArray &line : file.readAll().split('\n')) {
+        if (line.trimmed().isEmpty()) continue;
+        const QJsonDocument document = QJsonDocument::fromJson(line);
+        if (document.isObject()) messages.push_back(document.object());
+    }
+    return messages;
+}
+
+bool hasWorkspaceFolderChange(const QString &logPath,
+                              const QString &kind,
+                              const QString &uri)
+{
+    for (const QJsonObject &message : workspaceMessages(logPath)) {
+        if (message.value(QStringLiteral("method")).toString() !=
+            QStringLiteral("workspace/didChangeWorkspaceFolders"))
+            continue;
+        const QJsonArray folders =
+            message.value(QStringLiteral("params")).toObject()
+                .value(QStringLiteral("event")).toObject()
+                .value(kind).toArray();
+        for (const QJsonValue &folder : folders) {
+            if (folder.toObject().value(QStringLiteral("uri")).toString() == uri)
+                return true;
+        }
+    }
+    return false;
+}
+
+bool hasWatchedFileChange(const QString &logPath,
+                          const QString &uri,
+                          int type)
+{
+    for (const QJsonObject &message : workspaceMessages(logPath)) {
+        if (message.value(QStringLiteral("method")).toString() !=
+            QStringLiteral("workspace/didChangeWatchedFiles"))
+            continue;
+        const QJsonArray changes =
+            message.value(QStringLiteral("params")).toObject()
+                .value(QStringLiteral("changes")).toArray();
+        for (const QJsonValue &change : changes) {
+            const QJsonObject object = change.toObject();
+            if (object.value(QStringLiteral("uri")).toString() == uri and
+                object.value(QStringLiteral("type")).toInt() == type)
+                return true;
+        }
+    }
+    return false;
+}
+}
 
 #ifndef QALAM_FAKE_BAA_LSP_PATH
 #error QALAM_FAKE_BAA_LSP_PATH must be defined
@@ -19,6 +78,7 @@ private slots:
     void synchronizesDocumentsAndRejectsStaleDiagnostics();
     void restartsAfterUnexpectedExitAndReopensDocuments();
     void stopsRestartingAfterTheConfiguredLimit();
+    void publishesWorkspaceFolderAndManifestChanges();
     void rejectsNonBaaDocuments();
 };
 
@@ -514,6 +574,108 @@ void TestBaaLanguageClient::stopsRestartingAfterTheConfiguredLimit()
 
     client.stop();
     QCOMPARE(client.state(), BaaLanguageClient::State::Stopped);
+}
+
+void TestBaaLanguageClient::publishesWorkspaceFolderAndManifestChanges()
+{
+    QTemporaryDir temporary(QStringLiteral("qalam-lsp-workspaces-XXXXXX"));
+    QVERIFY(temporary.isValid());
+    const QString firstRoot = QDir(temporary.path()).filePath(
+        QStringLiteral("مشروع أول"));
+    const QString secondRoot = QDir(temporary.path()).filePath(
+        QStringLiteral("مشروع ثان"));
+    QVERIFY(QDir().mkpath(firstRoot));
+    QVERIFY(QDir().mkpath(secondRoot));
+
+    const QString firstSource = QDir(firstRoot).filePath(
+        QStringLiteral("الأول.baa"));
+    const QString secondSource = QDir(secondRoot).filePath(
+        QStringLiteral("الثاني.baa"));
+    const QString firstManifest = QDir(firstRoot).filePath(
+        QStringLiteral("مشروع.تكوين"));
+    const QString secondManifest = QDir(secondRoot).filePath(
+        QStringLiteral("مشروع.تكوين"));
+    for (const QString &path : {firstSource, secondSource,
+                                firstManifest, secondManifest}) {
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        file.write(path.endsWith(QStringLiteral(".baa"))
+                       ? "صحيح الرئيسية() { إرجع ٠. }\n"
+                       : "[المشروع]\nالاسم = \"تجربة\"\nالإصدار = \"1.0.0\"\n");
+    }
+
+    const QString logPath = QDir(temporary.path()).filePath(
+        QStringLiteral("workspace-events.jsonl"));
+    QVERIFY(qputenv("QALAM_FAKE_LSP_WORKSPACE_LOG", logPath.toUtf8()));
+    const auto clearEnvironment = qScopeGuard([]() {
+        qunsetenv("QALAM_FAKE_LSP_WORKSPACE_LOG");
+    });
+
+    BaaLanguageClient client;
+    client.setServerProgram(QString::fromUtf8(QALAM_FAKE_BAA_LSP_PATH));
+    QCOMPARE(client.synchronizeDocument(firstSource,
+                                         QStringLiteral("صحيح الأول() {}\n"),
+                                         1,
+                                         firstRoot),
+             1);
+    QTRY_COMPARE_WITH_TIMEOUT(client.state(),
+                              BaaLanguageClient::State::Ready,
+                              5000);
+
+    const QString firstRootUri = QUrl::fromLocalFile(
+        QDir::cleanPath(firstRoot)).toString();
+    QTRY_VERIFY_WITH_TIMEOUT(not workspaceMessages(logPath).isEmpty(), 5000);
+    const QJsonObject initialize = workspaceMessages(logPath).first();
+    QCOMPARE(initialize.value(QStringLiteral("method")).toString(),
+             QStringLiteral("initialize"));
+    const QJsonObject initializeParams =
+        initialize.value(QStringLiteral("params")).toObject();
+    QCOMPARE(initializeParams.value(QStringLiteral("workspaceFolders"))
+                 .toArray().size(),
+             1);
+    QCOMPARE(initializeParams.value(QStringLiteral("workspaceFolders"))
+                 .toArray().first().toObject()
+                 .value(QStringLiteral("uri")).toString(),
+             firstRootUri);
+    QVERIFY(initializeParams.value(QStringLiteral("capabilities")).toObject()
+                .value(QStringLiteral("workspace")).toObject()
+                .value(QStringLiteral("workspaceFolders")).toBool(false));
+
+    QCOMPARE(client.synchronizeDocument(secondSource,
+                                         QStringLiteral("صحيح الثاني() {}\n"),
+                                         1,
+                                         secondRoot),
+             1);
+    const QString secondRootUri = QUrl::fromLocalFile(
+        QDir::cleanPath(secondRoot)).toString();
+    QTRY_VERIFY_WITH_TIMEOUT(hasWorkspaceFolderChange(
+                                 logPath,
+                                 QStringLiteral("added"),
+                                 secondRootUri),
+                             5000);
+
+    {
+        QFile manifest(secondManifest);
+        QVERIFY(manifest.open(QIODevice::WriteOnly | QIODevice::Append));
+        manifest.write("\n[البناء]\nالمخرج = \"بناء\"\n");
+    }
+    QTRY_VERIFY_WITH_TIMEOUT(hasWatchedFileChange(
+                                 logPath,
+                                 QUrl::fromLocalFile(secondManifest).toString(),
+                                 2),
+                             5000);
+
+    client.closeDocument(secondSource);
+    QTRY_VERIFY_WITH_TIMEOUT(hasWorkspaceFolderChange(
+                                 logPath,
+                                 QStringLiteral("removed"),
+                                 secondRootUri),
+                             5000);
+    client.closeDocument(firstSource);
+    client.stop();
+    QTRY_COMPARE_WITH_TIMEOUT(client.state(),
+                              BaaLanguageClient::State::Stopped,
+                              5000);
 }
 
 QTEST_MAIN(TestBaaLanguageClient)

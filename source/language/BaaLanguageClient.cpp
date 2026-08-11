@@ -46,6 +46,15 @@ BaaLanguageClient::BaaLanguageClient(QObject *parent)
     connect(&m_changeTimer, &QTimer::timeout,
             this, &BaaLanguageClient::flushDocumentChanges);
 
+    connect(&m_workspaceWatcher, &QFileSystemWatcher::fileChanged,
+            this, &BaaLanguageClient::handleWorkspaceWatchPath);
+    connect(&m_workspaceWatcher, &QFileSystemWatcher::directoryChanged,
+            this, &BaaLanguageClient::handleWorkspaceWatchPath);
+    m_workspaceWatchTimer.setSingleShot(true);
+    m_workspaceWatchTimer.setInterval(100);
+    connect(&m_workspaceWatchTimer, &QTimer::timeout,
+            this, &BaaLanguageClient::flushWatchedFileChanges);
+
     m_stopTimer.setSingleShot(true);
     m_stopTimer.setInterval(750);
     connect(&m_stopTimer, &QTimer::timeout, this, [this]() {
@@ -62,7 +71,7 @@ BaaLanguageClient::BaaLanguageClient(QObject *parent)
             setState(State::Stopped);
             return;
         }
-        ensureStarted(m_workspaceRoot);
+        ensureStarted();
     });
 
     m_restartResetTimer.setSingleShot(true);
@@ -88,20 +97,32 @@ int BaaLanguageClient::synchronizeDocument(const QString &filePath,
 {
     if (not isBaaSourcePath(filePath)) return 0;
     const QString path = normalizedFilePath(filePath);
-    ensureStarted(workspaceRoot.isEmpty() ? QFileInfo(path).absolutePath() : workspaceRoot);
+    const QString root = normalizedFilePath(
+        workspaceRoot.isEmpty() ? QFileInfo(path).absolutePath() : workspaceRoot);
 
     auto it = m_documents.find(path);
     if (it == m_documents.end()) {
         Document document;
         document.filePath = path;
         document.uri = QUrl::fromLocalFile(path).toString();
+        document.workspaceRoot = root;
         document.text = text;
         document.editorRevision = editorRevision;
         document.version = 1;
+        retainWorkspaceRoot(root);
         it = m_documents.insert(path, document);
+        ensureStarted();
         if (m_state == State::Ready) sendDidOpen(it.value());
         return it->version;
     }
+
+    if (it->workspaceRoot != root) {
+        const QString previousRoot = it->workspaceRoot;
+        retainWorkspaceRoot(root);
+        it->workspaceRoot = root;
+        releaseWorkspaceRoot(previousRoot);
+    }
+    ensureStarted();
 
     if (it->text == text and it->editorRevision == editorRevision) return it->version;
     cancelPendingSymbolRequests(path);
@@ -466,7 +487,9 @@ void BaaLanguageClient::closeDocument(const QString &filePath)
             }}
         });
     }
+    const QString workspaceRoot = it->workspaceRoot;
     m_documents.erase(it);
+    releaseWorkspaceRoot(workspaceRoot);
     m_documentSymbols.remove(path);
     m_symbolRequestedVersions.remove(path);
     m_tokenRequestedVersions.remove(path);
@@ -476,6 +499,8 @@ void BaaLanguageClient::closeDocument(const QString &filePath)
 void BaaLanguageClient::stop()
 {
     m_changeTimer.stop();
+    m_workspaceWatchTimer.stop();
+    m_pendingWatchedFileChanges.clear();
     m_restartTimer.stop();
     m_restartResetTimer.stop();
     m_restartAttempts = 0;
@@ -561,7 +586,7 @@ void BaaLanguageClient::flushDocumentChanges()
     }
 }
 
-void BaaLanguageClient::ensureStarted(const QString &workspaceRoot)
+void BaaLanguageClient::ensureStarted()
 {
     if (m_restartTimer.isActive() or m_restartSuppressed) return;
     if (m_process and m_process->state() != QProcess::NotRunning) return;
@@ -572,9 +597,6 @@ void BaaLanguageClient::ensureStarted(const QString &workspaceRoot)
         return;
     }
 
-    m_workspaceRoot = workspaceRoot.isEmpty()
-        ? QString()
-        : QDir::cleanPath(QFileInfo(workspaceRoot).absoluteFilePath());
     m_framer.clear();
     m_initializeRequestId = 0;
     m_shutdownRequestId = 0;
@@ -694,11 +716,193 @@ void BaaLanguageClient::sendJson(const QJsonObject &message)
     m_process->write(LspMessageFramer::frame(body));
 }
 
+void BaaLanguageClient::retainWorkspaceRoot(const QString &workspaceRoot)
+{
+    if (workspaceRoot.isEmpty()) return;
+    auto existing = m_workspaceRootReferences.find(workspaceRoot);
+    if (existing != m_workspaceRootReferences.end()) {
+        ++existing.value();
+        return;
+    }
+
+    m_workspaceRootReferences.insert(workspaceRoot, 1);
+    watchWorkspaceRoot(workspaceRoot);
+    if (m_state == State::Ready and m_workspaceFoldersSupported) {
+        sendWorkspaceFolderChanges({workspaceRoot}, {});
+    }
+}
+
+void BaaLanguageClient::releaseWorkspaceRoot(const QString &workspaceRoot)
+{
+    auto existing = m_workspaceRootReferences.find(workspaceRoot);
+    if (existing == m_workspaceRootReferences.end()) return;
+    if (--existing.value() > 0) return;
+
+    m_workspaceRootReferences.erase(existing);
+    unwatchWorkspaceRoot(workspaceRoot);
+    if (m_state == State::Ready and m_workspaceFoldersSupported and
+        m_serverWorkspaceRoots.contains(workspaceRoot)) {
+        sendWorkspaceFolderChanges({}, {workspaceRoot});
+    } else {
+        m_serverWorkspaceRoots.remove(workspaceRoot);
+    }
+}
+
+QStringList BaaLanguageClient::workspaceRoots() const
+{
+    QStringList roots = m_workspaceRootReferences.keys();
+    std::sort(roots.begin(), roots.end(), [](const QString &left,
+                                             const QString &right) {
+        const int insensitive = QString::compare(
+            left, right, Qt::CaseInsensitive);
+        return insensitive == 0 ? left < right : insensitive < 0;
+    });
+    return roots;
+}
+
+QJsonObject BaaLanguageClient::workspaceFolder(
+    const QString &workspaceRoot) const
+{
+    QString name = QFileInfo(workspaceRoot).fileName();
+    if (name.isEmpty()) name = QDir(workspaceRoot).dirName();
+    if (name.isEmpty()) name = workspaceRoot;
+    return QJsonObject{
+        {QStringLiteral("uri"), QUrl::fromLocalFile(workspaceRoot).toString()},
+        {QStringLiteral("name"), name}
+    };
+}
+
+void BaaLanguageClient::sendWorkspaceFolderChanges(
+    const QStringList &added,
+    const QStringList &removed)
+{
+    if (added.isEmpty() and removed.isEmpty()) return;
+    QJsonArray addedFolders;
+    for (const QString &root : added) {
+        addedFolders.append(workspaceFolder(root));
+        m_serverWorkspaceRoots.insert(root);
+    }
+    QJsonArray removedFolders;
+    for (const QString &root : removed) {
+        removedFolders.append(workspaceFolder(root));
+        m_serverWorkspaceRoots.remove(root);
+    }
+    sendNotification(QStringLiteral("workspace/didChangeWorkspaceFolders"),
+                     QJsonObject{
+                         {QStringLiteral("event"), QJsonObject{
+                             {QStringLiteral("added"), addedFolders},
+                             {QStringLiteral("removed"), removedFolders}
+                         }}
+                     });
+}
+
+void BaaLanguageClient::watchWorkspaceRoot(const QString &workspaceRoot)
+{
+    if (QFileInfo(workspaceRoot).isDir() and
+        not m_workspaceWatcher.directories().contains(workspaceRoot)) {
+        m_workspaceWatcher.addPath(workspaceRoot);
+    }
+    const QStringList names{
+        QStringLiteral("مشروع.تكوين"),
+        QStringLiteral("تكوين.قفل")
+    };
+    for (const QString &name : names) {
+        const QString path = QDir(workspaceRoot).filePath(name);
+        const bool exists = QFileInfo(path).isFile();
+        m_watchedFileExistence.insert(path, exists);
+        if (exists and not m_workspaceWatcher.files().contains(path))
+            m_workspaceWatcher.addPath(path);
+    }
+}
+
+void BaaLanguageClient::unwatchWorkspaceRoot(const QString &workspaceRoot)
+{
+    if (m_workspaceWatcher.directories().contains(workspaceRoot))
+        m_workspaceWatcher.removePath(workspaceRoot);
+    const QStringList names{
+        QStringLiteral("مشروع.تكوين"),
+        QStringLiteral("تكوين.قفل")
+    };
+    for (const QString &name : names) {
+        const QString path = QDir(workspaceRoot).filePath(name);
+        if (m_workspaceWatcher.files().contains(path))
+            m_workspaceWatcher.removePath(path);
+        m_watchedFileExistence.remove(path);
+        m_pendingWatchedFileChanges.remove(path);
+    }
+}
+
+void BaaLanguageClient::handleWorkspaceWatchPath(const QString &changedPath)
+{
+    const QString path = normalizedFilePath(changedPath);
+    if (m_workspaceRootReferences.contains(path)) {
+        const QStringList names{
+            QStringLiteral("مشروع.تكوين"),
+            QStringLiteral("تكوين.قفل")
+        };
+        for (const QString &name : names) {
+            const QString filePath = QDir(path).filePath(name);
+            const bool existed = m_watchedFileExistence.value(filePath, false);
+            const bool exists = QFileInfo(filePath).isFile();
+            m_watchedFileExistence.insert(filePath, exists);
+            if (exists and not m_workspaceWatcher.files().contains(filePath))
+                m_workspaceWatcher.addPath(filePath);
+            if (exists != existed)
+                sendWatchedFileChange(filePath, exists ? 1 : 3);
+        }
+        return;
+    }
+
+    auto watched = m_watchedFileExistence.find(path);
+    if (watched == m_watchedFileExistence.end()) return;
+    const bool existed = watched.value();
+    const bool exists = QFileInfo(path).isFile();
+    watched.value() = exists;
+    if (exists and not m_workspaceWatcher.files().contains(path))
+        m_workspaceWatcher.addPath(path);
+    sendWatchedFileChange(path, exists ? (existed ? 2 : 1) : 3);
+}
+
+void BaaLanguageClient::sendWatchedFileChange(const QString &path, int type)
+{
+    const int pending = m_pendingWatchedFileChanges.value(path, 0);
+    if ((pending == 3 and type == 1) or
+        (pending == 1 and type == 3)) {
+        type = 2;
+    }
+    m_pendingWatchedFileChanges.insert(path, type);
+    m_workspaceWatchTimer.start();
+}
+
+void BaaLanguageClient::flushWatchedFileChanges()
+{
+    if (m_state != State::Ready) {
+        m_pendingWatchedFileChanges.clear();
+        return;
+    }
+    QStringList paths = m_pendingWatchedFileChanges.keys();
+    std::sort(paths.begin(), paths.end());
+    QJsonArray changes;
+    for (const QString &path : paths) {
+        changes.append(QJsonObject{
+            {QStringLiteral("uri"), QUrl::fromLocalFile(path).toString()},
+            {QStringLiteral("type"), m_pendingWatchedFileChanges.value(path)}
+        });
+    }
+    m_pendingWatchedFileChanges.clear();
+    if (changes.isEmpty()) return;
+    sendNotification(QStringLiteral("workspace/didChangeWatchedFiles"),
+                     QJsonObject{
+                         {QStringLiteral("changes"), changes}
+                     });
+}
+
 void BaaLanguageClient::sendInitialize()
 {
-    const QString rootUri = m_workspaceRoot.isEmpty()
+    const QStringList roots = workspaceRoots();
+    const QString rootUri = roots.isEmpty()
         ? QString()
-        : QUrl::fromLocalFile(m_workspaceRoot).toString();
+        : QUrl::fromLocalFile(roots.first()).toString();
     QJsonObject params{
         {QStringLiteral("processId"), static_cast<qint64>(QCoreApplication::applicationPid())},
         {QStringLiteral("clientInfo"), QJsonObject{
@@ -711,6 +915,10 @@ void BaaLanguageClient::sendInitialize()
                 {QStringLiteral("positionEncodings"), QJsonArray{QStringLiteral("utf-16")}}
             }},
             {QStringLiteral("workspace"), QJsonObject{
+                {QStringLiteral("workspaceFolders"), true},
+                {QStringLiteral("didChangeWatchedFiles"), QJsonObject{
+                    {QStringLiteral("dynamicRegistration"), false}
+                }},
                 {QStringLiteral("workspaceEdit"), QJsonObject{
                     {QStringLiteral("documentChanges"), true}
                 }},
@@ -797,12 +1005,13 @@ void BaaLanguageClient::sendInitialize()
             }}
         }}
     };
-    if (not rootUri.isEmpty()) {
-        params.insert(QStringLiteral("workspaceFolders"), QJsonArray{
-            QJsonObject{{QStringLiteral("uri"), rootUri},
-                        {QStringLiteral("name"), QFileInfo(m_workspaceRoot).fileName()}}
-        });
+    QJsonArray folders;
+    for (const QString &root : roots) folders.append(workspaceFolder(root));
+    if (not folders.isEmpty()) {
+        params.insert(QStringLiteral("workspaceFolders"), folders);
     }
+    m_serverWorkspaceRoots.clear();
+    for (const QString &root : roots) m_serverWorkspaceRoots.insert(root);
     m_initializeRequestId = sendRequest(QStringLiteral("initialize"), params);
 }
 
@@ -1025,6 +1234,19 @@ void BaaLanguageClient::handleResponse(const QJsonObject &message)
             capabilities.value(QStringLiteral("workspaceSymbolProvider"));
         m_workspaceSymbolProvider = workspaceSymbolProvider.isObject() or
             workspaceSymbolProvider.toBool(false);
+        const QJsonObject workspaceFolders =
+            capabilities.value(QStringLiteral("workspace"))
+                .toObject()
+                .value(QStringLiteral("workspaceFolders"))
+                .toObject();
+        const QJsonValue changeNotifications =
+            workspaceFolders.value(QStringLiteral("changeNotifications"));
+        m_workspaceFoldersSupported =
+            workspaceFolders.value(QStringLiteral("supported")).toBool(false) and
+            ((changeNotifications.isBool() and
+              changeNotifications.toBool(false)) or
+             (changeNotifications.isString() and
+              not changeNotifications.toString().isEmpty()));
         const QJsonValue completionProvider =
             capabilities.value(QStringLiteral("completionProvider"));
         m_completionProvider = completionProvider.isObject() or
@@ -1062,6 +1284,21 @@ void BaaLanguageClient::handleResponse(const QJsonObject &message)
                 .value(QStringLiteral("prepareProvider")).toBool(false);
         sendNotification(QStringLiteral("initialized"), QJsonObject{});
         setState(State::Ready);
+        if (m_workspaceFoldersSupported) {
+            const QStringList roots = workspaceRoots();
+            QSet<QString> currentRoots;
+            for (const QString &root : roots) currentRoots.insert(root);
+            QStringList added;
+            for (const QString &root : roots) {
+                if (not m_serverWorkspaceRoots.contains(root)) added.push_back(root);
+            }
+            QStringList removed;
+            for (const QString &root : m_serverWorkspaceRoots) {
+                if (not currentRoots.contains(root)) removed.push_back(root);
+            }
+            std::sort(removed.begin(), removed.end());
+            sendWorkspaceFolderChanges(added, removed);
+        }
         if (m_restartAttempts > 0) {
             m_restartResetTimer.start(m_restartResetAfterMilliseconds);
         }
@@ -1958,6 +2195,10 @@ void BaaLanguageClient::clearServerSession()
     m_foldingRangeProvider = false;
     m_selectionRangeProvider = false;
     m_workspaceSymbolProvider = false;
+    m_workspaceFoldersSupported = false;
+    m_serverWorkspaceRoots.clear();
+    m_workspaceWatchTimer.stop();
+    m_pendingWatchedFileChanges.clear();
     m_completionProvider = false;
     m_hoverProvider = false;
     m_signatureHelpProvider = false;

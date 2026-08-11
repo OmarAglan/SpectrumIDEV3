@@ -15,6 +15,7 @@
 #include "LspMessageFramer.h"
 
 #include <QHash>
+#include <QFileSystemWatcher>
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QObject>
@@ -175,6 +176,7 @@ private:
     {
         QString filePath;
         QString uri;
+        QString workspaceRoot;
         QString text;
         int editorRevision{};
         int version{};
@@ -230,7 +232,7 @@ private:
         QString newName;
     };
 
-    void ensureStarted(const QString &workspaceRoot);
+    void ensureStarted();
     QString resolveServerProgram() const;
     QString resolveCompilerProgram() const;
     void setState(State state);
@@ -240,6 +242,17 @@ private:
     void sendJson(const QJsonObject &message);
     void sendInitialize();
     void sendDidOpen(Document &document);
+    void retainWorkspaceRoot(const QString &workspaceRoot);
+    void releaseWorkspaceRoot(const QString &workspaceRoot);
+    QStringList workspaceRoots() const;
+    QJsonObject workspaceFolder(const QString &workspaceRoot) const;
+    void sendWorkspaceFolderChanges(const QStringList &added,
+                                    const QStringList &removed);
+    void watchWorkspaceRoot(const QString &workspaceRoot);
+    void unwatchWorkspaceRoot(const QString &workspaceRoot);
+    void handleWorkspaceWatchPath(const QString &path);
+    void sendWatchedFileChange(const QString &path, int type);
+    void flushWatchedFileChanges();
     void cancelPendingSymbolRequests(const QString &filePath);
     void cancelPendingTokenRequests(const QString &filePath);
     void cancelPendingFoldingRequests(const QString &filePath);
@@ -287,11 +300,16 @@ private:
     QString m_serverProgram;
     QString m_compilerProgram;
     QString m_takweenProgram;
-    QString m_workspaceRoot;
     State m_state{State::Stopped};
     QPointer<QProcess> m_process;
     LspMessageFramer m_framer;
     QHash<QString, Document> m_documents;
+    QHash<QString, int> m_workspaceRootReferences;
+    QSet<QString> m_serverWorkspaceRoots;
+    QHash<QString, bool> m_watchedFileExistence;
+    QHash<QString, int> m_pendingWatchedFileChanges;
+    QFileSystemWatcher m_workspaceWatcher;
+    QTimer m_workspaceWatchTimer;
     QHash<QString, QVector<BaaDocumentSymbol>> m_documentSymbols;
     QHash<QString, int> m_symbolRequestedVersions;
     QHash<qint64, PendingSymbolRequest> m_pendingSymbolRequests;
@@ -319,6 +337,7 @@ private:
     bool m_selectionRangeProvider{};
     QStringList m_semanticTokenTypes;
     bool m_workspaceSymbolProvider{};
+    bool m_workspaceFoldersSupported{};
     bool m_completionProvider{};
     bool m_hoverProvider{};
     bool m_signatureHelpProvider{};

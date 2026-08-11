@@ -414,6 +414,9 @@ The workflow pins Baa-LSP commit `a3c1846421d3719bcc4d77fb75ab92b32b619876`.
 - [x] 9.1.16 Recover from an unexpected Baa-LSP exit with capped exponential
   backoff, reopen the newest unsaved document versions, reset the budget only
   after stable service, and stop after three consecutive restart attempts
+- [x] 9.1.17 Publish multiple dynamic Takween workspace folders and watched
+  `مشروع.تكوين`/`تكوين.قفل` changes through standard LSP notifications without
+  parsing project files in Qalam
 
 ### 9.2 Baa Language Server
 
