@@ -3,6 +3,8 @@ param(
     [string]$BuildDir = 'build/windows-release',
     [string]$PackageDir = 'dist/Qalam-win64',
     [string]$ZipPath = 'dist/Qalam-win64.zip',
+    [string]$BaaLspExecutable = $env:QALAM_BAA_LSP_PATH,
+    [switch]$SkipLanguageServer,
     [switch]$SkipBuild
 )
 
@@ -69,13 +71,55 @@ if ($LASTEXITCODE -ne 0) {
 # runtime recorded by CMake for this build instead.
 Copy-Item $compilerRuntimeDlls $PackageDir -Force
 
+$packagedLanguageServer = $null
+if (!$SkipLanguageServer) {
+    $serverCandidates = [System.Collections.Generic.List[string]]::new()
+    if ($BaaLspExecutable) { $serverCandidates.Add($BaaLspExecutable) }
+    $serverCandidates.Add('..\Baa-LSP\build\windows-release\baa-lsp.exe')
+    $serverCandidates.Add('..\Baa-LSP\build\ci-admission\baa-lsp.exe')
+    $serverCandidates.Add('ecosystem\Baa-LSP\build\windows-release\baa-lsp.exe')
+    $serverCandidates.Add('Baa-LSP\build\windows-release\baa-lsp.exe')
+    $pathServer = Get-Command baa-lsp.exe -ErrorAction SilentlyContinue
+    if ($pathServer) { $serverCandidates.Add($pathServer.Source) }
+
+    $resolvedServer = $serverCandidates |
+        Where-Object { $_ -and (Test-Path -LiteralPath $_ -PathType Leaf) } |
+        ForEach-Object { (Resolve-Path -LiteralPath $_).Path } |
+        Select-Object -First 1
+    if (!$resolvedServer) {
+        throw @'
+Baa-LSP was not found, so a complete Qalam package cannot be created.
+Build the sibling Baa-LSP repository, pass -BaaLspExecutable, set
+QALAM_BAA_LSP_PATH, or use -SkipLanguageServer only for an intentional UI-only
+development package.
+'@
+    }
+
+    $serverDirectory = Join-Path $PackageDir 'baa-lsp'
+    New-Item -ItemType Directory -Path $serverDirectory -Force | Out-Null
+    $packagedLanguageServer = Join-Path $serverDirectory 'baa-lsp.exe'
+    Copy-Item -LiteralPath $resolvedServer -Destination $packagedLanguageServer -Force
+}
+
 # Optional: bundle the Baa compiler if the repository contains a local compiler folder.
 if (Test-Path 'baa') {
     Copy-Item 'baa' (Join-Path $PackageDir 'baa') -Recurse -Force
 }
+
+$runtimeTestArguments = @{
+    Executable = (Join-Path $PackageDir 'Qalam.exe')
+    StartupSeconds = 1
+}
+if ($packagedLanguageServer) {
+    $runtimeTestArguments.LanguageServer = $packagedLanguageServer
+}
+& (Join-Path $PSScriptRoot 'test-windows-runtime.ps1') @runtimeTestArguments
 
 if (Test-Path $ZipPath) { Remove-Item $ZipPath -Force }
 Compress-Archive -Path (Join-Path $PackageDir '*') -DestinationPath $ZipPath
 
 Write-Host "Packaged Qalam successfully:" -ForegroundColor Green
 Write-Host "  $ZipPath"
+if ($packagedLanguageServer) {
+    Write-Host "  Baa-LSP: $packagedLanguageServer"
+}

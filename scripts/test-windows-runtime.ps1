@@ -2,6 +2,8 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$Executable,
 
+    [string]$LanguageServer = '',
+
     [int]$StartupSeconds = 2
 )
 
@@ -42,6 +44,32 @@ $env:Path = "$windowsDirectory\System32;$windowsDirectory"
 $env:QT_QPA_PLATFORM = 'offscreen'
 $process = $null
 try {
+    if ($LanguageServer) {
+        $resolvedLanguageServer = (Resolve-Path -LiteralPath $LanguageServer).Path
+        $probeInfo = [System.Diagnostics.ProcessStartInfo]::new()
+        $probeInfo.FileName = $resolvedLanguageServer
+        $probeInfo.Arguments = '--version'
+        $probeInfo.UseShellExecute = $false
+        $probeInfo.CreateNoWindow = $true
+        $probeInfo.RedirectStandardOutput = $true
+        $probeInfo.RedirectStandardError = $true
+        $probe = [System.Diagnostics.Process]::new()
+        $probe.StartInfo = $probeInfo
+        if (!$probe.Start()) {
+            throw 'Bundled Baa-LSP could not be started.'
+        }
+        $probeOutput = $probe.StandardOutput.ReadToEnd()
+        $probeError = $probe.StandardError.ReadToEnd()
+        $probe.WaitForExit()
+        if ($probe.ExitCode -ne 0) {
+            throw "Bundled Baa-LSP failed with exit code $($probe.ExitCode): $probeError"
+        }
+        if (("$probeOutput`n$probeError") -notmatch 'Baa-LSP') {
+            throw 'Bundled language server did not identify itself as Baa-LSP.'
+        }
+        $probe.Dispose()
+    }
+
     $process = Start-Process -FilePath $resolvedExecutable `
         -WindowStyle Hidden `
         -PassThru
@@ -58,4 +86,8 @@ try {
     $env:QT_QPA_PLATFORM = $previousPlatform
 }
 
-Write-Host 'Qalam started without external Qt or MinGW runtime paths.' -ForegroundColor Green
+if ($LanguageServer) {
+    Write-Host 'Qalam and its bundled language server passed the isolated runtime check.' -ForegroundColor Green
+} else {
+    Write-Host 'Qalam started without external Qt or MinGW runtime paths.' -ForegroundColor Green
+}

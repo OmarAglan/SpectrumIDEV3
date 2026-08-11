@@ -53,7 +53,8 @@ The bootstrap script does the full local setup:
 5. Selects the MinGW toolchain installed for that Qt kit; an unrelated `g++.exe`
    already present on `PATH` is not accepted as the kit compiler.
 6. Builds Qalam.
-7. Runs the packaging script to create a portable ZIP.
+7. Builds Baa-LSP from a sibling checkout (or consumes an explicit executable).
+8. Runs the packaging and isolated-runtime checks to create a portable ZIP.
 
 Outputs:
 
@@ -68,17 +69,25 @@ Useful options:
 .\scripts\bootstrap-windows.ps1 -QtRoot "D:\Qt"
 .\scripts\bootstrap-windows.ps1 -SkipWinget
 .\scripts\bootstrap-windows.ps1 -SkipQtInstall -QtRoot "C:\Qt"
+.\scripts\bootstrap-windows.ps1 -BuildDir "build\fresh-package"
+.\scripts\bootstrap-windows.ps1 -BaaLspSourceDir "..\Baa-LSP"
+.\scripts\bootstrap-windows.ps1 -BaaLspExecutable "D:\tools\baa-lsp.exe"
 ```
 
 The packaging script runs `windeployqt.exe` for Qt libraries and plugins, then
 copies the exact MinGW runtime recorded in the build's `CMakeCache.txt`.
-It never selects compiler DLLs from the caller's `PATH`.
+It never selects compiler DLLs from the caller's `PATH`. A production package
+also requires Baa-LSP and copies it to `baa-lsp/baa-lsp.exe`, the path Qalam
+discovers automatically. `-SkipLanguageServer` exists only for an intentional
+UI-only development package.
 
 To verify a built or packaged executable with no Qt or MinGW directories on
 `PATH`:
 
 ```powershell
-.\scripts\test-windows-runtime.ps1 -Executable .\dist\Qalam-win64\Qalam.exe
+.\scripts\test-windows-runtime.ps1 `
+  -Executable .\dist\Qalam-win64\Qalam.exe `
+  -LanguageServer .\dist\Qalam-win64\baa-lsp\baa-lsp.exe
 ```
 
 ### Option B: manual PowerShell scripts
@@ -90,7 +99,8 @@ Use this when Qt 6 with the MinGW kit is already installed:
 $env:QALAM_QT_DIR = "C:\Qt\6.10.2\mingw_64"
 
 .\scripts\build-windows.ps1 -Configuration Release
-.\scripts\package-windows.ps1 -SkipBuild
+.\scripts\package-windows.ps1 -SkipBuild `
+  -BaaLspExecutable "..\Baa-LSP\build\windows-release\baa-lsp.exe"
 ```
 
 ### Option C: CMake presets
@@ -235,7 +245,10 @@ mingw32-make -j
 
 ## Continuous Integration
 
-The repository includes `.github/workflows/build.yml` for Windows and Linux builds. It installs Python, downloads Qt with `aqtinstall`, builds the project, and uploads the Windows portable ZIP as a workflow artifact.
+The repository includes `.github/workflows/build.yml` for Windows and Linux.
+Both jobs build the pinned Baa-LSP revision and publish combined Qalam + Baa-LSP
+artifacts. Windows uploads a runtime-complete ZIP; Linux uploads a `.tar.gz`
+whose Qt libraries are provided by the target distribution.
 
 ---
 
@@ -245,7 +258,11 @@ The repository includes `.github/workflows/build.yml` for Windows and Linux buil
 2. **Windows terminal:** The embedded terminal starts `cmd.exe` using UTF-8 code page setup, but a future terminal layer should support PowerShell and better ANSI color rendering.
 3. **CI:** Windows and Linux GitHub Actions builds are included; macOS CI packaging can be added later.
 4. **Packaging installer:** Current Windows packaging creates a portable ZIP. A proper installer can be added later with Qt Installer Framework or another installer system.
-5. **Baa compiler bundling:** `scripts/package-windows.ps1` copies a local `baa/` folder if present. If the compiler lives in another repository, the release process should fetch or build it first.
+5. **Baa SDK distribution:** Baa-LSP is bundled now, but Baa, Nazm, `baalib`,
+   target files, and Takween belong to the separate versioned SDK/tool
+   environment. Until that track lands, users select an installed compiler and
+   Takween through discovery/settings rather than receiving an unversioned copy
+   inside the Qalam archive.
 
 ---
 

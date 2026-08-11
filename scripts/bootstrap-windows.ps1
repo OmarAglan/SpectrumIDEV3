@@ -8,6 +8,8 @@ param(
 
     [string]$QtRoot = 'C:\Qt',
 
+    [string]$BuildDir = '',
+
     [switch]$NoPackage,
 
     [switch]$BuildTests,
@@ -16,7 +18,13 @@ param(
 
     [switch]$SkipQtInstall,
 
-    [switch]$ForceQtInstall
+    [switch]$ForceQtInstall,
+
+    [string]$BaaLspSourceDir = '',
+
+    [string]$BaaLspExecutable = $env:QALAM_BAA_LSP_PATH,
+
+    [switch]$SkipLanguageServer
 )
 
 $ErrorActionPreference = 'Stop'
@@ -345,6 +353,10 @@ if (!(Get-CommandOrNull 'cmake.exe')) { throw 'CMake is required but was not fou
 $resolvedQtRoot = Install-QtIfNeeded
 $mingwBin = Install-MingwIfNeeded
 
+if (!$BuildDir) {
+    $BuildDir = "build/windows-$($Configuration.ToLowerInvariant())"
+}
+
 $env:QALAM_QT_DIR = $resolvedQtRoot
 $env:PATH = "$mingwBin;$resolvedQtRoot\bin;$env:PATH"
 
@@ -352,15 +364,57 @@ Write-Step 'Building Qalam IDE'
 & (Join-Path $PSScriptRoot 'build-windows.ps1') `
     -Configuration $Configuration `
     -QtRoot $resolvedQtRoot `
+    -BuildDir $BuildDir `
     -BuildTests:$BuildTests
 
 if (!$NoPackage) {
+    if (!$SkipLanguageServer -and !$BaaLspExecutable) {
+        $sourceCandidates = [System.Collections.Generic.List[string]]::new()
+        if ($BaaLspSourceDir) { $sourceCandidates.Add($BaaLspSourceDir) }
+        $sourceCandidates.Add((Join-Path (Get-Location) '..\Baa-LSP'))
+        $sourceCandidates.Add((Join-Path (Get-Location) 'ecosystem\Baa-LSP'))
+        $resolvedServerSource = $sourceCandidates |
+            Where-Object {
+                $_ -and (Test-Path -LiteralPath (Join-Path $_ 'CMakeLists.txt')) -and
+                (Test-Path -LiteralPath (Join-Path $_ 'scripts\build-windows.ps1'))
+            } |
+            ForEach-Object { (Resolve-Path -LiteralPath $_).Path } |
+            Select-Object -First 1
+        if (!$resolvedServerSource) {
+            throw @'
+Baa-LSP source was not found. A production Qalam package includes the language
+server. Clone it beside Qalam, pass -BaaLspSourceDir/-BaaLspExecutable, or use
+-SkipLanguageServer only for an intentional UI-only development package.
+'@
+        }
+
+        Write-Step 'Building the bundled Baa-LSP server'
+        Push-Location $resolvedServerSource
+        try {
+            & (Join-Path $resolvedServerSource 'scripts\build-windows.ps1') `
+                -Configuration $Configuration `
+                -BuildDir "build/windows-$($Configuration.ToLowerInvariant())" `
+                -MingwBin $mingwBin `
+                -SkipTests
+        } finally {
+            Pop-Location
+        }
+        $BaaLspExecutable = (Resolve-Path -LiteralPath (
+            Join-Path $resolvedServerSource (
+                "build/windows-$($Configuration.ToLowerInvariant())/baa-lsp.exe"))).Path
+    }
+
     Write-Step 'Packaging portable Windows ZIP'
-    & (Join-Path $PSScriptRoot 'package-windows.ps1') -QtRoot $resolvedQtRoot -BuildDir "build/windows-$($Configuration.ToLowerInvariant())" -SkipBuild
+    & (Join-Path $PSScriptRoot 'package-windows.ps1') `
+        -QtRoot $resolvedQtRoot `
+        -BuildDir $BuildDir `
+        -BaaLspExecutable $BaaLspExecutable `
+        -SkipLanguageServer:$SkipLanguageServer `
+        -SkipBuild
 }
 
 Write-Host "`nQalam IDE is ready." -ForegroundColor Green
-Write-Host "Executable: build/windows-$($Configuration.ToLowerInvariant())/qalam/Qalam.exe"
+Write-Host "Executable: $BuildDir/qalam/Qalam.exe"
 if (!$NoPackage) {
     Write-Host 'Portable ZIP: dist/Qalam-win64.zip'
 }

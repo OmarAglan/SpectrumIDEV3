@@ -12,12 +12,17 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: OmarAglan/Baa-LSP
+          ref: a3c1846421d3719bcc4d77fb75ab92b32b619876
+          path: ecosystem/Baa-LSP
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
       - name: Bootstrap, build, and package
         shell: pwsh
-        run: .\scripts\bootstrap-windows.ps1 -SkipWinget -BuildTests
+        run: .\scripts\bootstrap-windows.ps1 -SkipWinget -BuildTests -BaaLspSourceDir ecosystem/Baa-LSP
       - uses: actions/upload-artifact@v4
         with:
           name: Qalam-win64
@@ -28,6 +33,11 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: OmarAglan/Baa-LSP
+          ref: a3c1846421d3719bcc4d77fb75ab92b32b619876
+          path: ecosystem/Baa-LSP
       - name: Install system dependencies
         run: |
           sudo apt-get update
@@ -40,3 +50,17 @@ jobs:
           cmake -S . -B build/linux-release -DCMAKE_BUILD_TYPE=Release -DQALAM_BUILD_TESTS=ON
           cmake --build build/linux-release --parallel
           QT_QPA_PLATFORM=offscreen ctest --test-dir build/linux-release --output-on-failure
+          cmake -S ecosystem/Baa-LSP -B ecosystem/Baa-LSP/build \
+            -DCMAKE_BUILD_TYPE=Release -DBAA_LSP_BUILD_TESTS=OFF
+          cmake --build ecosystem/Baa-LSP/build --parallel
+      - name: Package Qalam with Baa-LSP
+        run: |
+          cmake --install build/linux-release --prefix dist/Qalam-linux-x86_64
+          mkdir -p dist/Qalam-linux-x86_64/baa-lsp
+          cp ecosystem/Baa-LSP/build/baa-lsp dist/Qalam-linux-x86_64/baa-lsp/baa-lsp
+          dist/Qalam-linux-x86_64/baa-lsp/baa-lsp --version
+          tar -C dist -czf dist/Qalam-linux-x86_64.tar.gz Qalam-linux-x86_64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Qalam-linux-x86_64
+          path: dist/Qalam-linux-x86_64.tar.gz

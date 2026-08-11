@@ -297,7 +297,8 @@ One deferred item from Phase 2:
 
 ### 7.1 Build Automation
 
-- [x] 7.1.1 Add GitHub Actions workflow for Windows build/package and Linux build
+- [x] 7.1.1 Add GitHub Actions workflow for Windows and Linux build/package
+  artifacts that place Baa-LSP at Qalam's automatic discovery path
 - [x] 7.1.2 Add CMakePresets for Linux (GCC 13+)
 - [ ] 7.1.3 Add CMakePresets for macOS (Clang 16+)
 - [ ] 7.1.4 Cache Qt installation in CI for faster builds
@@ -305,6 +306,8 @@ One deferred item from Phase 2:
 ### 7.2 Quality Gates
 
 - [x] 7.2.1 Configure Linux CI with `QALAM_BUILD_TESTS=ON` and run `ctest --output-on-failure`
+- [x] 7.2.1a Verify the combined Windows Qalam + Baa-LSP package with Qt and
+  MinGW paths removed; require Baa-LSP `--version` and Qalam startup
 - [ ] 7.2.2 Add `clang-format --dry-run --Werror` check step
 - [ ] 7.2.3 Add `clang-tidy` static analysis step
 - [ ] 7.2.4 Add build warnings as errors (`-Werror`) for CI builds

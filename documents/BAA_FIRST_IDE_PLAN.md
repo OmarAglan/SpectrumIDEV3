@@ -75,7 +75,10 @@ The first LSP slice now provides:
 
 The next language-intelligence gaps are dynamic workspace-folder refresh,
 compiler-owned inlay hints, telemetry-free structured server logs, and
-production packaging. Qalam now restarts a crashed Baa-LSP process with a
+the hosted cross-platform packaging receipt. The package pipeline now places
+Baa-LSP at Qalam's built-in discovery path and verifies the combined Windows
+artifact without external Qt/MinGW paths. Qalam also restarts a crashed
+Baa-LSP process with a
 bounded backoff, reopens the newest in-memory document versions, and suppresses
 automatic restart after three consecutive failures until the client is reset.
 `--dump-symbols=json`, `--dump-tokens=json`, `--semantic-index=json`, and

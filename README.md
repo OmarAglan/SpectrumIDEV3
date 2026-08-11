@@ -57,6 +57,10 @@ When Qt and MinGW are already installed:
 ```
 
 The Windows scripts select one matching Qt/MinGW toolchain and deploy its runtime beside the built executables. A normal build and test run should not require copying DLLs or editing the terminal environment manually.
+Production packages also build or consume the pinned standalone Baa-LSP binary,
+place it under `baa-lsp/` beside Qalam, and verify both programs with external Qt
+and MinGW paths removed. The Baa SDK and Takween remain separately discoverable
+tools until the versioned SDK distribution track is complete.
 
 ### Linux
 
