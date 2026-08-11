@@ -48,7 +48,10 @@ The editor supports:
 - **Call signatures:** type `(`, `،`, or `,` inside a call to see the function
   declaration and active parameter. Use `Ctrl+Shift+Space` to request it again.
 - **Bracket Matching:** Automatic pairing of `()`, `{}`, `[]`, `''`, `""`, and ` `` `.
-- **Code Folding:** Collapse and expand supported Baa blocks.
+- **Semantic structure:** collapse nested Baa regions from the folding gutter.
+  Use `Shift+Alt+Right` to expand the current selection through Baa-owned
+  expression, statement, block, and construct ranges; use `Shift+Alt+Left` to
+  return through the previous selections.
 - **Snippets:** Choose an Arabic template such as `إذا` or `الرئيسية`; use Tab
   or Enter to move through its editable positions.
 - **Auto-save:** Automatic backup every 30 seconds to `.~` files.
@@ -209,7 +212,6 @@ Qalam IDE is actively developed. See [ROADMAP.md](ROADMAP.md) for planned featur
 - Multi-cursor editing
 - Split editor
 - Minimap
-- Semantic tokens, folding ranges, and selection ranges through Baa-LSP
 - Git integration
 - Debugger
 

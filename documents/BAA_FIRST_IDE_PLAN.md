@@ -69,11 +69,14 @@ The first LSP slice now provides:
   `semantic-index-json-v1` identifier roles through
   `textDocument/semanticTokens/full`, with UTF-8-to-UTF-16 conversion,
   document-version rejection, and an immediate local lexical fallback;
+- compiler-owned nested folding and semantic expand/shrink selection from
+  `structure-json-v1`, with one shared per-version server result and local
+  folding only as a visual fallback;
 
-The next language-intelligence gaps are semantic folding and selection
-ranges from compiler-owned structure, dynamic workspace-folder refresh, and
-production restart and packaging behavior. `--dump-symbols=json` and
-`--dump-tokens=json` and `--semantic-index=json` are implemented and consumed.
+The next language-intelligence gaps are dynamic workspace-folder refresh,
+compiler-owned inlay hints, and production restart and packaging behavior.
+`--dump-symbols=json`, `--dump-tokens=json`, `--semantic-index=json`, and
+`--dump-structure=json` are implemented and consumed.
 
 ## Target Architecture
 

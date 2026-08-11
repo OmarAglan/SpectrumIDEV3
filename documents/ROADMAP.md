@@ -1,6 +1,6 @@
 # Qalam IDE - Improvement Roadmap
 
-**Date:** 2026-07-22
+**Date:** 2026-08-11
 **Version:** 3.3.0
 **Codebase:** ~9,750 lines C++ across 67 files (Qt 6 + C++23)
 
@@ -50,6 +50,9 @@ One deferred item from Phase 2:
   `semantic-index-json-v1` identifier roles flow through Baa-LSP full semantic
   tokens and overlay Qalam's immediate local lexer only for the matching
   document version
+- **Compiler-owned structural editing** -- Baa `structure-json-v1` drives
+  nested folding and semantic expand/shrink selection through Baa-LSP, with
+  exact UTF-16 ranges and local folding only as a startup/failure fallback
 - **Structured tooling failures** -- `compiler-cli-v1` exit codes are classified
   with explicit operation context when JSON diagnostics are empty; human messages
   are not parsed to determine the failure class
@@ -397,6 +400,9 @@ One deferred item from Phase 2:
   lexical fallback
 - [x] 9.1.14 Render compiler-bound functions, variables, parameters, fields,
   enum members, and type declarations without editor-side semantic inference
+- [x] 9.1.15 Render compiler-owned nested folding and semantic expand/shrink
+  selection from `structure-json-v1`, with shared per-version caching,
+  cancellation, stale-result rejection, and local folding fallback
 
 ### 9.2 Baa Language Server
 

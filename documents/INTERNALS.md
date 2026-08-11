@@ -84,7 +84,11 @@ The heart of Qalam is `TEditor`, a custom `QPlainTextEdit` subclass.
   and reuse the same version-checked workspace-edit path. Document formatting
   flushes the newest text, requests `textDocument/formatting`, and applies
   Baa's one versioned full-document edit as a single undo block. Qalam does not
-  own formatting rules.
+  own formatting rules. Folding and expand/shrink selection request
+  `textDocument/foldingRange` and `textDocument/selectionRange`; Baa-LSP serves
+  both from one validated `structure-json-v1` result for the current document
+  version. The editor keeps local folding only while that authoritative result
+  is unavailable and never derives semantic selection ranges itself.
 - **`BuildManager`:** Owns project execution. Build, run, test, and clean requests
   search parent directories for `مشروع.تكوين`, ask
   `takween-targets-v1` for capabilities, and invoke canonical Arabic Takween argv
