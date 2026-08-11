@@ -45,6 +45,22 @@ void publish(QFile &output, const QString &uri, int version)
         }}
     });
 }
+
+bool shouldCrashAfterOpen()
+{
+    if (qEnvironmentVariableIntValue("QALAM_FAKE_LSP_ALWAYS_CRASH") != 0) {
+        return true;
+    }
+
+    const QString markerPath =
+        QString::fromUtf8(qgetenv("QALAM_FAKE_LSP_CRASH_ONCE_MARKER"));
+    if (markerPath.isEmpty() or QFile::exists(markerPath)) return false;
+    QFile marker(markerPath);
+    if (not marker.open(QIODevice::WriteOnly | QIODevice::Truncate)) return false;
+    marker.write("crashed\n");
+    marker.close();
+    return true;
+}
 }
 
 int main(int argc, char *argv[])
@@ -128,6 +144,7 @@ int main(int argc, char *argv[])
             } else if (method == "textDocument/didOpen") {
                 const QJsonObject document = params.value("textDocument").toObject();
                 currentUri = document.value("uri").toString();
+                if (shouldCrashAfterOpen()) return 86;
                 publish(output, document.value("uri").toString(), document.value("version").toInt());
             } else if (method == "textDocument/didChange") {
                 const QJsonObject document = params.value("textDocument").toObject();

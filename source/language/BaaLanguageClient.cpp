@@ -54,6 +54,23 @@ BaaLanguageClient::BaaLanguageClient(QObject *parent)
             if (not m_process->waitForFinished(250)) m_process->kill();
         }
     });
+
+    m_restartTimer.setSingleShot(true);
+    connect(&m_restartTimer, &QTimer::timeout, this, [this]() {
+        if (m_restartSuppressed) return;
+        if (m_documents.isEmpty()) {
+            setState(State::Stopped);
+            return;
+        }
+        ensureStarted(m_workspaceRoot);
+    });
+
+    m_restartResetTimer.setSingleShot(true);
+    connect(&m_restartResetTimer, &QTimer::timeout, this, [this]() {
+        if (m_state != State::Ready) return;
+        m_restartAttempts = 0;
+        m_restartSuppressed = false;
+    });
 }
 
 BaaLanguageClient::~BaaLanguageClient()
@@ -459,6 +476,10 @@ void BaaLanguageClient::closeDocument(const QString &filePath)
 void BaaLanguageClient::stop()
 {
     m_changeTimer.stop();
+    m_restartTimer.stop();
+    m_restartResetTimer.stop();
+    m_restartAttempts = 0;
+    m_restartSuppressed = false;
     if (not m_process or m_process->state() == QProcess::NotRunning) {
         setState(State::Stopped);
         return;
@@ -476,7 +497,11 @@ void BaaLanguageClient::stop()
 
 void BaaLanguageClient::setServerProgram(const QString &program)
 {
-    m_serverProgram = program.trimmed();
+    const QString normalizedProgram = program.trimmed();
+    if (m_serverProgram == normalizedProgram) return;
+    m_serverProgram = normalizedProgram;
+    m_restartAttempts = 0;
+    m_restartSuppressed = false;
 }
 
 void BaaLanguageClient::setCompilerProgram(const QString &program)
@@ -492,6 +517,17 @@ void BaaLanguageClient::setTakweenProgram(const QString &program)
 void BaaLanguageClient::setChangeDebounceInterval(int milliseconds)
 {
     m_changeTimer.setInterval(qMax(0, milliseconds));
+}
+
+void BaaLanguageClient::setRestartPolicy(int maximumAttempts,
+                                         int initialDelayMilliseconds,
+                                         int resetAfterMilliseconds)
+{
+    m_maxRestartAttempts = qMax(0, maximumAttempts);
+    m_initialRestartDelayMilliseconds = qMax(0, initialDelayMilliseconds);
+    m_restartResetAfterMilliseconds = qMax(1, resetAfterMilliseconds);
+    m_restartAttempts = 0;
+    m_restartSuppressed = false;
 }
 
 BaaLanguageClient::State BaaLanguageClient::state() const
@@ -527,6 +563,7 @@ void BaaLanguageClient::flushDocumentChanges()
 
 void BaaLanguageClient::ensureStarted(const QString &workspaceRoot)
 {
+    if (m_restartTimer.isActive() or m_restartSuppressed) return;
     if (m_process and m_process->state() != QProcess::NotRunning) return;
     const QString program = resolveServerProgram();
     if (program.isEmpty() or not QFileInfo(program).isExecutable()) {
@@ -567,13 +604,19 @@ void BaaLanguageClient::ensureStarted(const QString &workspaceRoot)
     connect(process, &QProcess::readyReadStandardError,
             this, &BaaLanguageClient::consumeStderr);
     connect(process, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
-            this, &BaaLanguageClient::handleProcessFinished);
+            this, [this, process](int exitCode, QProcess::ExitStatus status) {
+                if (m_process != process) return;
+                handleProcessFinished(exitCode, status);
+            });
     connect(process, &QProcess::errorOccurred, this,
             [this, process](QProcess::ProcessError error) {
                 if (m_process != process or error != QProcess::FailedToStart) return;
-                setState(State::Error);
                 emit logMessage(QStringLiteral("تعذر تشغيل خادم لغة باء: %1")
                                     .arg(process->errorString()), 1);
+                m_process = nullptr;
+                process->deleteLater();
+                clearServerSession();
+                scheduleRestart();
             });
     process->start();
 }
@@ -1019,6 +1062,9 @@ void BaaLanguageClient::handleResponse(const QJsonObject &message)
                 .value(QStringLiteral("prepareProvider")).toBool(false);
         sendNotification(QStringLiteral("initialized"), QJsonObject{});
         setState(State::Ready);
+        if (m_restartAttempts > 0) {
+            m_restartResetTimer.start(m_restartResetAfterMilliseconds);
+        }
         for (auto it = m_documents.begin(); it != m_documents.end(); ++it) {
             sendDidOpen(it.value());
         }
@@ -1885,9 +1931,25 @@ BaaWorkspaceEdit BaaLanguageClient::parseWorkspaceEdit(
 void BaaLanguageClient::handleProcessFinished(int exitCode, QProcess::ExitStatus status)
 {
     m_stopTimer.stop();
+    m_restartResetTimer.stop();
     const bool expected = m_state == State::Stopping;
+    consumeStdout();
+    consumeStderr();
     if (m_process) m_process->deleteLater();
     m_process = nullptr;
+    clearServerSession();
+    if (expected) {
+        setState(State::Stopped);
+        return;
+    }
+    emit logMessage(QStringLiteral("توقف Baa-LSP بصورة غير متوقعة (الرمز %1، الحالة %2).")
+                        .arg(exitCode)
+                        .arg(status == QProcess::NormalExit ? 0 : 1), 1);
+    scheduleRestart();
+}
+
+void BaaLanguageClient::clearServerSession()
+{
     m_initializeRequestId = 0;
     m_shutdownRequestId = 0;
     m_documentSymbolProvider = false;
@@ -1918,10 +1980,37 @@ void BaaLanguageClient::handleProcessFinished(int exitCode, QProcess::ExitStatus
     m_foldingRequestedVersions.clear();
     m_documentSymbols.clear();
     for (auto it = m_documents.begin(); it != m_documents.end(); ++it) it->opened = false;
-    setState(expected ? State::Stopped : State::Error);
-    if (not expected) {
-        emit logMessage(QStringLiteral("توقف Baa-LSP بصورة غير متوقعة (الرمز %1، الحالة %2).")
-                            .arg(exitCode)
-                            .arg(status == QProcess::NormalExit ? 0 : 1), 1);
+}
+
+void BaaLanguageClient::scheduleRestart()
+{
+    if (m_documents.isEmpty()) {
+        setState(State::Stopped);
+        return;
     }
+    if (m_restartAttempts >= m_maxRestartAttempts) {
+        m_restartSuppressed = true;
+        setState(State::Error);
+        emit logMessage(
+            QStringLiteral("بلغ خادم لغة باء حد إعادة التشغيل (%1 محاولات). "
+                           "أُوقفت إعادة التشغيل التلقائية لحماية الاستقرار.")
+                .arg(m_maxRestartAttempts),
+            1);
+        return;
+    }
+
+    ++m_restartAttempts;
+    const int exponent = qMin(m_restartAttempts - 1, 5);
+    const qint64 scaledDelay =
+        static_cast<qint64>(m_initialRestartDelayMilliseconds) << exponent;
+    const int delay = static_cast<int>(qMin<qint64>(scaledDelay, 5000));
+    setState(State::Restarting);
+    emit logMessage(
+        QStringLiteral("سيُعاد تشغيل خادم لغة باء تلقائيا "
+                       "(المحاولة %1 من %2) بعد %3 مللي ثانية.")
+            .arg(m_restartAttempts)
+            .arg(m_maxRestartAttempts)
+            .arg(delay),
+        2);
+    m_restartTimer.start(delay);
 }

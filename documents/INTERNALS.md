@@ -88,7 +88,12 @@ The heart of Qalam is `TEditor`, a custom `QPlainTextEdit` subclass.
   `textDocument/foldingRange` and `textDocument/selectionRange`; Baa-LSP serves
   both from one validated `structure-json-v1` result for the current document
   version. The editor keeps local folding only while that authoritative result
-  is unavailable and never derives semantic selection ranges itself.
+  is unavailable and never derives semantic selection ranges itself. If the
+  server process exits unexpectedly, the client preserves its current document
+  snapshots, restarts with capped exponential backoff, and reopens every
+  document after initialization. Three consecutive automatic attempts are
+  allowed; the budget resets only after 30 seconds of stable service, preventing
+  a broken server from becoming an unbounded process loop.
 - **`BuildManager`:** Owns project execution. Build, run, test, and clean requests
   search parent directories for `مشروع.تكوين`, ask
   `takween-targets-v1` for capabilities, and invoke canonical Arabic Takween argv

@@ -33,6 +33,7 @@ public:
         Starting,
         Initializing,
         Ready,
+        Restarting,
         Stopping,
         Error
     };
@@ -75,6 +76,9 @@ public:
     void setCompilerProgram(const QString &program);
     void setTakweenProgram(const QString &program);
     void setChangeDebounceInterval(int milliseconds);
+    void setRestartPolicy(int maximumAttempts,
+                          int initialDelayMilliseconds,
+                          int resetAfterMilliseconds);
 
     State state() const;
     static bool isBaaSourcePath(const QString &filePath);
@@ -257,6 +261,8 @@ private:
     void handleResponse(const QJsonObject &message);
     void handleNotification(const QJsonObject &message);
     void handlePublishDiagnostics(const QJsonObject &params);
+    void clearServerSession();
+    void scheduleRestart();
     QVector<BaaDocumentSymbol> parseDocumentSymbols(const QJsonArray &items) const;
     QVector<BaaSemanticToken> parseSemanticTokens(const QJsonValue &result,
                                                    bool *valid) const;
@@ -302,6 +308,8 @@ private:
     QSet<QString> m_pendingChanges;
     QTimer m_changeTimer;
     QTimer m_stopTimer;
+    QTimer m_restartTimer;
+    QTimer m_restartResetTimer;
     qint64 m_nextRequestId{};
     qint64 m_initializeRequestId{};
     qint64 m_shutdownRequestId{};
@@ -320,4 +328,9 @@ private:
     bool m_documentFormattingProvider{};
     bool m_renameProvider{};
     bool m_prepareRenameProvider{};
+    int m_maxRestartAttempts{3};
+    int m_initialRestartDelayMilliseconds{250};
+    int m_restartResetAfterMilliseconds{30000};
+    int m_restartAttempts{};
+    bool m_restartSuppressed{};
 };

@@ -74,7 +74,10 @@ The first LSP slice now provides:
   folding only as a visual fallback;
 
 The next language-intelligence gaps are dynamic workspace-folder refresh,
-compiler-owned inlay hints, and production restart and packaging behavior.
+compiler-owned inlay hints, telemetry-free structured server logs, and
+production packaging. Qalam now restarts a crashed Baa-LSP process with a
+bounded backoff, reopens the newest in-memory document versions, and suppresses
+automatic restart after three consecutive failures until the client is reset.
 `--dump-symbols=json`, `--dump-tokens=json`, `--semantic-index=json`, and
 `--dump-structure=json` are implemented and consumed.
 

@@ -403,6 +403,9 @@ One deferred item from Phase 2:
 - [x] 9.1.15 Render compiler-owned nested folding and semantic expand/shrink
   selection from `structure-json-v1`, with shared per-version caching,
   cancellation, stale-result rejection, and local folding fallback
+- [x] 9.1.16 Recover from an unexpected Baa-LSP exit with capped exponential
+  backoff, reopen the newest unsaved document versions, reset the budget only
+  after stable service, and stop after three consecutive restart attempts
 
 ### 9.2 Baa Language Server
 

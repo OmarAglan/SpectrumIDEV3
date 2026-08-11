@@ -1,8 +1,12 @@
 #include "BaaLanguageClient.h"
 
 #include <QDir>
+#include <QFileInfo>
+#include <QScopeGuard>
 #include <QTemporaryDir>
 #include <QTest>
+
+#include <algorithm>
 
 #ifndef QALAM_FAKE_BAA_LSP_PATH
 #error QALAM_FAKE_BAA_LSP_PATH must be defined
@@ -13,6 +17,8 @@ class TestBaaLanguageClient : public QObject
     Q_OBJECT
 private slots:
     void synchronizesDocumentsAndRejectsStaleDiagnostics();
+    void restartsAfterUnexpectedExitAndReopensDocuments();
+    void stopsRestartingAfterTheConfiguredLimit();
     void rejectsNonBaaDocuments();
 };
 
@@ -404,6 +410,109 @@ void TestBaaLanguageClient::rejectsNonBaaDocuments()
 {
     BaaLanguageClient client;
     QCOMPARE(client.synchronizeDocument("notes.txt", "text", 1), 0);
+    QCOMPARE(client.state(), BaaLanguageClient::State::Stopped);
+}
+
+void TestBaaLanguageClient::restartsAfterUnexpectedExitAndReopensDocuments()
+{
+    QTemporaryDir workspace(QStringLiteral("qalam-lsp-restart-XXXXXX"));
+    QVERIFY(workspace.isValid());
+    const QString filePath =
+        QDir(workspace.path()).filePath(QStringLiteral("رئيسي.baa"));
+    const QString markerPath =
+        QDir(workspace.path()).filePath(QStringLiteral("crash-once.marker"));
+    QVERIFY(qputenv("QALAM_FAKE_LSP_CRASH_ONCE_MARKER",
+                    markerPath.toUtf8()));
+    const auto clearEnvironment = qScopeGuard([]() {
+        qunsetenv("QALAM_FAKE_LSP_CRASH_ONCE_MARKER");
+    });
+
+    BaaLanguageClient client;
+    client.setServerProgram(QString::fromUtf8(QALAM_FAKE_BAA_LSP_PATH));
+    client.setRestartPolicy(3, 10, 10000);
+
+    int restartCount = 0;
+    int publishedVersion = 0;
+    QStringList logs;
+    connect(&client, &BaaLanguageClient::stateChanged, this,
+            [&](BaaLanguageClient::State state) {
+                if (state == BaaLanguageClient::State::Restarting) {
+                    ++restartCount;
+                }
+            });
+    connect(&client, &BaaLanguageClient::diagnosticsPublished, this,
+            [&](const QString &publishedPath, int version,
+                const QVector<Diagnostic> &) {
+                QCOMPARE(QDir::cleanPath(publishedPath),
+                         QDir::cleanPath(filePath));
+                publishedVersion = version;
+            });
+    connect(&client, &BaaLanguageClient::logMessage, this,
+            [&](const QString &message, int) { logs.push_back(message); });
+
+    QCOMPARE(client.synchronizeDocument(
+                 filePath,
+                 QStringLiteral("صحيح الرئيسية() {\n    مفقود = ١.\n}\n"),
+                 1,
+                 workspace.path()),
+             1);
+    QTRY_VERIFY_WITH_TIMEOUT(QFileInfo::exists(markerPath), 5000);
+    QTRY_COMPARE_WITH_TIMEOUT(restartCount, 1, 5000);
+    QTRY_COMPARE_WITH_TIMEOUT(publishedVersion, 1, 5000);
+    QTRY_COMPARE_WITH_TIMEOUT(client.state(),
+                              BaaLanguageClient::State::Ready,
+                              5000);
+    QVERIFY(std::any_of(logs.cbegin(), logs.cend(), [](const QString &message) {
+        return message.contains(QStringLiteral("المحاولة 1 من 3"));
+    }));
+
+    client.stop();
+    QTRY_COMPARE_WITH_TIMEOUT(client.state(),
+                              BaaLanguageClient::State::Stopped,
+                              5000);
+}
+
+void TestBaaLanguageClient::stopsRestartingAfterTheConfiguredLimit()
+{
+    QTemporaryDir workspace(QStringLiteral("qalam-lsp-limit-XXXXXX"));
+    QVERIFY(workspace.isValid());
+    const QString filePath =
+        QDir(workspace.path()).filePath(QStringLiteral("رئيسي.baa"));
+    QVERIFY(qputenv("QALAM_FAKE_LSP_ALWAYS_CRASH", "1"));
+    const auto clearEnvironment = qScopeGuard([]() {
+        qunsetenv("QALAM_FAKE_LSP_ALWAYS_CRASH");
+    });
+
+    BaaLanguageClient client;
+    client.setServerProgram(QString::fromUtf8(QALAM_FAKE_BAA_LSP_PATH));
+    client.setRestartPolicy(2, 10, 10000);
+
+    int restartCount = 0;
+    QStringList logs;
+    connect(&client, &BaaLanguageClient::stateChanged, this,
+            [&](BaaLanguageClient::State state) {
+                if (state == BaaLanguageClient::State::Restarting) {
+                    ++restartCount;
+                }
+            });
+    connect(&client, &BaaLanguageClient::logMessage, this,
+            [&](const QString &message, int) { logs.push_back(message); });
+
+    QCOMPARE(client.synchronizeDocument(
+                 filePath,
+                 QStringLiteral("صحيح الرئيسية() {\n    مفقود = ١.\n}\n"),
+                 1,
+                 workspace.path()),
+             1);
+    QTRY_COMPARE_WITH_TIMEOUT(client.state(),
+                              BaaLanguageClient::State::Error,
+                              5000);
+    QCOMPARE(restartCount, 2);
+    QVERIFY(std::any_of(logs.cbegin(), logs.cend(), [](const QString &message) {
+        return message.contains(QStringLiteral("حد إعادة التشغيل (2 محاولات)"));
+    }));
+
+    client.stop();
     QCOMPARE(client.state(), BaaLanguageClient::State::Stopped);
 }
 
