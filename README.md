@@ -32,6 +32,7 @@ Unsaved documents are analyzed in memory, results are tied to the exact document
 - Go to definition, references, and collision-checked Arabic rename.
 - Compiler-owned semantic highlighting and canonical formatting.
 - Nested folding plus semantic expand/shrink selection.
+- Compiler-owned Arabic parameter hints rendered as source-safe editor overlays.
 - Takween targets and structured build, run, test, clean, and cancellation workflows.
 - File explorer, command palette, problems panel, embedded console, themes, autosave, and crash recovery.
 - Deterministic Windows runtime deployment with no recurring manual DLL or `PATH` repair.
@@ -57,10 +58,13 @@ When Qt and MinGW are already installed:
 ```
 
 The Windows scripts select one matching Qt/MinGW toolchain and deploy its runtime beside the built executables. A normal build and test run should not require copying DLLs or editing the terminal environment manually.
-Production packages also build or consume the pinned standalone Baa-LSP binary,
-place it under `baa-lsp/` beside Qalam, and verify both programs with external Qt
-and MinGW paths removed. The Baa SDK and Takween remain separately discoverable
-tools until the versioned SDK distribution track is complete.
+Production packages build or consume pinned standalone Baa-LSP, Baa, and Nazm
+revisions, place them under `baa-lsp/` and `baa/` beside Qalam, and verify all
+four programs with external Qt and MinGW paths removed. The bundled compiler,
+Arabic assembler, runtime archive, and standard library make editor intelligence
+and object generation functional immediately. Final native linking still needs
+a supported host linker until the versioned Baa SDK/toolchain track lands;
+Takween remains separately discoverable.
 
 ### Linux
 

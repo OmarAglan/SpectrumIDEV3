@@ -27,6 +27,10 @@ The editor supports:
   not appear.
 - **Live Baa diagnostics:** Saved and unsaved `.baa`/`.baahd` contents are checked
   after a short pause. Only results matching the current document revision are shown.
+- **Arabic parameter hints:** Baa-owned parameter names appear beside call
+  arguments as muted overlays. They are not inserted into the file, are excluded
+  when the argument already explains itself, and disappear if their document
+  version becomes stale.
 - **Compiler-backed navigation:** `F12` opens the exact declaration selected by
   Baa's semantic analysis, including declarations in headers. `Shift+F12`
   lists scope-correct references across the Takween project in the search

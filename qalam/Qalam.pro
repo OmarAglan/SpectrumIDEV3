@@ -73,6 +73,7 @@ HEADERS += Qalam.h \
     ../source/language/BaaDocumentSymbol.h \
     ../source/language/BaaCompletionItem.h \
     ../source/language/BaaHover.h \
+    ../source/language/BaaInlayHint.h \
     ../source/language/BaaLocation.h \
     ../source/language/BaaSignatureHelp.h \
     ../source/language/BaaWorkspaceEdit.h \

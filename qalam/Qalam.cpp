@@ -294,6 +294,24 @@ void Qalam::connectSignals()
             }
         }
     });
+    connect(m_languageClient, &BaaLanguageClient::inlayHintsPublished,
+            this, [this](const QString &filePath, int documentVersion,
+                         const QVector<BaaInlayHint> &hints) {
+        for (int index = 0; index < tabWidget->count(); ++index) {
+            TEditor *editor =
+                qobject_cast<TEditor*>(tabWidget->widget(index));
+            if (not editor or
+                editor->property("qalam.lsp.version").toInt() !=
+                    documentVersion)
+                continue;
+            const QString editorPath = QDir::cleanPath(
+                QFileInfo(editor->currentFilePath()).absoluteFilePath());
+            if (editorPath == QDir::cleanPath(filePath)) {
+                editor->setInlayHints(hints);
+                return;
+            }
+        }
+    });
     connect(m_languageClient, &BaaLanguageClient::selectionRangesPublished,
             this, [this](const QString &filePath, int documentVersion,
                          int line, int character,
@@ -1937,6 +1955,7 @@ void Qalam::scheduleEditorAnalysis(TEditor *editor)
         m_languageClient->closeDocument(previousPath);
         editor->clearSemanticTokens();
         editor->clearFoldingRanges();
+        editor->clearInlayHints();
         if (m_diagnosticsModel) {
             m_diagnosticsModel->replaceDiagnosticsFromSource("baa-lsp:" + previousPath, {});
         }
@@ -1945,6 +1964,7 @@ void Qalam::scheduleEditorAnalysis(TEditor *editor)
     if (!BaaLanguageClient::isBaaSourcePath(filePath)) {
         editor->clearSemanticTokens();
         editor->clearFoldingRanges();
+        editor->clearInlayHints();
         if (editor == currentEditor() and m_layoutManager and
             m_layoutManager->sidebar() and
             m_layoutManager->sidebar()->explorerView()) {
@@ -1968,6 +1988,7 @@ void Qalam::scheduleEditorAnalysis(TEditor *editor)
     if (version != previousVersion) {
         editor->clearSemanticTokens();
         editor->useLocalFoldingRanges();
+        editor->clearInlayHints();
     }
     editor->setProperty("qalam.lsp.version", version);
     if (editor == currentEditor() and m_layoutManager and

@@ -15,14 +15,24 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: OmarAglan/Baa-LSP
-          ref: c72997e88ad2e7ccd75c547bd49abedd68e133aa
+          ref: c88dd6573e23d289e28528aaae1cd39b8a5d2f09
           path: ecosystem/Baa-LSP
+      - uses: actions/checkout@v4
+        with:
+          repository: OmarAglan/Baa
+          ref: d5ee0c0df7288669f378be24990623f7f0d0f0b0
+          path: ecosystem/Baa
+      - uses: actions/checkout@v4
+        with:
+          repository: OmarAglan/Nazm
+          ref: f7fcf8f6d2bf629daf708b3b6028e22c74683ce6
+          path: ecosystem/Nazm
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
       - name: Bootstrap, build, and package
         shell: pwsh
-        run: .\scripts\bootstrap-windows.ps1 -SkipWinget -BuildTests -BaaLspSourceDir ecosystem/Baa-LSP
+        run: .\scripts\bootstrap-windows.ps1 -SkipWinget -BuildTests -BaaLspSourceDir ecosystem/Baa-LSP -BaaSourceDir ecosystem/Baa -NazmSourceDir ecosystem/Nazm
       - uses: actions/upload-artifact@v4
         with:
           name: Qalam-win64
@@ -36,8 +46,18 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: OmarAglan/Baa-LSP
-          ref: c72997e88ad2e7ccd75c547bd49abedd68e133aa
+          ref: c88dd6573e23d289e28528aaae1cd39b8a5d2f09
           path: ecosystem/Baa-LSP
+      - uses: actions/checkout@v4
+        with:
+          repository: OmarAglan/Baa
+          ref: d5ee0c0df7288669f378be24990623f7f0d0f0b0
+          path: ecosystem/Baa
+      - uses: actions/checkout@v4
+        with:
+          repository: OmarAglan/Nazm
+          ref: f7fcf8f6d2bf629daf708b3b6028e22c74683ce6
+          path: ecosystem/Nazm
       - name: Install system dependencies
         run: |
           sudo apt-get update
@@ -53,12 +73,34 @@ jobs:
           cmake -S ecosystem/Baa-LSP -B ecosystem/Baa-LSP/build \
             -DCMAKE_BUILD_TYPE=Release -DBAA_LSP_BUILD_TESTS=OFF
           cmake --build ecosystem/Baa-LSP/build --parallel
-      - name: Package Qalam with Baa-LSP
+          cmake -S ecosystem/Baa -B ecosystem/Baa/build \
+            -DCMAKE_BUILD_TYPE=Release
+          cmake --build ecosystem/Baa/build --parallel --target baa baa_runtime
+          cmake -S ecosystem/Nazm -B ecosystem/Nazm/build \
+            -DCMAKE_BUILD_TYPE=Release -DNAZM_BUILD_TESTS=OFF
+          cmake --build ecosystem/Nazm/build --parallel --target nazm
+      - name: Package Qalam with Baa-LSP, Baa, and Nazm
         run: |
           cmake --install build/linux-release --prefix dist/Qalam-linux-x86_64
           mkdir -p dist/Qalam-linux-x86_64/baa-lsp
           cp ecosystem/Baa-LSP/build/baa-lsp dist/Qalam-linux-x86_64/baa-lsp/baa-lsp
+          mkdir -p dist/Qalam-linux-x86_64/baa/stdlib
+          cp ecosystem/Baa/build/baa dist/Qalam-linux-x86_64/baa/baa
+          cp ecosystem/Baa/build/libbaa_runtime.a dist/Qalam-linux-x86_64/baa/libbaa_runtime.a
+          cp -R ecosystem/Baa/stdlib/. dist/Qalam-linux-x86_64/baa/stdlib/
+          cp ecosystem/Nazm/build/نظم dist/Qalam-linux-x86_64/baa/نظم
+          chmod +x dist/Qalam-linux-x86_64/baa/baa dist/Qalam-linux-x86_64/baa/نظم
           dist/Qalam-linux-x86_64/baa-lsp/baa-lsp --version
+          dist/Qalam-linux-x86_64/baa/baa --version
+          dist/Qalam-linux-x86_64/baa/نظم --إصدار
+          mkdir -p dist/اختبار-حزمة
+          printf 'صحيح الرئيسية() {\n    إرجع ٠.\n}\n' > dist/اختبار-حزمة/رئيسي.baa
+          BAA_HOME="$PWD/dist/Qalam-linux-x86_64/baa" \
+          BAA_NAZM="$PWD/dist/Qalam-linux-x86_64/baa/نظم" \
+            dist/Qalam-linux-x86_64/baa/baa -c \
+              dist/اختبار-حزمة/رئيسي.baa -o dist/اختبار-حزمة/رئيسي.o
+          test -s dist/اختبار-حزمة/رئيسي.o
+          rm -rf dist/اختبار-حزمة
           tar -C dist -czf dist/Qalam-linux-x86_64.tar.gz Qalam-linux-x86_64
       - uses: actions/upload-artifact@v4
         with:

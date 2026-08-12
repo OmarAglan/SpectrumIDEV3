@@ -117,6 +117,7 @@ int main(int argc, char *argv[])
                             {"documentSymbolProvider", true},
                             {"foldingRangeProvider", true},
                             {"selectionRangeProvider", true},
+                            {"inlayHintProvider", true},
                             {"semanticTokensProvider", QJsonObject{
                                 {"legend", QJsonObject{
                                     {"tokenTypes", QJsonArray{
@@ -244,6 +245,24 @@ int main(int argc, char *argv[])
                                     {"range", documentRange}
                                 }}
                             }}
+                        }}
+                    }}}
+                });
+            } else if (method == "textDocument/inlayHint") {
+                send(output, QJsonObject{
+                    {"jsonrpc", "2.0"},
+                    {"id", id},
+                    {"result", QJsonArray{QJsonObject{
+                        {"position", QJsonObject{
+                            {"line", 1}, {"character", 12}
+                        }},
+                        {"label", "قيمة:"},
+                        {"kind", 2},
+                        {"paddingRight", true},
+                        {"data", QJsonObject{
+                            {"schema_version", "inlay-hints-json-v1"},
+                            {"parameter", "قيمة"},
+                            {"complete", true}
                         }}
                     }}}
                 });

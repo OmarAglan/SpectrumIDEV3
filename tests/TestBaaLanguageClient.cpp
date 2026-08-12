@@ -97,6 +97,7 @@ void TestBaaLanguageClient::synchronizesDocumentsAndRejectsStaleDiagnostics()
     int symbolVersion = 0;
     int semanticTokenVersion = 0;
     int foldingVersion = 0;
+    int inlayHintVersion = 0;
     int selectionVersion = 0;
     bool workspaceSymbolsReady = false;
     int completionVersion = 0;
@@ -112,6 +113,7 @@ void TestBaaLanguageClient::synchronizesDocumentsAndRejectsStaleDiagnostics()
     QVector<BaaDocumentSymbol> lastSymbols;
     QVector<BaaSemanticToken> lastSemanticTokens;
     QVector<BaaFoldingRange> lastFoldingRanges;
+    QVector<BaaInlayHint> lastInlayHints;
     QVector<BaaSelectionRange> lastSelectionRanges;
     QVector<BaaWorkspaceSymbol> lastWorkspaceSymbols;
     QVector<BaaCompletionItem> lastCompletions;
@@ -154,6 +156,14 @@ void TestBaaLanguageClient::synchronizesDocumentsAndRejectsStaleDiagnostics()
                          QDir::cleanPath(filePath));
                 foldingVersion = version;
                 lastFoldingRanges = ranges;
+            });
+    connect(&client, &BaaLanguageClient::inlayHintsPublished, this,
+            [&](const QString &publishedPath, int version,
+                const QVector<BaaInlayHint> &hints) {
+                QCOMPARE(QDir::cleanPath(publishedPath),
+                         QDir::cleanPath(filePath));
+                inlayHintVersion = version;
+                lastInlayHints = hints;
             });
     connect(&client, &BaaLanguageClient::selectionRangesPublished, this,
             [&](const QString &publishedPath, int version,
@@ -208,6 +218,15 @@ void TestBaaLanguageClient::synchronizesDocumentsAndRejectsStaleDiagnostics()
     QCOMPARE(lastFoldingRanges.first().endLine, 2);
     QCOMPARE(lastFoldingRanges.first().endCharacter, 1);
     QCOMPARE(lastFoldingRanges.first().kind, QStringLiteral("region"));
+
+    QTRY_COMPARE_WITH_TIMEOUT(inlayHintVersion, 1, 5000);
+    QCOMPARE(lastInlayHints.size(), 1);
+    QCOMPARE(lastInlayHints.first().line, 1);
+    QCOMPARE(lastInlayHints.first().character, 12);
+    QCOMPARE(lastInlayHints.first().label, QStringLiteral("قيمة:"));
+    QCOMPARE(lastInlayHints.first().parameter, QStringLiteral("قيمة"));
+    QVERIFY(lastInlayHints.first().paddingRight);
+    QVERIFY(lastInlayHints.first().complete);
 
     client.requestSelectionRanges(filePath, 1, 4);
     QTRY_COMPARE_WITH_TIMEOUT(selectionVersion, 1, 5000);
@@ -460,6 +479,7 @@ void TestBaaLanguageClient::synchronizesDocumentsAndRejectsStaleDiagnostics()
     QTRY_COMPARE_WITH_TIMEOUT(symbolVersion, 2, 5000);
     QTRY_COMPARE_WITH_TIMEOUT(semanticTokenVersion, 2, 5000);
     QTRY_COMPARE_WITH_TIMEOUT(foldingVersion, 2, 5000);
+    QTRY_COMPARE_WITH_TIMEOUT(inlayHintVersion, 2, 5000);
 
     client.closeDocument(filePath);
     client.stop();

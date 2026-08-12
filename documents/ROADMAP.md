@@ -53,6 +53,8 @@ One deferred item from Phase 2:
 - **Compiler-owned structural editing** -- Baa `structure-json-v1` drives
   nested folding and semantic expand/shrink selection through Baa-LSP, with
   exact UTF-16 ranges and local folding only as a startup/failure fallback
+- **Compiler-owned parameter hints** -- Baa `inlay-hints-json-v1` flows through
+  cancellable, versioned LSP requests into source-safe Arabic editor overlays
 - **Structured tooling failures** -- `compiler-cli-v1` exit codes are classified
   with explicit operation context when JSON diagnostics are empty; human messages
   are not parsed to determine the failure class
@@ -298,7 +300,8 @@ One deferred item from Phase 2:
 ### 7.1 Build Automation
 
 - [x] 7.1.1 Add GitHub Actions workflow for Windows and Linux build/package
-  artifacts that place Baa-LSP at Qalam's automatic discovery path
+  artifacts that place Baa-LSP and the matching Baa/Nazm/compiler-runtime/stdlib
+  payload at Qalam's automatic discovery paths
 - [x] 7.1.2 Add CMakePresets for Linux (GCC 13+)
 - [ ] 7.1.3 Add CMakePresets for macOS (Clang 16+)
 - [ ] 7.1.4 Cache Qt installation in CI for faster builds
@@ -306,15 +309,20 @@ One deferred item from Phase 2:
 ### 7.2 Quality Gates
 
 - [x] 7.2.1 Configure Linux CI with `QALAM_BUILD_TESTS=ON` and run `ctest --output-on-failure`
-- [x] 7.2.1a Verify the combined Windows Qalam + Baa-LSP package with Qt and
-  MinGW paths removed; require Baa-LSP `--version` and Qalam startup
+- [x] 7.2.1a Verify the combined Windows Qalam + Baa-LSP + Baa + Nazm package
+  with Qt and MinGW paths removed; require all tooling probes, Qalam startup,
+  and Baa-to-Nazm object generation from an Arabic path
 
 **Cross-platform packaging receipt (2026-08-11):** Windows and Linux combined
 artifacts passed and were uploaded by
 [run 31506739091](https://github.com/OmarAglan/Qalam-IDE/actions/runs/31506739091).
 The current workflow pins Baa-LSP commit
-`c72997e88ad2e7ccd75c547bd49abedd68e133aa`; its combined artifacts passed in
-[run 31509433467](https://github.com/OmarAglan/Qalam-IDE/actions/runs/31509433467).
+`c88dd6573e23d289e28528aaae1cd39b8a5d2f09` and Baa commit
+`d5ee0c0df7288669f378be24990623f7f0d0f0b0`, with Nazm commit
+`f7fcf8f6d2bf629daf708b3b6028e22c74683ce6`. The earlier combined-artifact
+baseline passed in
+[run 31509433467](https://github.com/OmarAglan/Qalam-IDE/actions/runs/31509433467);
+the compiler/Nazm-bundled inlay-hints candidate requires a new green CI receipt.
 - [ ] 7.2.2 Add `clang-format --dry-run --Werror` check step
 - [ ] 7.2.3 Add `clang-tidy` static analysis step
 - [ ] 7.2.4 Add build warnings as errors (`-Werror`) for CI builds
@@ -419,6 +427,9 @@ The current workflow pins Baa-LSP commit
 - [x] 9.1.17 Publish multiple dynamic Takween workspace folders and watched
   `مشروع.تكوين`/`تكوين.قفل` changes through standard LSP notifications without
   parsing project files in Qalam
+- [x] 9.1.18 Render compiler-owned Arabic parameter-name hints through
+  `textDocument/inlayHint`, with UTF-16 validation, version cancellation,
+  source-safe painting, and accessible hint-count metadata
 
   Cross-platform receipt:
   [Baa-LSP 31509393734](https://github.com/OmarAglan/Baa-LSP/actions/runs/31509393734)
@@ -440,6 +451,8 @@ The current workflow pins Baa-LSP commit
     documentation through the server's resolve contract
 - [x] 9.2.5 Implement compiler-backed diagnostic provider
 - [x] 9.2.6 Build as a standalone, Qt-free LSP binary
+- [x] 9.2.7 Consume strict `inlay-hints-json-v1`, cache complete per-version
+  results, filter standard request ranges, and never infer parameter names
 
 ### 9.3 Git Integration
 

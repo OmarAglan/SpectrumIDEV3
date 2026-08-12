@@ -19,6 +19,7 @@
 #include "Constants.h"
 #include "BaaCompletionItem.h"
 #include "BaaHover.h"
+#include "BaaInlayHint.h"
 #include "BaaFoldingRange.h"
 #include "BaaSelectionRange.h"
 #include "BaaSignatureHelp.h"
@@ -50,6 +51,9 @@ public:
     void clearFoldingRanges();
     void useLocalFoldingRanges();
     int foldingRangeCount() const { return foldRegions.size(); }
+    void setInlayHints(const QVector<BaaInlayHint> &hints);
+    void clearInlayHints();
+    int inlayHintCount() const { return m_inlayHints.size(); }
     void applySemanticSelectionRanges(
         const QVector<BaaSelectionRange> &ranges,
         int requestLine,
@@ -92,6 +96,7 @@ public slots:
     void updateHighlighterTheme(std::shared_ptr<SyntaxTheme>);
 
 protected:
+    void paintEvent(QPaintEvent *event) override;
     void resizeEvent(QResizeEvent* event) override;
     bool eventFilter(QObject* obj, QEvent* event) override;
     void dragEnterEvent(QDragEnterEvent* event) override;
@@ -137,6 +142,7 @@ private:
     QCompleter* c{};
     CompletionModel *model{};
     QVector<Diagnostic> m_diagnostics;
+    QVector<BaaInlayHint> m_inlayHints;
     QString textUnderCursor() const;
     void performCompletion(bool explicitRequest = false);
     void showCompletionPopup();

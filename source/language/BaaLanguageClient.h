@@ -4,6 +4,7 @@
 #include "BaaDocumentSymbol.h"
 #include "BaaCompletionItem.h"
 #include "BaaHover.h"
+#include "BaaInlayHint.h"
 #include "BaaFoldingRange.h"
 #include "BaaLocation.h"
 #include "BaaSemanticToken.h"
@@ -50,6 +51,7 @@ public:
     void requestDocumentSymbols(const QString &filePath);
     void requestSemanticTokens(const QString &filePath);
     void requestFoldingRanges(const QString &filePath);
+    void requestInlayHints(const QString &filePath);
     void requestSelectionRanges(const QString &filePath,
                                 int line,
                                 int character);
@@ -98,6 +100,9 @@ signals:
     void foldingRangesPublished(const QString &filePath,
                                 int documentVersion,
                                 const QVector<BaaFoldingRange> &ranges);
+    void inlayHintsPublished(const QString &filePath,
+                             int documentVersion,
+                             const QVector<BaaInlayHint> &hints);
     void selectionRangesPublished(const QString &filePath,
                                   int documentVersion,
                                   int line,
@@ -198,6 +203,11 @@ private:
         QString filePath;
         int documentVersion{};
     };
+    struct PendingInlayHintRequest
+    {
+        QString filePath;
+        int documentVersion{};
+    };
     struct PendingSelectionRequest
     {
         QString filePath;
@@ -256,6 +266,7 @@ private:
     void cancelPendingSymbolRequests(const QString &filePath);
     void cancelPendingTokenRequests(const QString &filePath);
     void cancelPendingFoldingRequests(const QString &filePath);
+    void cancelPendingInlayHintRequests(const QString &filePath);
     void cancelPendingStructureRequests(const QString &filePath);
     void cancelPendingCompletionRequests(const QString &filePath);
     void cancelPendingFormattingRequests(const QString &filePath);
@@ -281,6 +292,9 @@ private:
                                                    bool *valid) const;
     QVector<BaaFoldingRange> parseFoldingRanges(const QJsonValue &result,
                                                 bool *valid) const;
+    QVector<BaaInlayHint> parseInlayHints(const QJsonValue &result,
+                                          const QString &text,
+                                          bool *valid) const;
     QVector<BaaSelectionRange> parseSelectionRanges(const QJsonValue &result,
                                                     bool *valid) const;
     QVector<BaaWorkspaceSymbol> parseWorkspaceSymbols(
@@ -317,6 +331,8 @@ private:
     QHash<qint64, PendingTokenRequest> m_pendingTokenRequests;
     QHash<QString, int> m_foldingRequestedVersions;
     QHash<qint64, PendingFoldingRequest> m_pendingFoldingRequests;
+    QHash<QString, int> m_inlayHintRequestedVersions;
+    QHash<qint64, PendingInlayHintRequest> m_pendingInlayHintRequests;
     QHash<qint64, PendingSelectionRequest> m_pendingSelectionRequests;
     QHash<qint64, PendingWorkspaceSymbolRequest>
         m_pendingWorkspaceSymbolRequests;
@@ -334,6 +350,7 @@ private:
     bool m_documentSymbolProvider{};
     bool m_semanticTokenProvider{};
     bool m_foldingRangeProvider{};
+    bool m_inlayHintProvider{};
     bool m_selectionRangeProvider{};
     QStringList m_semanticTokenTypes;
     bool m_workspaceSymbolProvider{};

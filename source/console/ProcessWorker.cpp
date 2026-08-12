@@ -1,7 +1,10 @@
 #include "ProcessWorker.h"
 #include <QDebug>
+#include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QMutexLocker>
+#include <QProcessEnvironment>
 
 namespace {
 QString decodeProcessBytes(const QByteArray &data)
@@ -15,6 +18,33 @@ QString decodeProcessBytes(const QByteArray &data)
 #else
     return QString::fromUtf8(data);
 #endif
+}
+
+bool bundledBaaEnvironment(const QString &program,
+                           QProcessEnvironment *environment)
+{
+    const QFileInfo programInfo(program);
+    if (programInfo.completeBaseName().compare(QStringLiteral("baa"), Qt::CaseInsensitive) != 0) {
+        return false;
+    }
+
+    *environment = QProcessEnvironment::systemEnvironment();
+    const QString compilerHome = programInfo.absolutePath();
+    if (not environment->contains(QStringLiteral("BAA_HOME")) and
+        QFileInfo(QDir(compilerHome).filePath(QStringLiteral("stdlib"))).isDir()) {
+        environment->insert(QStringLiteral("BAA_HOME"), compilerHome);
+    }
+    if (not environment->contains(QStringLiteral("BAA_NAZM"))) {
+#if defined(Q_OS_WIN)
+        const QString nazm = QDir(compilerHome).filePath(QStringLiteral("نظم.exe"));
+#else
+        const QString nazm = QDir(compilerHome).filePath(QStringLiteral("نظم"));
+#endif
+        if (QFileInfo(nazm).isExecutable()) {
+            environment->insert(QStringLiteral("BAA_NAZM"), nazm);
+        }
+    }
+    return true;
 }
 }
 
@@ -57,6 +87,10 @@ void ProcessWorker::start() {
     process->setArguments(args);
     process->setWorkingDirectory(workingDir);
     process->setProcessChannelMode(QProcess::SeparateChannels);
+    QProcessEnvironment environment;
+    if (bundledBaaEnvironment(program, &environment)) {
+        process->setProcessEnvironment(environment);
+    }
 
     // Connect read signals
     connect(process, &QProcess::readyReadStandardOutput,

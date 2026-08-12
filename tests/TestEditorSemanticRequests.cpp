@@ -1,6 +1,7 @@
 #include "TEditor.h"
 
 #include <QCoreApplication>
+#include <QImage>
 #include <QKeyEvent>
 #include <QSignalSpy>
 #include <QTemporaryDir>
@@ -15,6 +16,7 @@ private slots:
     void keepsPairsAndSelectionsInLogicalDocumentOrder();
     void expandsAndShrinksCompilerOwnedSelections();
     void keepsLiteralBracesOutOfLocalFolding();
+    void rendersInlayHintsWithoutChangingSourceText();
 };
 
 void TestEditorSemanticRequests::requestsSignaturesFromArabicEditingTriggers()
@@ -153,6 +155,41 @@ void TestEditorSemanticRequests::keepsLiteralBracesOutOfLocalFolding()
         {0, 16, 3, 1, QStringLiteral("region")}
     });
     QCOMPARE(editor.foldingRangeCount(), 1);
+}
+
+void TestEditorSemanticRequests::rendersInlayHintsWithoutChangingSourceText()
+{
+    TEditor editor;
+    editor.resize(640, 240);
+    const QString source = QStringLiteral(
+        "صحيح اجمع(صحيح أول، صحيح ثان) { إرجع أول + ثان. }\n"
+        "صحيح الرئيسية() { إرجع اجمع(١، ٢). }\n");
+    editor.setPlainText(source);
+
+    QImage withoutHints(editor.size(), QImage::Format_ARGB32_Premultiplied);
+    withoutHints.fill(Qt::transparent);
+    editor.render(&withoutHints);
+
+    editor.setInlayHints({
+        {1, 27, QStringLiteral("أول:"), QStringLiteral("أول"), true, true},
+        {1, 30, QStringLiteral("ثان:"), QStringLiteral("ثان"), true, true}
+    });
+    QCOMPARE(editor.inlayHintCount(), 2);
+    QCOMPARE(editor.property("qalam.inlayHintCount").toInt(), 2);
+    QVERIFY(editor.accessibleDescription().contains(QStringLiteral("2")));
+    QCOMPARE(editor.toPlainText(), source);
+
+    QImage rendered(editor.size(), QImage::Format_ARGB32_Premultiplied);
+    rendered.fill(Qt::transparent);
+    editor.render(&rendered);
+    QVERIFY(not rendered.isNull());
+    QVERIFY(rendered != withoutHints);
+    QCOMPARE(editor.toPlainText(), source);
+
+    editor.clearInlayHints();
+    QCOMPARE(editor.inlayHintCount(), 0);
+    QCOMPARE(editor.property("qalam.inlayHintCount").toInt(), 0);
+    QVERIFY(editor.accessibleDescription().isEmpty());
 }
 
 QTEST_MAIN(TestEditorSemanticRequests)

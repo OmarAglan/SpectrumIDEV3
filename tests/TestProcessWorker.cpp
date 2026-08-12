@@ -1,7 +1,9 @@
 #include "ProcessWorker.h"
 
 #include <QCoreApplication>
+#include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
@@ -14,6 +16,7 @@ class TestProcessWorker : public QObject
 private slots:
     void tailsCompleteAndFinalJsonLines();
     void reportsRequestedCancellation();
+    void suppliesBundledBaaHome();
 };
 
 void TestProcessWorker::tailsCompleteAndFinalJsonLines()
@@ -54,6 +57,88 @@ void TestProcessWorker::reportsRequestedCancellation()
     QCOMPARE(finished.first().first().toInt(), -2);
 }
 
+void TestProcessWorker::suppliesBundledBaaHome()
+{
+    QTemporaryDir temporary;
+    QVERIFY(temporary.isValid());
+    QVERIFY(QDir().mkpath(temporary.filePath(QStringLiteral("stdlib"))));
+
+#if defined(Q_OS_WIN)
+    const QString compilerPath = temporary.filePath(QStringLiteral("baa.exe"));
+    const QString nazmPath = temporary.filePath(QStringLiteral("نظم.exe"));
+    const QString helperProgram = qEnvironmentVariable("ComSpec");
+    const QStringList helperArguments = {
+        QStringLiteral("/d"), QStringLiteral("/s"), QStringLiteral("/c"),
+        QStringLiteral("echo %BAA_HOME%& if \"%BAA_NAZM%\"==\"%1\" (echo MATCH) else (echo MISMATCH)")
+            .arg(nazmPath)
+    };
+#else
+    const QString compilerPath = temporary.filePath(QStringLiteral("baa"));
+    const QString nazmPath = temporary.filePath(QStringLiteral("نظم"));
+    const QString helperProgram = QStringLiteral("/bin/sh");
+    const QStringList helperArguments = {
+        QStringLiteral("-c"),
+        QStringLiteral("printf '%s\\n%s\\n' \"$BAA_HOME\" \"$BAA_NAZM\"")
+    };
+#endif
+    QVERIFY(QFileInfo(helperProgram).isExecutable());
+    QVERIFY(QFile::copy(helperProgram, compilerPath));
+    QVERIFY(QFile::copy(helperProgram, nazmPath));
+    QFile::setPermissions(
+        compilerPath,
+        QFileInfo(compilerPath).permissions() | QFileDevice::ExeOwner | QFileDevice::ExeGroup |
+            QFileDevice::ExeOther);
+    QFile::setPermissions(
+        nazmPath,
+        QFileInfo(nazmPath).permissions() | QFileDevice::ExeOwner | QFileDevice::ExeGroup |
+            QFileDevice::ExeOther);
+
+    const QByteArray previousBaaHome = qgetenv("BAA_HOME");
+    const bool hadBaaHome = qEnvironmentVariableIsSet("BAA_HOME");
+    const QByteArray previousBaaNazm = qgetenv("BAA_NAZM");
+    const bool hadBaaNazm = qEnvironmentVariableIsSet("BAA_NAZM");
+    qunsetenv("BAA_HOME");
+    qunsetenv("BAA_NAZM");
+
+    ProcessWorker worker(
+        compilerPath,
+        helperArguments,
+        temporary.path());
+    QSignalSpy output(&worker, &ProcessWorker::outputReady);
+    QSignalSpy finished(&worker, &ProcessWorker::finished);
+
+    worker.start();
+    QTRY_COMPARE_WITH_TIMEOUT(finished.size(), 1, 5000);
+
+    if (hadBaaHome) {
+        qputenv("BAA_HOME", previousBaaHome);
+    } else {
+        qunsetenv("BAA_HOME");
+    }
+    if (hadBaaNazm) {
+        qputenv("BAA_NAZM", previousBaaNazm);
+    } else {
+        qunsetenv("BAA_NAZM");
+    }
+
+    QCOMPARE(finished.first().first().toInt(), 0);
+    QString combinedOutput;
+    for (const QList<QVariant> &arguments : output) {
+        combinedOutput += arguments.first().toString();
+    }
+    const QStringList environmentLines =
+        combinedOutput.trimmed().split(QLatin1Char('\n'));
+    QCOMPARE(environmentLines.size(), 2);
+    QCOMPARE(QDir::cleanPath(environmentLines.at(0).trimmed()),
+             QDir::cleanPath(temporary.path()));
+#if defined(Q_OS_WIN)
+    QCOMPARE(environmentLines.at(1).trimmed(), QStringLiteral("MATCH"));
+#else
+    QCOMPARE(QDir::cleanPath(environmentLines.at(1).trimmed()),
+             QDir::cleanPath(nazmPath));
+#endif
+}
+
 int main(int argc, char **argv)
 {
     QCoreApplication application(argc, argv);
@@ -73,7 +158,6 @@ int main(int argc, char **argv)
         QThread::sleep(30);
         return 0;
     }
-
     TestProcessWorker test;
     return QTest::qExec(&test, argc, argv);
 }

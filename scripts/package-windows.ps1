@@ -4,11 +4,18 @@ param(
     [string]$PackageDir = 'dist/Qalam-win64',
     [string]$ZipPath = 'dist/Qalam-win64.zip',
     [string]$BaaLspExecutable = $env:QALAM_BAA_LSP_PATH,
+    [string]$BaaCompilerExecutable = $env:QALAM_BAA_PATH,
+    [string]$BaaSourceDir = '',
+    [string]$NazmExecutable = $env:QALAM_NAZM_PATH,
+    [string]$NazmSourceDir = '',
     [switch]$SkipLanguageServer,
+    [switch]$SkipCompiler,
     [switch]$SkipBuild
 )
 
 $ErrorActionPreference = 'Stop'
+$nazmArabicExecutableName =
+    (-join [char[]](0x0646, 0x0638, 0x0645)) + '.exe'
 Set-Location (Split-Path -Parent $PSScriptRoot)
 
 if (!$SkipBuild) {
@@ -101,9 +108,98 @@ development package.
     Copy-Item -LiteralPath $resolvedServer -Destination $packagedLanguageServer -Force
 }
 
-# Optional: bundle the Baa compiler if the repository contains a local compiler folder.
-if (Test-Path 'baa') {
-    Copy-Item 'baa' (Join-Path $PackageDir 'baa') -Recurse -Force
+$packagedCompiler = $null
+$packagedNazm = $null
+if (!$SkipCompiler) {
+    $compilerCandidates = [System.Collections.Generic.List[string]]::new()
+    if ($BaaCompilerExecutable) { $compilerCandidates.Add($BaaCompilerExecutable) }
+    $compilerCandidates.Add('..\Baa\build\windows-release\baa.exe')
+    $compilerCandidates.Add('..\Baa\build\baa.exe')
+    $compilerCandidates.Add('ecosystem\Baa\build\windows-release\baa.exe')
+    $compilerCandidates.Add('ecosystem\Baa\build\baa.exe')
+    $pathCompiler = Get-Command baa.exe -ErrorAction SilentlyContinue
+    if ($pathCompiler) { $compilerCandidates.Add($pathCompiler.Source) }
+
+    $resolvedCompiler = $compilerCandidates |
+        Where-Object { $_ -and (Test-Path -LiteralPath $_ -PathType Leaf) } |
+        ForEach-Object { (Resolve-Path -LiteralPath $_).Path } |
+        Select-Object -First 1
+    if (!$resolvedCompiler) {
+        throw @'
+Baa was not found, so a functional Qalam package cannot be created. Build the
+sibling Baa repository, pass -BaaCompilerExecutable, set QALAM_BAA_PATH, or use
+-SkipCompiler only for an intentional UI/LSP development package.
+'@
+    }
+
+    $sourceCandidates = [System.Collections.Generic.List[string]]::new()
+    if ($BaaSourceDir) { $sourceCandidates.Add($BaaSourceDir) }
+    $sourceCandidates.Add('..\Baa')
+    $sourceCandidates.Add('ecosystem\Baa')
+    $resolvedSource = $sourceCandidates |
+        Where-Object {
+            $_ -and (Test-Path -LiteralPath (Join-Path $_ 'stdlib') -PathType Container)
+        } |
+        ForEach-Object { (Resolve-Path -LiteralPath $_).Path } |
+        Select-Object -First 1
+    if (!$resolvedSource) {
+        throw 'Baa stdlib was not found. Pass -BaaSourceDir for the compiler source tree.'
+    }
+
+    $runtimeCandidates = @(
+        (Join-Path (Split-Path -Parent $resolvedCompiler) 'libbaa_runtime.a'),
+        (Join-Path $resolvedSource 'build\windows-release\libbaa_runtime.a'),
+        (Join-Path $resolvedSource 'build\libbaa_runtime.a')
+    )
+    $resolvedRuntime = $runtimeCandidates |
+        Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } |
+        ForEach-Object { (Resolve-Path -LiteralPath $_).Path } |
+        Select-Object -First 1
+    if (!$resolvedRuntime) {
+        throw 'Baa runtime archive libbaa_runtime.a was not found beside the selected compiler.'
+    }
+
+    $compilerDirectory = Join-Path $PackageDir 'baa'
+    New-Item -ItemType Directory -Path $compilerDirectory -Force | Out-Null
+    $packagedCompiler = Join-Path $compilerDirectory 'baa.exe'
+    Copy-Item -LiteralPath $resolvedCompiler -Destination $packagedCompiler -Force
+    Copy-Item -LiteralPath $resolvedRuntime `
+        -Destination (Join-Path $compilerDirectory 'libbaa_runtime.a') -Force
+    Copy-Item -LiteralPath (Join-Path $resolvedSource 'stdlib') `
+        -Destination (Join-Path $compilerDirectory 'stdlib') -Recurse -Force
+
+    $nazmCandidates = [System.Collections.Generic.List[string]]::new()
+    if ($NazmExecutable) { $nazmCandidates.Add($NazmExecutable) }
+    if ($NazmSourceDir) {
+        $nazmCandidates.Add((Join-Path $NazmSourceDir (
+            'build\windows-release\' + $nazmArabicExecutableName)))
+        $nazmCandidates.Add((Join-Path $NazmSourceDir 'build\windows-release\nazm.exe'))
+        $nazmCandidates.Add((Join-Path $NazmSourceDir (
+            'build\' + $nazmArabicExecutableName)))
+        $nazmCandidates.Add((Join-Path $NazmSourceDir 'build\nazm.exe'))
+    }
+    $nazmCandidates.Add((Join-Path '..\Nazm\build\windows-release' $nazmArabicExecutableName))
+    $nazmCandidates.Add('..\Nazm\build\windows-release\nazm.exe')
+    $nazmCandidates.Add((Join-Path '..\Nazm\build' $nazmArabicExecutableName))
+    $nazmCandidates.Add('..\Nazm\build\nazm.exe')
+    $nazmCandidates.Add((Join-Path 'ecosystem\Nazm\build\windows-release' $nazmArabicExecutableName))
+    $nazmCandidates.Add('ecosystem\Nazm\build\windows-release\nazm.exe')
+    $pathNazm = Get-Command $nazmArabicExecutableName -ErrorAction SilentlyContinue
+    if (!$pathNazm) { $pathNazm = Get-Command nazm.exe -ErrorAction SilentlyContinue }
+    if ($pathNazm) { $nazmCandidates.Add($pathNazm.Source) }
+
+    $resolvedNazm = $nazmCandidates |
+        Where-Object { $_ -and (Test-Path -LiteralPath $_ -PathType Leaf) } |
+        ForEach-Object { (Resolve-Path -LiteralPath $_).Path } |
+        Select-Object -First 1
+    if (!$resolvedNazm) {
+        throw @'
+Nazm was not found, so the bundled Baa compiler could not produce objects.
+Build the sibling Nazm repository or pass -NazmExecutable/-NazmSourceDir.
+'@
+    }
+    $packagedNazm = Join-Path $compilerDirectory $nazmArabicExecutableName
+    Copy-Item -LiteralPath $resolvedNazm -Destination $packagedNazm -Force
 }
 
 $runtimeTestArguments = @{
@@ -112,6 +208,10 @@ $runtimeTestArguments = @{
 }
 if ($packagedLanguageServer) {
     $runtimeTestArguments.LanguageServer = $packagedLanguageServer
+}
+if ($packagedCompiler) {
+    $runtimeTestArguments.Compiler = $packagedCompiler
+    $runtimeTestArguments.Nazm = $packagedNazm
 }
 & (Join-Path $PSScriptRoot 'test-windows-runtime.ps1') @runtimeTestArguments
 
@@ -122,4 +222,8 @@ Write-Host "Packaged Qalam successfully:" -ForegroundColor Green
 Write-Host "  $ZipPath"
 if ($packagedLanguageServer) {
     Write-Host "  Baa-LSP: $packagedLanguageServer"
+}
+if ($packagedCompiler) {
+    Write-Host "  Baa: $packagedCompiler"
+    Write-Host "  Nazm: $packagedNazm"
 }

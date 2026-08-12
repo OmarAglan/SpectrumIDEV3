@@ -24,10 +24,22 @@ param(
 
     [string]$BaaLspExecutable = $env:QALAM_BAA_LSP_PATH,
 
-    [switch]$SkipLanguageServer
+    [string]$BaaSourceDir = '',
+
+    [string]$BaaCompilerExecutable = $env:QALAM_BAA_PATH,
+
+    [string]$NazmSourceDir = '',
+
+    [string]$NazmExecutable = $env:QALAM_NAZM_PATH,
+
+    [switch]$SkipLanguageServer,
+
+    [switch]$SkipCompiler
 )
 
 $ErrorActionPreference = 'Stop'
+$nazmArabicExecutableName =
+    (-join [char[]](0x0646, 0x0638, 0x0645)) + '.exe'
 Set-Location (Split-Path -Parent $PSScriptRoot)
 
 function Write-Step {
@@ -368,6 +380,70 @@ Write-Step 'Building Qalam IDE'
     -BuildTests:$BuildTests
 
 if (!$NoPackage) {
+    if (!$SkipCompiler -and !$NazmExecutable) {
+        $nazmSourceCandidates = [System.Collections.Generic.List[string]]::new()
+        if ($NazmSourceDir) { $nazmSourceCandidates.Add($NazmSourceDir) }
+        $nazmSourceCandidates.Add((Join-Path (Get-Location) '..\Nazm'))
+        $nazmSourceCandidates.Add((Join-Path (Get-Location) 'ecosystem\Nazm'))
+        $resolvedNazmSource = $nazmSourceCandidates |
+            Where-Object { $_ -and (Test-Path -LiteralPath (Join-Path $_ 'CMakeLists.txt')) } |
+            ForEach-Object { (Resolve-Path -LiteralPath $_).Path } |
+            Select-Object -First 1
+        if (!$resolvedNazmSource) {
+            throw @'
+Nazm source was not found. A production Qalam package includes the assembler.
+Clone it beside Qalam, pass -NazmSourceDir/-NazmExecutable, or use
+-SkipCompiler only for an intentional UI/LSP development package.
+'@
+        }
+
+        $nazmBuildDir = Join-Path $resolvedNazmSource (
+            "build/windows-$($Configuration.ToLowerInvariant())")
+        Write-Step 'Building the bundled Nazm assembler'
+        & cmake -S $resolvedNazmSource -B $nazmBuildDir `
+            -G 'MinGW Makefiles' "-DCMAKE_BUILD_TYPE=$Configuration" `
+            -DNAZM_BUILD_TESTS=OFF
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        & cmake --build $nazmBuildDir --parallel 2 --target nazm
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        $NazmExecutable = (Resolve-Path -LiteralPath (
+            Join-Path $nazmBuildDir $nazmArabicExecutableName)).Path
+        $NazmSourceDir = $resolvedNazmSource
+    }
+
+    if (!$SkipCompiler -and !$BaaCompilerExecutable) {
+        $compilerSourceCandidates = [System.Collections.Generic.List[string]]::new()
+        if ($BaaSourceDir) { $compilerSourceCandidates.Add($BaaSourceDir) }
+        $compilerSourceCandidates.Add((Join-Path (Get-Location) '..\Baa'))
+        $compilerSourceCandidates.Add((Join-Path (Get-Location) 'ecosystem\Baa'))
+        $resolvedCompilerSource = $compilerSourceCandidates |
+            Where-Object {
+                $_ -and (Test-Path -LiteralPath (Join-Path $_ 'CMakeLists.txt')) -and
+                (Test-Path -LiteralPath (Join-Path $_ 'stdlib'))
+            } |
+            ForEach-Object { (Resolve-Path -LiteralPath $_).Path } |
+            Select-Object -First 1
+        if (!$resolvedCompilerSource) {
+            throw @'
+Baa source was not found. A production Qalam package includes the compiler and
+stdlib. Clone it beside Qalam, pass -BaaSourceDir/-BaaCompilerExecutable, or use
+-SkipCompiler only for an intentional UI/LSP development package.
+'@
+        }
+
+        $compilerBuildDir = Join-Path $resolvedCompilerSource (
+            "build/windows-$($Configuration.ToLowerInvariant())")
+        Write-Step 'Building the bundled Baa compiler'
+        & cmake -S $resolvedCompilerSource -B $compilerBuildDir `
+            -G 'MinGW Makefiles' "-DCMAKE_BUILD_TYPE=$Configuration"
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        & cmake --build $compilerBuildDir --parallel 2 --target baa baa_runtime
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        $BaaCompilerExecutable = (Resolve-Path -LiteralPath (
+            Join-Path $compilerBuildDir 'baa.exe')).Path
+        $BaaSourceDir = $resolvedCompilerSource
+    }
+
     if (!$SkipLanguageServer -and !$BaaLspExecutable) {
         $sourceCandidates = [System.Collections.Generic.List[string]]::new()
         if ($BaaLspSourceDir) { $sourceCandidates.Add($BaaLspSourceDir) }
@@ -409,7 +485,12 @@ server. Clone it beside Qalam, pass -BaaLspSourceDir/-BaaLspExecutable, or use
         -QtRoot $resolvedQtRoot `
         -BuildDir $BuildDir `
         -BaaLspExecutable $BaaLspExecutable `
+        -BaaCompilerExecutable $BaaCompilerExecutable `
+        -BaaSourceDir $BaaSourceDir `
+        -NazmExecutable $NazmExecutable `
+        -NazmSourceDir $NazmSourceDir `
         -SkipLanguageServer:$SkipLanguageServer `
+        -SkipCompiler:$SkipCompiler `
         -SkipBuild
 }
 

@@ -8,6 +8,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonParseError>
+#include <QProcessEnvironment>
 #include <QSettings>
 #include <QStandardPaths>
 #include <QUrl>
@@ -35,6 +36,40 @@ bool nonnegativeInt(const QJsonValue &value, int *result)
         return false;
     *result = static_cast<int>(integer);
     return true;
+}
+
+QJsonObject documentEndPosition(const QString &text)
+{
+    int line = 0;
+    int character = 0;
+    for (const QChar value : text) {
+        if (value == QLatin1Char('\n')) {
+            ++line;
+            character = 0;
+        } else {
+            ++character;
+        }
+    }
+    return QJsonObject{
+        {QStringLiteral("line"), line},
+        {QStringLiteral("character"), character}
+    };
+}
+
+bool positionExists(const QString &text, int line, int character)
+{
+    if (line < 0 or character < 0) return false;
+    int currentLine = 0;
+    int lineStart = 0;
+    for (int index = 0; index < text.size(); ++index) {
+        if (currentLine == line and text.at(index) == QLatin1Char('\n'))
+            return character <= index - lineStart;
+        if (text.at(index) == QLatin1Char('\n')) {
+            ++currentLine;
+            lineStart = index + 1;
+        }
+    }
+    return currentLine == line and character <= text.size() - lineStart;
 }
 }
 
@@ -128,6 +163,7 @@ int BaaLanguageClient::synchronizeDocument(const QString &filePath,
     cancelPendingSymbolRequests(path);
     cancelPendingTokenRequests(path);
     cancelPendingStructureRequests(path);
+    cancelPendingInlayHintRequests(path);
     cancelPendingCompletionRequests(path);
     cancelPendingFormattingRequests(path);
     cancelPendingSemanticRequests(path);
@@ -135,6 +171,7 @@ int BaaLanguageClient::synchronizeDocument(const QString &filePath,
     m_symbolRequestedVersions.remove(path);
     m_tokenRequestedVersions.remove(path);
     m_foldingRequestedVersions.remove(path);
+    m_inlayHintRequestedVersions.remove(path);
     it->text = text;
     it->editorRevision = editorRevision;
     ++it->version;
@@ -196,6 +233,33 @@ void BaaLanguageClient::requestFoldingRanges(const QString &filePath)
                      QJsonObject{{QStringLiteral("uri"), document->uri}}}});
     m_pendingFoldingRequests.insert(requestId, {path, document->version});
     m_foldingRequestedVersions.insert(path, document->version);
+}
+
+void BaaLanguageClient::requestInlayHints(const QString &filePath)
+{
+    if (m_state != State::Ready or not m_inlayHintProvider) return;
+    const QString path = normalizedFilePath(filePath);
+    auto document = m_documents.find(path);
+    if (document == m_documents.end() or not document->opened) return;
+    if (m_inlayHintRequestedVersions.value(path) == document->version) return;
+
+    flushPendingChange(path, document.value());
+    cancelPendingInlayHintRequests(path);
+    const qint64 requestId = sendRequest(
+        QStringLiteral("textDocument/inlayHint"),
+        QJsonObject{
+            {QStringLiteral("textDocument"),
+             QJsonObject{{QStringLiteral("uri"), document->uri}}},
+            {QStringLiteral("range"), QJsonObject{
+                {QStringLiteral("start"), QJsonObject{
+                    {QStringLiteral("line"), 0},
+                    {QStringLiteral("character"), 0}
+                }},
+                {QStringLiteral("end"), documentEndPosition(document->text)}
+            }}
+        });
+    m_pendingInlayHintRequests.insert(requestId, {path, document->version});
+    m_inlayHintRequestedVersions.insert(path, document->version);
 }
 
 void BaaLanguageClient::requestSelectionRanges(const QString &filePath,
@@ -476,6 +540,7 @@ void BaaLanguageClient::closeDocument(const QString &filePath)
     cancelPendingSymbolRequests(path);
     cancelPendingTokenRequests(path);
     cancelPendingStructureRequests(path);
+    cancelPendingInlayHintRequests(path);
     cancelPendingCompletionRequests(path);
     cancelPendingFormattingRequests(path);
     cancelPendingSemanticRequests(path);
@@ -494,6 +559,7 @@ void BaaLanguageClient::closeDocument(const QString &filePath)
     m_symbolRequestedVersions.remove(path);
     m_tokenRequestedVersions.remove(path);
     m_foldingRequestedVersions.remove(path);
+    m_inlayHintRequestedVersions.remove(path);
 }
 
 void BaaLanguageClient::stop()
@@ -613,6 +679,28 @@ void BaaLanguageClient::ensureStarted()
         arguments.append({QStringLiteral("--takween-path"), m_takweenProgram});
     }
     process->setArguments(arguments);
+    if (not compiler.isEmpty()) {
+        QProcessEnvironment environment = QProcessEnvironment::systemEnvironment();
+        if (not environment.contains(QStringLiteral("BAA_HOME"))) {
+            environment.insert(
+                QStringLiteral("BAA_HOME"),
+                QFileInfo(compiler).absolutePath());
+        }
+        if (not environment.contains(QStringLiteral("BAA_NAZM"))) {
+            const QString compilerHome = QFileInfo(compiler).absolutePath();
+#if defined(Q_OS_WIN)
+            const QString nazm =
+                QDir(compilerHome).filePath(QStringLiteral("نظم.exe"));
+#else
+            const QString nazm =
+                QDir(compilerHome).filePath(QStringLiteral("نظم"));
+#endif
+            if (QFileInfo(nazm).isExecutable()) {
+                environment.insert(QStringLiteral("BAA_NAZM"), nazm);
+            }
+        }
+        process->setProcessEnvironment(environment);
+    }
     process->setProcessChannelMode(QProcess::SeparateChannels);
     setState(State::Starting);
 
@@ -678,7 +766,38 @@ QString BaaLanguageClient::resolveCompilerProgram() const
 {
     if (not m_compilerProgram.isEmpty()) return m_compilerProgram;
     QSettings settings(Constants::OrgName, Constants::AppName);
-    return settings.value(Constants::SettingsKeyCompilerPath).toString().trimmed();
+    const QString configured =
+        settings.value(Constants::SettingsKeyCompilerPath).toString().trimmed();
+    if (not configured.isEmpty()) {
+        const QString found = QStandardPaths::findExecutable(configured);
+        return found.isEmpty() ? configured : found;
+    }
+
+    const QString environment = qEnvironmentVariable("BAA").trimmed();
+    if (not environment.isEmpty()) {
+        const QString found = QStandardPaths::findExecutable(environment);
+        return found.isEmpty() ? environment : found;
+    }
+
+    const QString appDirectory = QCoreApplication::applicationDirPath();
+    const QStringList candidates = {
+#if defined(Q_OS_WIN)
+        QDir(appDirectory).filePath(QStringLiteral("baa/baa.exe")),
+        QDir(appDirectory).filePath(QStringLiteral("baa-lsp/baa/baa.exe")),
+        QDir(appDirectory).filePath(QStringLiteral("baa.exe")),
+        QStandardPaths::findExecutable(QStringLiteral("baa.exe")),
+#else
+        QDir(appDirectory).filePath(QStringLiteral("baa/baa")),
+        QDir(appDirectory).filePath(QStringLiteral("baa-lsp/baa/baa")),
+        QDir(appDirectory).filePath(QStringLiteral("baa")),
+#endif
+        QStandardPaths::findExecutable(QStringLiteral("baa"))
+    };
+    for (const QString &candidate : candidates) {
+        if (not candidate.isEmpty() and QFileInfo(candidate).isExecutable())
+            return candidate;
+    }
+    return QString();
 }
 
 void BaaLanguageClient::setState(State state)
@@ -961,6 +1080,9 @@ void BaaLanguageClient::sendInitialize()
                 {QStringLiteral("selectionRange"), QJsonObject{
                     {QStringLiteral("dynamicRegistration"), false}
                 }},
+                {QStringLiteral("inlayHint"), QJsonObject{
+                    {QStringLiteral("dynamicRegistration"), false}
+                }},
                 {QStringLiteral("completion"), QJsonObject{
                     {QStringLiteral("completionItem"), QJsonObject{
                         {QStringLiteral("snippetSupport"), true}
@@ -1085,6 +1207,21 @@ void BaaLanguageClient::cancelPendingFoldingRequests(
         sendNotification(QStringLiteral("$/cancelRequest"),
                          QJsonObject{{QStringLiteral("id"), requestId}});
         m_pendingFoldingRequests.remove(requestId);
+    }
+}
+
+void BaaLanguageClient::cancelPendingInlayHintRequests(
+    const QString &filePath)
+{
+    QList<qint64> requestIds;
+    for (auto it = m_pendingInlayHintRequests.cbegin();
+         it != m_pendingInlayHintRequests.cend(); ++it) {
+        if (it->filePath == filePath) requestIds.push_back(it.key());
+    }
+    for (qint64 requestId : requestIds) {
+        sendNotification(QStringLiteral("$/cancelRequest"),
+                         QJsonObject{{QStringLiteral("id"), requestId}});
+        m_pendingInlayHintRequests.remove(requestId);
     }
 }
 
@@ -1230,6 +1367,10 @@ void BaaLanguageClient::handleResponse(const QJsonObject &message)
             capabilities.value(QStringLiteral("selectionRangeProvider"));
         m_selectionRangeProvider = selectionRangeProvider.isObject() or
             selectionRangeProvider.toBool(false);
+        const QJsonValue inlayHintProvider =
+            capabilities.value(QStringLiteral("inlayHintProvider"));
+        m_inlayHintProvider = inlayHintProvider.isObject() or
+            inlayHintProvider.toBool(false);
         const QJsonValue workspaceSymbolProvider =
             capabilities.value(QStringLiteral("workspaceSymbolProvider"));
         m_workspaceSymbolProvider = workspaceSymbolProvider.isObject() or
@@ -1429,6 +1570,36 @@ void BaaLanguageClient::handleResponse(const QJsonObject &message)
         emit selectionRangesPublished(
             pending.filePath, pending.documentVersion,
             pending.line, pending.character, ranges);
+        return;
+    }
+    auto inlayHintRequest = m_pendingInlayHintRequests.find(id);
+    if (inlayHintRequest != m_pendingInlayHintRequests.end()) {
+        const PendingInlayHintRequest pending = inlayHintRequest.value();
+        m_pendingInlayHintRequests.erase(inlayHintRequest);
+        const auto document = m_documents.constFind(pending.filePath);
+        if (document == m_documents.cend() or
+            document->version != pending.documentVersion) return;
+        if (message.contains(QStringLiteral("error"))) {
+            m_inlayHintRequestedVersions.remove(pending.filePath);
+            const QJsonObject error =
+                message.value(QStringLiteral("error")).toObject();
+            const int code = error.value(QStringLiteral("code")).toInt();
+            if (code != -32800 and code != -32801)
+                emit logMessage(
+                    error.value(QStringLiteral("message")).toString(), 2);
+            return;
+        }
+        bool valid = false;
+        const QVector<BaaInlayHint> hints = parseInlayHints(
+            message.value(QStringLiteral("result")), document->text, &valid);
+        if (not valid) {
+            m_inlayHintRequestedVersions.remove(pending.filePath);
+            emit logMessage(
+                QStringLiteral("أعاد Baa-LSP تلميحات مضمنة غير صالحة."), 2);
+            return;
+        }
+        emit inlayHintsPublished(
+            pending.filePath, pending.documentVersion, hints);
         return;
     }
     auto workspaceSymbolRequest =
@@ -1671,6 +1842,7 @@ void BaaLanguageClient::handlePublishDiagnostics(const QJsonObject &params)
     requestDocumentSymbols(path);
     requestSemanticTokens(path);
     requestFoldingRanges(path);
+    requestInlayHints(path);
 }
 
 QVector<BaaSemanticToken> BaaLanguageClient::parseSemanticTokens(
@@ -1766,6 +1938,58 @@ QVector<BaaFoldingRange> BaaLanguageClient::parseFoldingRanges(
     }
     if (valid) *valid = true;
     return ranges;
+}
+
+QVector<BaaInlayHint> BaaLanguageClient::parseInlayHints(
+    const QJsonValue &result,
+    const QString &text,
+    bool *valid) const
+{
+    if (valid) *valid = false;
+    QVector<BaaInlayHint> hints;
+    if (not result.isArray()) return hints;
+    const QJsonArray items = result.toArray();
+    hints.reserve(items.size());
+    int previousLine = -1;
+    int previousCharacter = -1;
+    for (const QJsonValue &value : items) {
+        if (not value.isObject()) return {};
+        const QJsonObject item = value.toObject();
+        const QJsonObject position =
+            item.value(QStringLiteral("position")).toObject();
+        const QJsonObject data = item.value(QStringLiteral("data")).toObject();
+        BaaInlayHint hint;
+        if (not nonnegativeInt(
+                position.value(QStringLiteral("line")), &hint.line) or
+            not nonnegativeInt(
+                position.value(QStringLiteral("character")),
+                &hint.character) or
+            not positionExists(text, hint.line, hint.character) or
+            item.value(QStringLiteral("kind")).toInt(-1) != 2 or
+            not item.value(QStringLiteral("label")).isString() or
+            not item.value(QStringLiteral("paddingRight")).isBool() or
+            data.value(QStringLiteral("schema_version")).toString() !=
+                QStringLiteral("inlay-hints-json-v1") or
+            not data.value(QStringLiteral("parameter")).isString() or
+            not data.value(QStringLiteral("complete")).isBool())
+            return {};
+        hint.label =
+            item.value(QStringLiteral("label")).toString().trimmed();
+        hint.parameter =
+            data.value(QStringLiteral("parameter")).toString().trimmed();
+        hint.paddingRight =
+            item.value(QStringLiteral("paddingRight")).toBool();
+        hint.complete = data.value(QStringLiteral("complete")).toBool();
+        if (not hint.isValid() or hint.line < previousLine or
+            (hint.line == previousLine and
+             hint.character < previousCharacter))
+            return {};
+        previousLine = hint.line;
+        previousCharacter = hint.character;
+        hints.push_back(std::move(hint));
+    }
+    if (valid) *valid = true;
+    return hints;
 }
 
 QVector<BaaSelectionRange> BaaLanguageClient::parseSelectionRanges(
@@ -2194,6 +2418,7 @@ void BaaLanguageClient::clearServerSession()
     m_semanticTokenTypes.clear();
     m_foldingRangeProvider = false;
     m_selectionRangeProvider = false;
+    m_inlayHintProvider = false;
     m_workspaceSymbolProvider = false;
     m_workspaceFoldersSupported = false;
     m_serverWorkspaceRoots.clear();
@@ -2212,6 +2437,7 @@ void BaaLanguageClient::clearServerSession()
     m_pendingTokenRequests.clear();
     m_pendingFoldingRequests.clear();
     m_pendingSelectionRequests.clear();
+    m_pendingInlayHintRequests.clear();
     m_pendingWorkspaceSymbolRequests.clear();
     m_pendingCompletionRequests.clear();
     m_pendingFormattingRequests.clear();
@@ -2219,6 +2445,7 @@ void BaaLanguageClient::clearServerSession()
     m_symbolRequestedVersions.clear();
     m_tokenRequestedVersions.clear();
     m_foldingRequestedVersions.clear();
+    m_inlayHintRequestedVersions.clear();
     m_documentSymbols.clear();
     for (auto it = m_documents.begin(); it != m_documents.end(); ++it) it->opened = false;
 }

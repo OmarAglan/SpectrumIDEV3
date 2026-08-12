@@ -54,7 +54,11 @@ The bootstrap script does the full local setup:
    already present on `PATH` is not accepted as the kit compiler.
 6. Builds Qalam.
 7. Builds Baa-LSP from a sibling checkout (or consumes an explicit executable).
-8. Runs the packaging and isolated-runtime checks to create a portable ZIP.
+8. Builds Baa and its runtime from a sibling checkout (or consumes an explicit
+   compiler), then copies the matching stdlib.
+9. Builds the pinned Nazm assembler and installs its Arabic executable beside Baa.
+10. Runs the packaging and isolated-runtime/object-generation checks to create a
+    portable ZIP.
 
 Outputs:
 
@@ -72,14 +76,18 @@ Useful options:
 .\scripts\bootstrap-windows.ps1 -BuildDir "build\fresh-package"
 .\scripts\bootstrap-windows.ps1 -BaaLspSourceDir "..\Baa-LSP"
 .\scripts\bootstrap-windows.ps1 -BaaLspExecutable "D:\tools\baa-lsp.exe"
+.\scripts\bootstrap-windows.ps1 -BaaSourceDir "..\Baa"
+.\scripts\bootstrap-windows.ps1 -BaaCompilerExecutable "D:\tools\baa.exe" -BaaSourceDir "..\Baa"
+.\scripts\bootstrap-windows.ps1 -NazmSourceDir "..\Nazm"
 ```
 
 The packaging script runs `windeployqt.exe` for Qt libraries and plugins, then
 copies the exact MinGW runtime recorded in the build's `CMakeCache.txt`.
 It never selects compiler DLLs from the caller's `PATH`. A production package
-also requires Baa-LSP and copies it to `baa-lsp/baa-lsp.exe`, the path Qalam
-discovers automatically. `-SkipLanguageServer` exists only for an intentional
-UI-only development package.
+requires Baa-LSP at `baa-lsp/baa-lsp.exe` and the matching Baa compiler, Nazm
+assembler, `libbaa_runtime.a`, and stdlib under `baa/`, which Qalam discovers
+automatically. `-SkipLanguageServer` and `-SkipCompiler` exist only for
+intentional development packages.
 
 To verify a built or packaged executable with no Qt or MinGW directories on
 `PATH`:
@@ -87,7 +95,9 @@ To verify a built or packaged executable with no Qt or MinGW directories on
 ```powershell
 .\scripts\test-windows-runtime.ps1 `
   -Executable .\dist\Qalam-win64\Qalam.exe `
-  -LanguageServer .\dist\Qalam-win64\baa-lsp\baa-lsp.exe
+  -LanguageServer .\dist\Qalam-win64\baa-lsp\baa-lsp.exe `
+  -Compiler .\dist\Qalam-win64\baa\baa.exe `
+  -Nazm .\dist\Qalam-win64\baa\نظم.exe
 ```
 
 ### Option B: manual PowerShell scripts
@@ -100,7 +110,10 @@ $env:QALAM_QT_DIR = "C:\Qt\6.10.2\mingw_64"
 
 .\scripts\build-windows.ps1 -Configuration Release
 .\scripts\package-windows.ps1 -SkipBuild `
-  -BaaLspExecutable "..\Baa-LSP\build\windows-release\baa-lsp.exe"
+  -BaaLspExecutable "..\Baa-LSP\build\windows-release\baa-lsp.exe" `
+  -BaaCompilerExecutable "..\Baa\build\windows-release\baa.exe" `
+  -BaaSourceDir "..\Baa" `
+  -NazmExecutable "..\Nazm\build\windows-release\نظم.exe"
 ```
 
 ### Option C: CMake presets
@@ -138,9 +151,15 @@ intermediate build:
 The IDE now resolves the Baa compiler in this order:
 
 1. The configured compiler path from settings.
-2. `baa/baa.exe` next to `Qalam.exe`.
-3. `baa.exe` next to `Qalam.exe`.
-4. `baa.exe` or `baa` from `PATH`.
+2. The `BAA` environment variable.
+3. `baa/baa.exe` next to `Qalam.exe`.
+4. `baa-lsp/baa/baa.exe` in a development layout.
+5. `baa.exe` next to `Qalam.exe`.
+6. `baa.exe` or `baa` from `PATH`.
+
+When the selected compiler has a sibling Arabic `نظم` executable, Qalam supplies
+its exact path through `BAA_NAZM`; no ASCII launcher name or global `PATH` entry
+is required. An explicit existing `BAA_NAZM` remains authoritative.
 
 For portable releases, place the compiler here:
 
@@ -149,6 +168,9 @@ Qalam-win64/
   Qalam.exe
   baa/
     baa.exe
+    نظم.exe
+    libbaa_runtime.a
+    stdlib/
 ```
 
 ---
@@ -198,6 +220,9 @@ build/linux-release/qalam/
   Qalam
   baa/
     baa
+    نظم
+    libbaa_runtime.a
+    stdlib/
 ```
 
 Make it executable:
@@ -246,12 +271,14 @@ mingw32-make -j
 ## Continuous Integration
 
 The repository includes `.github/workflows/build.yml` for Windows and Linux.
-Both jobs build the pinned Baa-LSP revision and publish combined Qalam + Baa-LSP
-artifacts. Windows uploads a runtime-complete ZIP; Linux uploads a `.tar.gz`
-whose Qt libraries are provided by the target distribution.
+Both jobs build the pinned Baa-LSP, Baa, and Nazm revisions and publish combined
+Qalam + Baa-LSP + Baa + Nazm artifacts. Windows uploads a runtime-complete ZIP;
+Linux uploads a `.tar.gz` whose Qt libraries are provided by the target distribution.
 The workflow pins Baa-LSP commit
-`c72997e88ad2e7ccd75c547bd49abedd68e133aa`, including dynamic Takween
-workspace folders and manifest/lock refresh.
+`c88dd6573e23d289e28528aaae1cd39b8a5d2f09` and Baa commit
+`d5ee0c0df7288669f378be24990623f7f0d0f0b0`, plus Nazm commit
+`f7fcf8f6d2bf629daf708b3b6028e22c74683ce6`, including compiler-owned
+parameter hints and an Arabic-only assembler path in the portable payload.
 
 The admitted receipt is
 [run 31509433467](https://github.com/OmarAglan/Qalam-IDE/actions/runs/31509433467),
@@ -265,11 +292,11 @@ which uploaded `Qalam-win64` and `Qalam-linux-x86_64` after both jobs passed.
 2. **Windows terminal:** The embedded terminal starts `cmd.exe` using UTF-8 code page setup, but a future terminal layer should support PowerShell and better ANSI color rendering.
 3. **CI:** Windows and Linux GitHub Actions builds are included; macOS CI packaging can be added later.
 4. **Packaging installer:** Current Windows packaging creates a portable ZIP. A proper installer can be added later with Qt Installer Framework or another installer system.
-5. **Baa SDK distribution:** Baa-LSP is bundled now, but Baa, Nazm, `baalib`,
-   target files, and Takween belong to the separate versioned SDK/tool
-   environment. Until that track lands, users select an installed compiler and
-   Takween through discovery/settings rather than receiving an unversioned copy
-   inside the Qalam archive.
+5. **Baa SDK distribution:** Qalam now bundles the pinned reference compiler,
+   Nazm assembler, runtime archive, and stdlib needed for IDE use and local
+   object generation. Final native linking still requires a supported host
+   linker. Takween, a linker/toolchain payload, multi-version selection, target
+   files, and transactional installation belong to the versioned SDK track.
 
 ---
 

@@ -182,6 +182,27 @@ void TEditor::clearSemanticTokens()
     if (highlighter) highlighter->clearSemanticTokens();
 }
 
+void TEditor::setInlayHints(const QVector<BaaInlayHint> &hints)
+{
+    m_inlayHints = hints;
+    setProperty("qalam.inlayHintCount", m_inlayHints.size());
+    setAccessibleDescription(
+        m_inlayHints.isEmpty()
+            ? QString()
+            : QStringLiteral("%1 تلميحات معاملات من مصرّف باء")
+                  .arg(m_inlayHints.size()));
+    viewport()->update();
+}
+
+void TEditor::clearInlayHints()
+{
+    if (m_inlayHints.isEmpty()) return;
+    m_inlayHints.clear();
+    setProperty("qalam.inlayHintCount", 0);
+    setAccessibleDescription(QString());
+    viewport()->update();
+}
+
 void TEditor::setFoldingRanges(const QVector<BaaFoldingRange> &ranges)
 {
     QVector<FoldRegion> converted;
@@ -508,6 +529,67 @@ void TEditor::updateLineNumberArea(const QRect &rect, int dy) {
 
     if (rect.contains(viewport()->rect()))
         updateLineNumberAreaWidth();
+}
+
+void TEditor::paintEvent(QPaintEvent *event)
+{
+    QPlainTextEdit::paintEvent(event);
+    if (m_inlayHints.isEmpty()) return;
+
+    QPainter painter(viewport());
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    QFont hintFont = font();
+    if (hintFont.pixelSize() > 0) {
+        hintFont.setPixelSize(qMax(9, qRound(hintFont.pixelSize() * 0.62)));
+    } else {
+        hintFont.setPointSizeF(qMax(7.0, hintFont.pointSizeF() * 0.62));
+    }
+    painter.setFont(hintFont);
+    const QFontMetrics metrics(hintFont);
+    QColor foreground(Constants::Colors::TextMuted);
+    foreground.setAlpha(210);
+    QColor background = palette().color(QPalette::Base);
+    background.setAlpha(225);
+    QColor border = foreground;
+    border.setAlpha(85);
+
+    QVector<QRect> occupied;
+    for (const BaaInlayHint &hint : m_inlayHints) {
+        if (not hint.isValid()) continue;
+        const QTextBlock block = document()->findBlockByNumber(hint.line);
+        if (not block.isValid() or not block.isVisible()) continue;
+        const int lineLength = qMax(0, block.length() - 1);
+        if (hint.character > lineLength) continue;
+
+        QTextCursor cursor(block);
+        cursor.setPosition(block.position() + hint.character);
+        const QRect caret = cursorRect(cursor);
+        const int width = metrics.horizontalAdvance(hint.label) + 8;
+        const int height = metrics.height() + 2;
+        int x = caret.right() + 3;
+        if (x + width > viewport()->width()) x = caret.left() - width - 3;
+        int y = caret.top() - 1;
+        QRect badge(x, y, width, height);
+        for (const QRect &previous : occupied) {
+            if (badge.intersects(previous)) {
+                badge.moveLeft(previous.left() - width - 3);
+            }
+        }
+        if (badge.right() < 0 or badge.left() > viewport()->width() or
+            badge.bottom() < event->rect().top() or
+            badge.top() > event->rect().bottom())
+            continue;
+
+        painter.setPen(QPen(border, 1));
+        painter.setBrush(background);
+        painter.drawRoundedRect(badge, 3, 3);
+        painter.setPen(foreground);
+        painter.drawText(
+            badge.adjusted(4, 0, -4, 0),
+            Qt::AlignCenter | Qt::TextSingleLine,
+            hint.label);
+        occupied.push_back(badge);
+    }
 }
 
 void TEditor::resizeEvent(QResizeEvent* event) {
