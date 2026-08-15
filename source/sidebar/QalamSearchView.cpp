@@ -348,6 +348,15 @@ void QalamSearchView::setSearching(bool searching)
     }
 }
 
+void QalamSearchView::setWorkspaceIndexing()
+{
+    m_searching = true;
+    m_replaceAllBtn->setEnabled(false);
+    m_resultSummary->setText(
+        QStringLiteral("جار فهرسة ملفات المشروع…"));
+    m_resultSummary->show();
+}
+
 void QalamSearchView::setSearchProgress(int scannedFiles, int totalFiles)
 {
     m_resultSummary->setText(

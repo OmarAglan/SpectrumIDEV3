@@ -3,6 +3,7 @@
 #include <QtTest/QtTest>
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QTemporaryDir>
 #include <QTextStream>
 
@@ -13,6 +14,8 @@ class TestWorkspaceIndexer : public QObject
 private slots:
     void indexesAllowedFilesAndSkipsGeneratedFolders();
     void appliesNestedGitignoreAnchorsGlobsAndNegation();
+    void refreshesAfterExternalWorkspaceChanges();
+    void rejectsStaleIndexWhenSwitchingRoots();
 };
 
 namespace {
@@ -46,7 +49,7 @@ void TestWorkspaceIndexer::indexesAllowedFilesAndSkipsGeneratedFolders()
     QSignalSpy spy(&indexer, &WorkspaceIndexer::indexUpdated);
     indexer.setRootPath(tempDir.path());
 
-    QCOMPARE(spy.count(), 1);
+    QTRY_VERIFY_WITH_TIMEOUT(spy.count() >= 1, 5000);
     const QStringList files = indexer.files();
     QVERIFY(files.contains(QDir::cleanPath(root.filePath("src/main.baa"))));
     QVERIFY(files.contains(QDir::cleanPath(root.filePath("README.md"))));
@@ -90,7 +93,9 @@ void TestWorkspaceIndexer::appliesNestedGitignoreAnchorsGlobsAndNegation()
                   QStringLiteral("مسموح\n"));
 
     WorkspaceIndexer indexer;
+    QSignalSpy spy(&indexer, &WorkspaceIndexer::indexUpdated);
     indexer.setRootPath(tempDir.path());
+    QTRY_VERIFY_WITH_TIMEOUT(spy.count() >= 1, 5000);
     const QStringList files = indexer.files();
 
     QVERIFY(files.contains(QDir::cleanPath(
@@ -107,6 +112,88 @@ void TestWorkspaceIndexer::appliesNestedGitignoreAnchorsGlobsAndNegation()
         root.filePath(QStringLiteral("nested/private/secret.baa")))));
     QVERIFY(not files.contains(QDir::cleanPath(
         root.filePath(QStringLiteral("nested/cache/deep/data.baa")))));
+}
+
+void TestWorkspaceIndexer::refreshesAfterExternalWorkspaceChanges()
+{
+    QTemporaryDir tempDir;
+    QVERIFY(tempDir.isValid());
+    QDir root(tempDir.path());
+
+    const QString originalPath =
+        root.filePath(QStringLiteral("الأصل.baa"));
+    writeUtf8File(originalPath, QStringLiteral("الأصل\n"));
+
+    WorkspaceIndexer indexer;
+    QSignalSpy updates(&indexer, &WorkspaceIndexer::indexUpdated);
+    indexer.setRootPath(tempDir.path());
+    QTRY_VERIFY_WITH_TIMEOUT(
+        indexer.files().contains(QDir::cleanPath(originalPath)), 5000);
+
+    QVERIFY(root.mkpath(QStringLiteral("خارجي/متداخل")));
+    const QString createdPath = root.filePath(
+        QStringLiteral("خارجي/متداخل/جديد.baa"));
+    writeUtf8File(createdPath, QStringLiteral("جديد\n"));
+    QTRY_VERIFY_WITH_TIMEOUT(
+        indexer.files().contains(QDir::cleanPath(createdPath)), 5000);
+
+    const QString renamedPath = root.filePath(
+        QStringLiteral("خارجي/متداخل/مُعاد.baa"));
+    QVERIFY(QFile::rename(createdPath, renamedPath));
+    QTRY_VERIFY_WITH_TIMEOUT(
+        not indexer.files().contains(QDir::cleanPath(createdPath)) and
+        indexer.files().contains(QDir::cleanPath(renamedPath)),
+        5000);
+
+    const QString ignorePath = root.filePath(QStringLiteral(".gitignore"));
+    writeUtf8File(ignorePath, QStringLiteral("**/مُعاد.baa\n"));
+    QTRY_VERIFY_WITH_TIMEOUT(
+        not indexer.files().contains(QDir::cleanPath(renamedPath)), 5000);
+
+    writeUtf8File(ignorePath, QStringLiteral("# لا استثناءات\n"));
+    QTRY_VERIFY_WITH_TIMEOUT(
+        indexer.files().contains(QDir::cleanPath(renamedPath)), 5000);
+
+    updates.clear();
+    writeUtf8File(originalPath, QStringLiteral("تغيير خارجي\n"));
+    QTRY_VERIFY_WITH_TIMEOUT(updates.count() >= 1, 5000);
+    QVERIFY(indexer.files().contains(QDir::cleanPath(originalPath)));
+
+    QVERIFY(QFile::remove(renamedPath));
+    QTRY_VERIFY_WITH_TIMEOUT(
+        not indexer.files().contains(QDir::cleanPath(renamedPath)), 5000);
+}
+
+void TestWorkspaceIndexer::rejectsStaleIndexWhenSwitchingRoots()
+{
+    QTemporaryDir firstDirectory;
+    QTemporaryDir secondDirectory;
+    QVERIFY(firstDirectory.isValid());
+    QVERIFY(secondDirectory.isValid());
+
+    const QString firstPath =
+        firstDirectory.filePath(QStringLiteral("الأول.baa"));
+    const QString secondPath =
+        secondDirectory.filePath(QStringLiteral("الثاني.baa"));
+    writeUtf8File(firstPath, QStringLiteral("الأول\n"));
+    writeUtf8File(secondPath, QStringLiteral("الثاني\n"));
+
+    WorkspaceIndexer indexer;
+    QSignalSpy updates(&indexer, &WorkspaceIndexer::indexUpdated);
+    indexer.setRootPath(firstDirectory.path());
+    QVERIFY(indexer.isIndexing());
+    indexer.setRootPath(secondDirectory.path());
+    QVERIFY(indexer.isIndexing());
+
+    QTRY_VERIFY_WITH_TIMEOUT(
+        indexer.files().contains(QDir::cleanPath(secondPath)), 5000);
+    QVERIFY(not indexer.isIndexing());
+    QVERIFY(not indexer.files().contains(QDir::cleanPath(firstPath)));
+    QCOMPARE(indexer.rootPath(), QDir::cleanPath(
+        QFileInfo(secondDirectory.path()).absoluteFilePath()));
+    QTest::qWait(200);
+    QVERIFY(not indexer.files().contains(QDir::cleanPath(firstPath)));
+    QVERIFY(updates.count() >= 1);
 }
 
 QTEST_MAIN(TestWorkspaceIndexer)

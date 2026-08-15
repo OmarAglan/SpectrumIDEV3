@@ -1,4 +1,5 @@
 #include "ProjectSearchService.h"
+#include "WorkspaceIndexer.h"
 
 #include <QDir>
 #include <QFile>
@@ -16,6 +17,7 @@ private slots:
     void preparesRegexReplacementAndPreservesUtf8Bom();
     void reportsSkippedFilesLimitsProgressAndCacheHits();
     void suppressesStaleCancelledResults();
+    void refreshesCachedSearchAfterExternalFileChange();
 };
 
 namespace {
@@ -206,6 +208,48 @@ void TestProjectSearchService::suppressesStaleCancelledResults()
     QVERIFY(result.matches.isEmpty());
     QTest::qWait(100);
     QCOMPARE(finished.count(), 0);
+}
+
+void TestProjectSearchService::refreshesCachedSearchAfterExternalFileChange()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString filePath = directory.filePath(QStringLiteral("متغير.baa"));
+    writeUtf8(filePath, QStringLiteral("قديم\n"));
+
+    WorkspaceIndexer indexer;
+    QSignalSpy indexUpdates(&indexer, &WorkspaceIndexer::indexUpdated);
+    indexer.setRootPath(directory.path());
+    QTRY_VERIFY_WITH_TIMEOUT(indexUpdates.count() >= 1, 5000);
+
+    ProjectSearchRequest request;
+    request.rootPath = directory.path();
+    request.filePaths = indexer.files();
+    request.query = QStringLiteral("جديد");
+
+    ProjectSearchService service;
+    QSignalSpy finished(&service, &ProjectSearchService::searchFinished);
+    service.search(request);
+    QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 1, 5000);
+    QVERIFY(takeSearchResult(&finished).matches.isEmpty());
+
+    bool refreshed = false;
+    connect(&indexer, &WorkspaceIndexer::indexUpdated,
+            &service, [&]() {
+        if (refreshed) return;
+        refreshed = true;
+        service.cancel();
+        service.invalidateCache();
+        request.filePaths = indexer.files();
+        service.search(request);
+    });
+    writeUtf8(filePath, QStringLiteral("جديد\n"));
+    QTRY_VERIFY_WITH_TIMEOUT(refreshed, 5000);
+    QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 1, 5000);
+    const ProjectSearchResult result = takeSearchResult(&finished);
+    QCOMPARE(result.matches.size(), 1);
+    QCOMPARE(result.matches.constFirst().matchedText,
+             QStringLiteral("جديد"));
 }
 
 QTEST_MAIN(TestProjectSearchService)

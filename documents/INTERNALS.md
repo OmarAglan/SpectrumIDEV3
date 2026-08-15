@@ -139,7 +139,18 @@ The heart of Qalam is `QalamEditor`, a custom `QPlainTextEdit` subclass.
   inventory. It rejects generated/version-control directories, symlinks,
   unsupported extensions, and files larger than 5 MiB. Root and nested
   `.gitignore` rules support comments, negation, anchored paths, `*`, `**`, and
-  `?`, with later and more local rules taking precedence.
+  `?`, with later and more local rules taking precedence. Initial and refreshed
+  scans run on a single cancellable worker; a root switch invalidates any stale
+  result before it can reach the UI.
+- The indexer watches searchable files, ignore files, and traversed directories
+  for external content and inventory changes. Native watches are deduplicated
+  and capped at 4,096 paths. If that bound or an operating-system limit rejects
+  a path, a three-second asynchronous fallback rescan remains active. A 160 ms
+  debounce coalesces editor/tool write bursts, and an in-flight scan records one
+  pending refresh instead of spawning overlapping work.
+- `Qalam` consumes `indexUpdated` as a cache-invalidation boundary. Visible
+  project search is rescheduled, and an open Quick Open palette repopulates in
+  place while preserving its current filter, including during the initial scan.
 - **`ProjectSearchService`:** Runs literal or regular-expression matching on a
   dedicated single-worker pool. An atomic generation cancels stale queued or
   running requests, progress is throttled before crossing to the UI thread,
@@ -149,7 +160,9 @@ The heart of Qalam is `QalamEditor`, a custom `QPlainTextEdit` subclass.
   current editor text and revisions.
 - Successful searches are cached from the query flags, result limit, normalized
   file paths, disk size/time metadata, and overlay revision/content hash. A
-  project switch or committed replacement invalidates that cache.
+  project switch, committed replacement, or live index update invalidates that
+  cache. A visible search is then rescheduled, so even same-size external edits
+  cannot reuse a stale metadata cache entry.
 - Project replacement is a two-stage operation. The worker creates a bounded
   immutable plan from UTF-8 snapshots, expands regex captures, and preserves a
   byte-order mark. `Qalam` then asks for confirmation, verifies that every path

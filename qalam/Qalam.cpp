@@ -687,6 +687,14 @@ void Qalam::connectSignals()
             m_projectSearchService, &ProjectSearchService::cancel);
     connect(sidebar, &QalamSidebar::replaceRequested,
             this, &Qalam::performProjectReplace);
+    connect(m_workspaceIndexer, &WorkspaceIndexer::indexUpdated,
+            this, [this, sidebar]() {
+        m_projectSearchService->cancel();
+        m_projectSearchService->invalidateCache();
+        if (QalamSearchView *view = sidebar->searchView();
+            view and view->isVisible())
+            view->scheduleSearch();
+    });
     if (sidebar->searchView()) {
         connect(sidebar->searchView(), &QalamSearchView::resultClicked, this, &Qalam::goToLocation);
     }
@@ -1351,6 +1359,10 @@ void Qalam::performProjectSearch(const QString &query, bool caseSensitive, bool 
             QStringLiteral("افتح مجلد مشروع قبل البحث في الملفات."));
         return;
     }
+    if (m_workspaceIndexer and m_workspaceIndexer->isIndexing()) {
+        searchView->setWorkspaceIndexing();
+        return;
+    }
 
     ProjectSearchRequest request = projectSearchRequest(
         query, QString(), caseSensitive, wholeWord, regex);
@@ -1374,6 +1386,10 @@ void Qalam::performProjectReplace(
         m_projectSearchService->cancel();
         searchView->setSearchError(
             QStringLiteral("افتح مجلد مشروع قبل الاستبدال في الملفات."));
+        return;
+    }
+    if (m_workspaceIndexer and m_workspaceIndexer->isIndexing()) {
+        searchView->setWorkspaceIndexing();
         return;
     }
 
@@ -1646,30 +1662,36 @@ void Qalam::showCommandPalette()
 
 void Qalam::showQuickOpen()
 {
-    const QStringList files = collectProjectFiles();
-    if (files.isEmpty()) {
-        if (folderPath.isEmpty()) {
-            QMessageBox::information(this, "فتح سريع", "افتح مجلدًا أولًا لاستخدام الفتح السريع.");
-        } else {
-            QMessageBox::information(this, "فتح سريع", "لا توجد ملفات مناسبة داخل المجلد الحالي.");
-        }
+    if (folderPath.isEmpty()) {
+        QMessageBox::information(
+            this, "فتح سريع", "افتح مجلدًا أولًا لاستخدام الفتح السريع.");
         return;
-    }
-
-    QVector<QalamCommandPalette::Entry> entries;
-    entries.reserve(qMin(files.size(), 600));
-    for (const QString &file : files) {
-        const QString relative = QDir(folderPath).relativeFilePath(file);
-        entries.push_back({"file.open.path", relative, QFileInfo(file).absolutePath(), QString(), file});
-        if (entries.size() >= 600) break;
     }
 
     auto *palette = new QalamCommandPalette(this);
     palette->setAttribute(Qt::WA_DeleteOnClose);
     palette->setWindowTitle("فتح سريع");
     palette->setPlaceholderText("اكتب اسم الملف...");
-    palette->setEmptyText("لا يوجد ملف مطابق");
-    palette->setEntries(entries);
+    const auto populate = [this, palette]() {
+        const QStringList files = collectProjectFiles();
+        QVector<QalamCommandPalette::Entry> entries;
+        entries.reserve(qMin(files.size(), 600));
+        for (const QString &file : files) {
+            const QString relative = QDir(folderPath).relativeFilePath(file);
+            entries.push_back({
+                "file.open.path", relative, QFileInfo(file).absolutePath(),
+                QString(), file});
+            if (entries.size() >= 600) break;
+        }
+        palette->setEmptyText(
+            m_workspaceIndexer and m_workspaceIndexer->isIndexing()
+                ? QStringLiteral("جار فهرسة ملفات المشروع...")
+                : QStringLiteral("لا يوجد ملف مطابق"));
+        palette->setEntries(entries);
+    };
+    populate();
+    connect(m_workspaceIndexer, &WorkspaceIndexer::indexUpdated,
+            palette, populate);
     connect(palette, &QalamCommandPalette::entryActivated, this, [this](const QString &id, const QString &payload) {
         if (id == "file.open.path" and !payload.isEmpty()) {
             openFileFromUi(payload);

@@ -184,6 +184,8 @@ Search across the eligible UTF-8 files in the opened project folder:
 - Typing starts a background search, including one-character Arabic queries;
   changing or clearing the query cancels obsolete work. Arabic progress and
   result-limit or unreadable-file notices remain visible in the sidebar.
+- If search or Quick Open is opened during the initial asynchronous scan, it
+  shows an Arabic indexing state and fills itself when the current index arrives.
 - Toggle the icon buttons for case-sensitive text, an entire Unicode word, or
   a regular expression. Arabic combining marks count as part of their word.
 - Qalam recursively searches Baa sources, headers, project text, Markdown,
@@ -200,10 +202,11 @@ Search across the eligible UTF-8 files in the opened project folder:
   file byte snapshot. A stale or invalid UTF-8 file aborts the whole plan.
   Closed files use atomic saves with best-effort rollback; each open editor
   receives one undoable change. UTF-8 byte-order marks are preserved.
-- Repeated unchanged searches use a metadata-and-editor-revision cache. The
-  current inventory is established when the folder opens; reopen the folder to
-  include files created or deleted externally until live inventory refresh is
-  completed.
+- Repeated unchanged searches use a metadata-and-editor-revision cache. Qalam
+  watches the complete searchable inventory and refreshes it after external
+  content edits, `.gitignore` changes, and file or directory creation, deletion,
+  or rename. When a platform cannot allocate every native watch, a bounded
+  background rescan keeps the inventory current without blocking the editor.
 
 ---
 

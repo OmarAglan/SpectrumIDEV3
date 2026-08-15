@@ -38,6 +38,7 @@ signals:
 public slots:
     void addResult(const QString &filePath, int line, int column, const QString &lineText, const QString &matchText);
     void setSearching(bool searching);
+    void setWorkspaceIndexing();
     void setSearchProgress(int scannedFiles, int totalFiles);
     void setReplacementProgress(int scannedFiles, int totalFiles);
     void setSearchError(const QString &message);

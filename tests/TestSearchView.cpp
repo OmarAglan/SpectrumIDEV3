@@ -112,6 +112,10 @@ void TestSearchView::exposesArabicReplaceAndProgressWorkflow()
     QVERIFY(summary->text().contains(arabic.toString(32)));
     QVERIFY(summary->text().contains(QStringLiteral("البحث")));
 
+    view.setWorkspaceIndexing();
+    QVERIFY(summary->text().contains(QStringLiteral("فهرسة")));
+    QVERIFY(not replaceButton->isEnabled());
+
     const QString screenshotPath =
         qEnvironmentVariable("QALAM_PROJECT_REPLACE_SCREENSHOT");
     if (not screenshotPath.isEmpty())
