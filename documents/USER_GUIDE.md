@@ -84,7 +84,8 @@ Selecting a result opens its exact location. If the language server is not
 ready, Qalam reports that state instead of leaving an unfinished search open.
 
 ### Sidebar Search (`Ctrl+Shift+F`)
-Search across all files in the opened folder (project-wide search).
+Open the project-wide search sidebar. See [Search and Replace](#search-and-replace)
+for matching, progress, ignore, and safe replacement behavior.
 
 ## Customization
 
@@ -178,7 +179,31 @@ Find text within the current file:
 - Escape closes the panel and removes only search highlights.
 
 ### Project Search (`Ctrl+Shift+F`)
-Search across all files in the opened project folder.
+Search across the eligible UTF-8 files in the opened project folder:
+
+- Typing starts a background search, including one-character Arabic queries;
+  changing or clearing the query cancels obsolete work. Arabic progress and
+  result-limit or unreadable-file notices remain visible in the sidebar.
+- Toggle the icon buttons for case-sensitive text, an entire Unicode word, or
+  a regular expression. Arabic combining marks count as part of their word.
+- Qalam recursively searches Baa sources, headers, project text, Markdown,
+  JSON, CMake, and native source files up to 5 MiB. Generated directories and
+  common root or nested `.gitignore` patterns are excluded.
+- Current unsaved editor text overrides the disk copy, so results match what is
+  visible in open tabs. Results are grouped by file and open at the exact line
+  and column.
+- Expand the replacement row, enter replacement text, and choose the
+  replace-all icon. Regular expressions accept `$1` or `\1` capture references.
+  Qalam first prepares an immutable plan, shows the affected location and file
+  counts, and changes nothing until you confirm.
+- Before writing, Qalam verifies every open document revision and every closed
+  file byte snapshot. A stale or invalid UTF-8 file aborts the whole plan.
+  Closed files use atomic saves with best-effort rollback; each open editor
+  receives one undoable change. UTF-8 byte-order marks are preserved.
+- Repeated unchanged searches use a metadata-and-editor-revision cache. The
+  current inventory is established when the folder opens; reopen the folder to
+  include files created or deleted externally until live inventory refresh is
+  completed.
 
 ---
 

@@ -12,6 +12,7 @@ class TestWorkspaceIndexer : public QObject
 
 private slots:
     void indexesAllowedFilesAndSkipsGeneratedFolders();
+    void appliesNestedGitignoreAnchorsGlobsAndNegation();
 };
 
 namespace {
@@ -52,6 +53,60 @@ void TestWorkspaceIndexer::indexesAllowedFilesAndSkipsGeneratedFolders()
     QVERIFY(std::none_of(files.begin(), files.end(), [](const QString &path) {
         return path.contains("/build/") || path.contains("/.git/") || path.endsWith("image.png");
     }));
+}
+
+void TestWorkspaceIndexer::appliesNestedGitignoreAnchorsGlobsAndNegation()
+{
+    QTemporaryDir tempDir;
+    QVERIFY(tempDir.isValid());
+
+    QDir root(tempDir.path());
+    QVERIFY(root.mkpath(QStringLiteral("generated")));
+    QVERIFY(root.mkpath(QStringLiteral("nested/private")));
+    QVERIFY(root.mkpath(QStringLiteral("nested/cache/deep")));
+    QVERIFY(root.mkpath(QStringLiteral("nested/other")));
+
+    writeUtf8File(root.filePath(QStringLiteral(".gitignore")),
+                  QStringLiteral(
+                      "generated/*.baa\n"
+                      "!generated/keep.baa\n"
+                      "/root-only.baa\n"
+                      "**/cache/**\n"));
+    writeUtf8File(root.filePath(QStringLiteral("nested/.gitignore")),
+                  QStringLiteral("private/\n"));
+    writeUtf8File(root.filePath(QStringLiteral("generated/drop.baa")),
+                  QStringLiteral("مرفوض\n"));
+    writeUtf8File(root.filePath(QStringLiteral("generated/keep.baa")),
+                  QStringLiteral("مسموح\n"));
+    writeUtf8File(root.filePath(QStringLiteral("root-only.baa")),
+                  QStringLiteral("مرفوض\n"));
+    writeUtf8File(root.filePath(QStringLiteral("nested/root-only.baa")),
+                  QStringLiteral("مسموح\n"));
+    writeUtf8File(root.filePath(QStringLiteral("nested/private/secret.baa")),
+                  QStringLiteral("مرفوض\n"));
+    writeUtf8File(root.filePath(QStringLiteral("nested/cache/deep/data.baa")),
+                  QStringLiteral("مرفوض\n"));
+    writeUtf8File(root.filePath(QStringLiteral("nested/other/main.baa")),
+                  QStringLiteral("مسموح\n"));
+
+    WorkspaceIndexer indexer;
+    indexer.setRootPath(tempDir.path());
+    const QStringList files = indexer.files();
+
+    QVERIFY(files.contains(QDir::cleanPath(
+        root.filePath(QStringLiteral("generated/keep.baa")))));
+    QVERIFY(files.contains(QDir::cleanPath(
+        root.filePath(QStringLiteral("nested/root-only.baa")))));
+    QVERIFY(files.contains(QDir::cleanPath(
+        root.filePath(QStringLiteral("nested/other/main.baa")))));
+    QVERIFY(not files.contains(QDir::cleanPath(
+        root.filePath(QStringLiteral("generated/drop.baa")))));
+    QVERIFY(not files.contains(QDir::cleanPath(
+        root.filePath(QStringLiteral("root-only.baa")))));
+    QVERIFY(not files.contains(QDir::cleanPath(
+        root.filePath(QStringLiteral("nested/private/secret.baa")))));
+    QVERIFY(not files.contains(QDir::cleanPath(
+        root.filePath(QStringLiteral("nested/cache/deep/data.baa")))));
 }
 
 QTEST_MAIN(TestWorkspaceIndexer)

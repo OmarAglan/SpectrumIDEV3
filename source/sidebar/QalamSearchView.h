@@ -25,17 +25,24 @@ public:
 
     void setSearchPath(const QString &path);
     void focusSearchInput();
+    void scheduleSearch();
     void clearResults();
 
 signals:
     void searchRequested(const QString &query, bool caseSensitive, bool wholeWord, bool regex);
-    void replaceRequested(const QString &query, const QString &replacement);
+    void searchCancelled();
+    void replaceRequested(const QString &query, const QString &replacement,
+                          bool caseSensitive, bool wholeWord, bool regex);
     void resultClicked(const QString &filePath, int line, int column);
 
 public slots:
     void addResult(const QString &filePath, int line, int column, const QString &lineText, const QString &matchText);
     void setSearching(bool searching);
-    void setResultCount(int fileCount, int matchCount);
+    void setSearchProgress(int scannedFiles, int totalFiles);
+    void setReplacementProgress(int scannedFiles, int totalFiles);
+    void setSearchError(const QString &message);
+    void setResultCount(int fileCount, int matchCount,
+                        bool truncated = false, int skippedFiles = 0);
 
 private slots:
     void onSearchTextChanged();
@@ -55,6 +62,7 @@ private:
     QLineEdit *m_searchInput = nullptr;
     QLineEdit *m_replaceInput = nullptr;
     QPushButton *m_toggleReplaceBtn = nullptr;
+    QPushButton *m_replaceAllBtn = nullptr;
     
     // Search options
     QWidget *m_optionsContainer = nullptr;
@@ -71,6 +79,7 @@ private:
     bool m_caseSensitive = false;
     bool m_wholeWord = false;
     bool m_useRegex = false;
+    bool m_searching = false;
     
     QTimer *m_searchDebounce = nullptr;
 };

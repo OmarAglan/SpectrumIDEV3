@@ -23,6 +23,7 @@ Qalam IDE is built using **Qt 6 (C++23)** and follows a modular design. The proj
 ├── menubar             # QalamMenuBar
 ├── settings            # QalamSettings
 ├── sidebar             # QalamExplorerView, QalamSearchView
+├── workspace           # WorkspaceIndexer, ProjectSearchService
 ├── ui                  # QalamWindow, QalamTheme, QalamTitleBar, QalamActivityBar, QalamSidebar, QalamPanelArea, QalamStatusBar, QalamBreadcrumb
 ├── managers            # FileManager, BuildManager, SessionManager, LayoutManager
 └── pages               # QalamWelcomePage
@@ -112,6 +113,7 @@ The heart of Qalam is `QalamEditor`, a custom `QPlainTextEdit` subclass.
   document after initialization. Three consecutive automatic attempts are
   allowed; the budget resets only after 30 seconds of stable service, preventing
   a broken server from becoming an unbounded process loop.
+
 - **`BuildManager`:** Owns project execution. Build, run, test, and clean requests
   search parent directories for `مشروع.تكوين`, ask
   `takween-targets-v1` for capabilities, and invoke canonical Arabic Takween argv
@@ -130,6 +132,31 @@ The heart of Qalam is `QalamEditor`, a custom `QPlainTextEdit` subclass.
   when the structured model is empty. `run` and `test` remain operation-aware
   because a successfully built program may return its own nonzero code.
 - **`LayoutManager`:** Manages sidebar and panel visibility states.
+
+#### 5. Workspace Services (`source/workspace`)
+
+- **`WorkspaceIndexer`:** Builds the shared quick-open and textual-search file
+  inventory. It rejects generated/version-control directories, symlinks,
+  unsupported extensions, and files larger than 5 MiB. Root and nested
+  `.gitignore` rules support comments, negation, anchored paths, `*`, `**`, and
+  `?`, with later and more local rules taking precedence.
+- **`ProjectSearchService`:** Runs literal or regular-expression matching on a
+  dedicated single-worker pool. An atomic generation cancels stale queued or
+  running requests, progress is throttled before crossing to the UI thread,
+  and only the newest generation may publish results. Unicode word boundaries
+  include letters, marks, numbers, and underscore, so Arabic diacritics are not
+  split from their identifier. The request overlays indexed disk paths with
+  current editor text and revisions.
+- Successful searches are cached from the query flags, result limit, normalized
+  file paths, disk size/time metadata, and overlay revision/content hash. A
+  project switch or committed replacement invalidates that cache.
+- Project replacement is a two-stage operation. The worker creates a bounded
+  immutable plan from UTF-8 snapshots, expands regex captures, and preserves a
+  byte-order mark. `Qalam` then asks for confirmation, verifies that every path
+  remains inside the open project and every snapshot is current, atomically
+  commits closed files with best-effort rollback, and applies each open-editor
+  update in one undo block. Unsupported encodings or stale files produce an
+  explicit Arabic failure; there is no partial silent fallback.
 
 ## Development Workflow
 

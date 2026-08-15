@@ -4,6 +4,7 @@
 #include <QTimer>
 #include <QHeaderView>
 #include <QFileInfo>
+#include <QLocale>
 #include <QRegularExpression>
 
 namespace {
@@ -21,6 +22,11 @@ void installCheckableIcons(
         [button, normalPath, checkedPath](bool checked) {
             button->setIcon(QIcon(checked ? checkedPath : normalPath));
         });
+}
+
+QString localizedNumber(int number)
+{
+    return QLocale(QLocale::Arabic, QLocale::SaudiArabia).toString(number);
 }
 
 }
@@ -65,18 +71,38 @@ void QalamSearchView::setupUi()
     
     searchRowLayout->addWidget(m_searchInput);
     
-    // Replace input (hidden by default)
-    m_replaceInput = new QLineEdit();
+    // Replace controls (hidden by default)
+    auto *replaceRow = new QWidget();
+    replaceRow->setObjectName(QStringLiteral("projectReplaceRow"));
+    auto *replaceLayout = new QHBoxLayout(replaceRow);
+    replaceLayout->setContentsMargins(0, 0, 0, 0);
+    replaceLayout->setSpacing(4);
+
+    m_replaceInput = new QLineEdit(replaceRow);
     m_replaceInput->setObjectName("replaceInput");
     m_replaceInput->setPlaceholderText("استبدال");
     m_replaceInput->addAction(
         QIcon(QStringLiteral(":/icons/resources/replace.svg")),
         QLineEdit::LeadingPosition);
     m_replaceInput->setClearButtonEnabled(true);
-    m_replaceInput->hide();
+    replaceLayout->addWidget(m_replaceInput, 1);
+
+    m_replaceAllBtn = new QPushButton(replaceRow);
+    m_replaceAllBtn->setObjectName(QStringLiteral("projectReplaceAllButton"));
+    m_replaceAllBtn->setIcon(
+        QIcon(QStringLiteral(":/icons/resources/replace-all.svg")));
+    m_replaceAllBtn->setIconSize(QSize(18, 18));
+    m_replaceAllBtn->setFixedSize(30, 28);
+    m_replaceAllBtn->setToolTip(
+        QStringLiteral("استبدال كل النتائج في المشروع"));
+    m_replaceAllBtn->setAccessibleName(
+        QStringLiteral("استبدال كل النتائج في المشروع"));
+    m_replaceAllBtn->setEnabled(false);
+    replaceLayout->addWidget(m_replaceAllBtn);
+    replaceRow->hide();
     
     inputLayout->addWidget(searchRow);
-    inputLayout->addWidget(m_replaceInput);
+    inputLayout->addWidget(replaceRow);
     
     m_mainLayout->addWidget(m_inputContainer);
     
@@ -161,13 +187,25 @@ void QalamSearchView::setupUi()
     
     connect(m_searchInput, &QLineEdit::textChanged, this, &QalamSearchView::onSearchTextChanged);
     connect(m_searchInput, &QLineEdit::returnPressed, this, &QalamSearchView::onSearchTriggered);
+    connect(m_replaceInput, &QLineEdit::returnPressed,
+            m_replaceAllBtn, &QPushButton::click);
     connect(m_searchDebounce, &QTimer::timeout, this, &QalamSearchView::onSearchTriggered);
     connect(m_resultsTree, &QTreeWidget::itemClicked, this, &QalamSearchView::onResultItemClicked);
     
     connect(m_toggleReplaceBtn, &QPushButton::clicked, this, [this]() {
         m_replaceVisible = !m_replaceVisible;
-        m_replaceInput->setVisible(m_replaceVisible);
+        if (QWidget *row = findChild<QWidget *>(
+                QStringLiteral("projectReplaceRow")))
+            row->setVisible(m_replaceVisible);
         m_toggleReplaceBtn->setIcon(QIcon(m_replaceVisible ? ":/icons/resources/down-arrow.svg" : ":/icons/resources/right-arrow.svg"));
+        if (m_replaceVisible) m_replaceInput->setFocus();
+    });
+
+    connect(m_replaceAllBtn, &QPushButton::clicked, this, [this]() {
+        if (m_searchInput->text().isEmpty() or m_searching) return;
+        emit replaceRequested(
+            m_searchInput->text(), m_replaceInput->text(),
+            m_caseSensitive, m_wholeWord, m_useRegex);
     });
     
     connect(m_caseSensitiveBtn, &QPushButton::toggled, this, [this](bool checked) {
@@ -188,29 +226,33 @@ void QalamSearchView::setupUi()
 
 void QalamSearchView::onSearchTextChanged()
 {
+    m_replaceAllBtn->setEnabled(not m_searching and
+                                not m_searchInput->text().isEmpty());
     m_searchDebounce->start();
 }
 
 void QalamSearchView::onSearchTriggered()
 {
     QString query = m_searchInput->text();
-    if (query.trimmed().isEmpty()) {
+    if (query.isEmpty()) {
         clearResults();
         setResultCount(0, 0);
-        return;
-    }
-    if (query.length() < 2) {
-        clearResults();
+        emit searchCancelled();
         return;
     }
 
     // Validate regex before emitting
     if (m_useRegex) {
-        QRegularExpression re(query);
+        QRegularExpression::PatternOptions options =
+            QRegularExpression::UseUnicodePropertiesOption;
+        if (not m_caseSensitive)
+            options |= QRegularExpression::CaseInsensitiveOption;
+        QRegularExpression re(query, options);
         if (not re.isValid()) {
             m_searchInput->setStyleSheet("QLineEdit#searchInput { border: 1px solid #f44747; }");
-            m_resultSummary->setText("تعبير نمطي غير صالح: " + re.errorString());
-            m_resultSummary->show();
+            setSearchError(
+                QStringLiteral("تعبير نمطي غير صالح: ") + re.errorString());
+            emit searchCancelled();
             return;
         }
     }
@@ -246,6 +288,11 @@ void QalamSearchView::focusSearchInput()
 {
     m_searchInput->setFocus();
     m_searchInput->selectAll();
+}
+
+void QalamSearchView::scheduleSearch()
+{
+    if (not m_searchInput->text().isEmpty()) m_searchDebounce->start();
 }
 
 void QalamSearchView::clearResults()
@@ -292,17 +339,61 @@ void QalamSearchView::addResult(const QString &filePath, int line, int column,
 
 void QalamSearchView::setSearching(bool searching)
 {
-    m_searchInput->setEnabled(!searching);
-    // Could add a spinner here
+    m_searching = searching;
+    m_replaceAllBtn->setEnabled(not searching and
+                                not m_searchInput->text().isEmpty());
+    if (searching) {
+        m_resultSummary->setText(QStringLiteral("جار البحث في المشروع…"));
+        m_resultSummary->show();
+    }
 }
 
-void QalamSearchView::setResultCount(int fileCount, int matchCount)
+void QalamSearchView::setSearchProgress(int scannedFiles, int totalFiles)
 {
+    m_resultSummary->setText(
+        QStringLiteral("جار البحث… %1 من %2 ملف")
+            .arg(localizedNumber(scannedFiles), localizedNumber(totalFiles)));
+    m_resultSummary->show();
+}
+
+void QalamSearchView::setReplacementProgress(int scannedFiles, int totalFiles)
+{
+    m_searching = true;
+    m_replaceAllBtn->setEnabled(false);
+    m_resultSummary->setText(
+        QStringLiteral("جار تجهيز الاستبدال… %1 من %2 ملف")
+            .arg(localizedNumber(scannedFiles), localizedNumber(totalFiles)));
+    m_resultSummary->show();
+}
+
+void QalamSearchView::setSearchError(const QString &message)
+{
+    m_searching = false;
+    m_replaceAllBtn->setEnabled(not m_searchInput->text().isEmpty());
+    m_resultSummary->setText(message);
+    m_resultSummary->show();
+}
+
+void QalamSearchView::setResultCount(int fileCount, int matchCount,
+                                     bool truncated, int skippedFiles)
+{
+    m_searching = false;
+    m_replaceAllBtn->setEnabled(not m_searchInput->text().isEmpty());
     if (matchCount == 0) {
-        m_resultSummary->setText("لا توجد نتائج");
+        m_resultSummary->setText(QStringLiteral("لا توجد نتائج"));
     } else {
-        m_resultSummary->setText(QString("%1 نتيجة في %2 ملف").arg(matchCount).arg(fileCount));
+        m_resultSummary->setText(
+            QStringLiteral("%1 نتيجة في %2 ملف")
+                .arg(localizedNumber(matchCount), localizedNumber(fileCount)));
     }
+    if (truncated)
+        m_resultSummary->setText(
+            m_resultSummary->text() + QStringLiteral(" — عُرض الحد الأقصى"));
+    if (skippedFiles > 0)
+        m_resultSummary->setText(
+            m_resultSummary->text() +
+            QStringLiteral(" — تعذر قراءة %1 ملف")
+                .arg(localizedNumber(skippedFiles)));
     m_resultSummary->show();
 }
 
@@ -353,15 +444,16 @@ void QalamSearchView::applyStyles()
             border-color: %6;
         }
         
-        #toggleReplaceBtn {
+        #toggleReplaceBtn, #projectReplaceAllButton {
             background-color: transparent;
             border: none;
             color: %7;
             font-size: 10px;
         }
         
-        #toggleReplaceBtn:hover {
+        #toggleReplaceBtn:hover, #projectReplaceAllButton:hover {
             color: %4;
+            background-color: %8;
         }
         
         /* Result summary */

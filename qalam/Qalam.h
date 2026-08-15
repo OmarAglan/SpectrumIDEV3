@@ -21,9 +21,12 @@ class CommandRegistry;
 class DiagnosticsModel;
 class QalamWelcomePage;
 class QalamCommandPalette;
+class ProjectSearchService;
 class WorkspaceIndexer;
 struct BaaLocation;
 struct Diagnostic;
+struct ProjectReplacementPlan;
+struct ProjectSearchRequest;
 
 class Qalam : public QalamWindow
 {
@@ -96,6 +99,13 @@ private:
     bool maybeSaveAllModified();
     void goToLocation(const QString &filePath, int line, int column);
     void performProjectSearch(const QString &query, bool caseSensitive, bool wholeWord, bool regex);
+    void performProjectReplace(const QString &query, const QString &replacement,
+                               bool caseSensitive, bool wholeWord, bool regex);
+    ProjectSearchRequest projectSearchRequest(
+        const QString &query, const QString &replacement,
+        bool caseSensitive, bool wholeWord, bool regex) const;
+    bool applyProjectReplacement(const ProjectReplacementPlan &plan,
+                                 QString *error = nullptr);
     void closeEditorByPath(const QString &filePath);
     QStringList collectProjectFiles() const;
     bool runCommandById(const QString &commandId);
@@ -131,6 +141,7 @@ private:
     CommandRegistry *m_commandRegistry{};
     DiagnosticsModel *m_diagnosticsModel{};
     WorkspaceIndexer *m_workspaceIndexer{};
+    ProjectSearchService *m_projectSearchService{};
     BreakpointModel *m_breakpointModel{};
 
     QalamSearchPanel *searchBar{};

@@ -32,6 +32,8 @@ add_library(qalam_core STATIC
     # Workspace services
     workspace/WorkspaceIndexer.cpp
     workspace/WorkspaceIndexer.h
+    workspace/ProjectSearchService.cpp
+    workspace/ProjectSearchService.h
     # Debug services
     debug/BreakpointModel.cpp
     debug/BreakpointModel.h

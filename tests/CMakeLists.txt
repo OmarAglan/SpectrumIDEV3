@@ -53,6 +53,7 @@ add_test(
 
 add_qalam_test(test_diagnostic_parser TestDiagnosticParser.cpp)
 add_qalam_test(test_workspace_indexer TestWorkspaceIndexer.cpp)
+add_qalam_test(test_project_search_service TestProjectSearchService.cpp)
 add_qalam_test(test_command_registry TestCommandRegistry.cpp)
 add_qalam_test(test_build_manager TestBuildManager.cpp)
 add_qalam_test(test_takween_protocol TestTakweenProtocol.cpp)

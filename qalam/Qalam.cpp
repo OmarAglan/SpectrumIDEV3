@@ -32,6 +32,7 @@
 #include <QInputDialog>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QLocale>
 #include <QSet>
 #include <QVector>
 #include <QVariant>
@@ -42,9 +43,28 @@
 #include "DiagnosticParser.h"
 #include "DiagnosticsModel.h"
 #include "BaaLanguageClient.h"
+#include "ProjectSearchService.h"
 #include "WorkspaceIndexer.h"
 #include "BreakpointModel.h"
 #include "QalamCommandPalette.h"
+
+namespace {
+
+QString projectSearchPathKey(const QString &filePath)
+{
+    QString path = QDir::cleanPath(QFileInfo(filePath).absoluteFilePath());
+#ifdef Q_OS_WIN
+    path = path.toCaseFolded();
+#endif
+    return path;
+}
+
+QString localizedProjectSearchNumber(qlonglong number)
+{
+    return QLocale(QLocale::Arabic, QLocale::SaudiArabia).toString(number);
+}
+
+}
 
 Qalam::Qalam(const QString& filePath, QWidget *parent)
     : QalamWindow(parent)
@@ -72,6 +92,7 @@ Qalam::Qalam(const QString& filePath, QWidget *parent)
     }
     m_diagnosticsModel = new DiagnosticsModel(this);
     m_workspaceIndexer = new WorkspaceIndexer(this);
+    m_projectSearchService = new ProjectSearchService(this);
     m_breakpointModel = new BreakpointModel(this);
 
     searchBar = new QalamSearchPanel(this);
@@ -662,9 +683,104 @@ void Qalam::connectSignals()
     connect(sidebar, &QalamSidebar::openFolderRequested, this, &Qalam::handleOpenFolderMenu);
     connect(sidebar, &QalamSidebar::openEditorCloseRequested, this, &Qalam::closeEditorByPath);
     connect(sidebar, &QalamSidebar::searchRequested, this, &Qalam::performProjectSearch);
+    connect(sidebar, &QalamSidebar::searchCancelled,
+            m_projectSearchService, &ProjectSearchService::cancel);
+    connect(sidebar, &QalamSidebar::replaceRequested,
+            this, &Qalam::performProjectReplace);
     if (sidebar->searchView()) {
         connect(sidebar->searchView(), &QalamSearchView::resultClicked, this, &Qalam::goToLocation);
     }
+
+    connect(m_projectSearchService, &ProjectSearchService::searchStarted,
+            this, [sidebar](int, int totalFiles) {
+        if (QalamSearchView *view = sidebar->searchView()) {
+            view->clearResults();
+            view->setSearching(true);
+            view->setSearchProgress(0, totalFiles);
+        }
+    });
+    connect(m_projectSearchService, &ProjectSearchService::searchProgress,
+            this, [sidebar](int, int scannedFiles, int totalFiles) {
+        if (QalamSearchView *view = sidebar->searchView())
+            view->setSearchProgress(scannedFiles, totalFiles);
+    });
+    connect(m_projectSearchService, &ProjectSearchService::searchFinished,
+            this, [sidebar](const ProjectSearchResult &result) {
+        QalamSearchView *view = sidebar->searchView();
+        if (not view) return;
+        view->clearResults();
+        if (not result.error.isEmpty()) {
+            view->setSearchError(result.error);
+            return;
+        }
+        for (const ProjectSearchMatch &match : result.matches) {
+            view->addResult(
+                match.filePath, match.line + 1, match.character + 1,
+                match.lineText, match.matchedText);
+        }
+        view->setResultCount(
+            result.fileCount, result.matches.size(),
+            result.truncated, result.skippedFiles);
+    });
+    connect(m_projectSearchService, &ProjectSearchService::replacementStarted,
+            this, [sidebar](int, int totalFiles) {
+        if (QalamSearchView *view = sidebar->searchView())
+            view->setReplacementProgress(0, totalFiles);
+    });
+    connect(m_projectSearchService, &ProjectSearchService::replacementProgress,
+            this, [sidebar](int, int scannedFiles, int totalFiles) {
+        if (QalamSearchView *view = sidebar->searchView())
+            view->setReplacementProgress(scannedFiles, totalFiles);
+    });
+    connect(m_projectSearchService, &ProjectSearchService::replacementPrepared,
+            this, [this, sidebar](const ProjectReplacementPlan &plan) {
+        QalamSearchView *view = sidebar->searchView();
+        if (not view) return;
+        view->setSearching(false);
+        if (not plan.error.isEmpty()) {
+            view->setSearchError(plan.error);
+            return;
+        }
+        if (plan.replacementCount == 0) {
+            view->setResultCount(0, 0);
+            return;
+        }
+
+        const QMessageBox::StandardButton answer = QMessageBox::question(
+            this,
+            QStringLiteral("تأكيد الاستبدال في المشروع"),
+            QStringLiteral("سيُستبدل %1 موضعاً في %2 ملف. هل تريد المتابعة؟")
+                .arg(localizedProjectSearchNumber(plan.replacementCount))
+                .arg(localizedProjectSearchNumber(plan.files.size())),
+            QMessageBox::Yes | QMessageBox::No,
+            QMessageBox::No);
+        if (answer != QMessageBox::Yes) {
+            performProjectSearch(
+                plan.query, plan.caseSensitive,
+                plan.wholeWord, plan.regularExpression);
+            return;
+        }
+
+        QString error;
+        if (not applyProjectReplacement(plan, &error)) {
+            QMessageBox::warning(
+                this, QStringLiteral("تعذر الاستبدال في المشروع"), error);
+            performProjectSearch(
+                plan.query, plan.caseSensitive,
+                plan.wholeWord, plan.regularExpression);
+            return;
+        }
+        if (m_layoutManager and m_layoutManager->statusBar()) {
+            m_layoutManager->statusBar()->showMessage(
+                QStringLiteral("اكتمل استبدال %1 موضعاً في %2 ملف")
+                    .arg(localizedProjectSearchNumber(plan.replacementCount))
+                    .arg(localizedProjectSearchNumber(plan.files.size())),
+                5000);
+        }
+        performProjectSearch(
+            plan.query, plan.caseSensitive,
+            plan.wholeWord, plan.regularExpression);
+    });
 
     connect(statusBar, &QalamStatusBar::problemsClicked, this, [this]() {
         m_layoutManager->panelArea()->setCurrentTab(QalamPanelArea::Tab::Problems);
@@ -749,6 +865,10 @@ void Qalam::toggleConsole()
 void Qalam::loadFolder(const QString &path)
 {
     this->folderPath = path;
+    if (m_projectSearchService) {
+        m_projectSearchService->cancel();
+        m_projectSearchService->invalidateCache();
+    }
     if (m_workspaceIndexer) {
         m_workspaceIndexer->setRootPath(path);
     }
@@ -1219,66 +1339,197 @@ void Qalam::performProjectSearch(const QString &query, bool caseSensitive, bool 
     auto *searchView = sidebar ? sidebar->searchView() : nullptr;
     if (!searchView) return;
 
-    searchView->clearResults();
-
-    const QString trimmedQuery = query.trimmed();
-    if (trimmedQuery.isEmpty() or folderPath.isEmpty()) {
+    if (query.isEmpty()) {
+        m_projectSearchService->cancel();
+        searchView->clearResults();
         searchView->setResultCount(0, 0);
         return;
     }
-
-    QRegularExpression::PatternOptions options = QRegularExpression::UseUnicodePropertiesOption;
-    if (!caseSensitive) {
-        options |= QRegularExpression::CaseInsensitiveOption;
-    }
-
-    QString pattern = regex ? trimmedQuery : QRegularExpression::escape(trimmedQuery);
-    if (wholeWord) {
-        pattern = QStringLiteral("(?<![\\p{L}\\p{N}_])(?:%1)(?![\\p{L}\\p{N}_])").arg(pattern);
-    }
-
-    QRegularExpression expression(pattern, options);
-    if (!expression.isValid()) {
-        searchView->setResultCount(0, 0);
+    if (folderPath.isEmpty()) {
+        m_projectSearchService->cancel();
+        searchView->setSearchError(
+            QStringLiteral("افتح مجلد مشروع قبل البحث في الملفات."));
         return;
     }
 
-    int fileCount = 0;
-    int matchCount = 0;
+    ProjectSearchRequest request = projectSearchRequest(
+        query, QString(), caseSensitive, wholeWord, regex);
+    request.maximumMatches = 5000;
+    m_projectSearchService->search(request);
+}
 
-    const QStringList indexedFiles = collectProjectFiles();
-    for (const QString &path : indexedFiles) {
-        QFile file(path);
-        if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
-            continue;
+void Qalam::performProjectReplace(
+    const QString &query, const QString &replacement,
+    bool caseSensitive, bool wholeWord, bool regex)
+{
+    auto *sidebar = m_layoutManager ? m_layoutManager->sidebar() : nullptr;
+    auto *searchView = sidebar ? sidebar->searchView() : nullptr;
+    if (not searchView) return;
+    if (query.isEmpty()) {
+        m_projectSearchService->cancel();
+        searchView->setResultCount(0, 0);
+        return;
+    }
+    if (folderPath.isEmpty()) {
+        m_projectSearchService->cancel();
+        searchView->setSearchError(
+            QStringLiteral("افتح مجلد مشروع قبل الاستبدال في الملفات."));
+        return;
+    }
+
+    ProjectSearchRequest request = projectSearchRequest(
+        query, replacement, caseSensitive, wholeWord, regex);
+    request.maximumMatches = 100000;
+    m_projectSearchService->prepareReplacement(request);
+}
+
+ProjectSearchRequest Qalam::projectSearchRequest(
+    const QString &query, const QString &replacement,
+    bool caseSensitive, bool wholeWord, bool regex) const
+{
+    ProjectSearchRequest request;
+    request.rootPath = folderPath;
+    request.filePaths = collectProjectFiles();
+    request.query = query;
+    request.replacement = replacement;
+    request.caseSensitive = caseSensitive;
+    request.wholeWord = wholeWord;
+    request.regularExpression = regex;
+
+    QSet<QString> indexedPaths;
+    for (const QString &filePath : request.filePaths)
+        indexedPaths.insert(projectSearchPathKey(filePath));
+    for (int index = 0; index < tabWidget->count(); ++index) {
+        QalamEditor *editor =
+            qobject_cast<QalamEditor *>(tabWidget->widget(index));
+        if (not editor or editor->currentFilePath().isEmpty()) continue;
+        const QString key = projectSearchPathKey(editor->currentFilePath());
+        if (not indexedPaths.contains(key)) continue;
+        request.overlays.insert(
+            key,
+            {editor->toPlainText(), editor->document()->revision()});
+    }
+    return request;
+}
+
+bool Qalam::applyProjectReplacement(
+    const ProjectReplacementPlan &plan, QString *error)
+{
+    if (error) error->clear();
+    auto fail = [error](const QString &message) {
+        if (error) *error = message;
+        return false;
+    };
+    if (plan.files.isEmpty() or plan.replacementCount <= 0)
+        return fail(QStringLiteral("خطة الاستبدال فارغة."));
+
+    struct PreparedFile {
+        const ProjectReplacementFile *replacement{};
+        QalamEditor *editor{};
+    };
+    QVector<PreparedFile> prepared;
+    prepared.reserve(plan.files.size());
+    QSet<QString> seenFiles;
+    const QDir projectRoot(folderPath);
+
+    auto editorForPath = [this](const QString &filePath) -> QalamEditor * {
+        const QString wanted = projectSearchPathKey(filePath);
+        for (int index = 0; index < tabWidget->count(); ++index) {
+            QalamEditor *editor =
+                qobject_cast<QalamEditor *>(tabWidget->widget(index));
+            if (editor and not editor->currentFilePath().isEmpty() and
+                projectSearchPathKey(editor->currentFilePath()) == wanted)
+                return editor;
         }
+        return nullptr;
+    };
 
-        QTextStream stream(&file);
-        stream.setEncoding(QStringConverter::Utf8);
+    for (const ProjectReplacementFile &replacement : plan.files) {
+        const QString filePath = QDir::cleanPath(
+            QFileInfo(replacement.filePath).absoluteFilePath());
+        const QString relative = QDir::fromNativeSeparators(
+            projectRoot.relativeFilePath(filePath));
+        if (QDir::isAbsolutePath(relative) or relative == QStringLiteral("..") or
+            relative.startsWith(QStringLiteral("../")))
+            return fail(QStringLiteral(
+                "رفض قلم تعديل ملف خارج مجلد المشروع: %1").arg(filePath));
 
-        bool fileHadMatch = false;
-        int lineNumber = 0;
-        while (!stream.atEnd()) {
-            const QString lineText = stream.readLine();
-            ++lineNumber;
+        const QString key = projectSearchPathKey(filePath);
+        if (seenFiles.contains(key))
+            return fail(QStringLiteral(
+                "تحتوي خطة الاستبدال على ملف مكرر: %1").arg(filePath));
+        seenFiles.insert(key);
 
-            QRegularExpressionMatchIterator matches = expression.globalMatch(lineText);
-            while (matches.hasNext()) {
-                const QRegularExpressionMatch match = matches.next();
-                if (!match.hasMatch()) continue;
+        QalamEditor *editor = editorForPath(filePath);
+        if (editor) {
+            if (editor->toPlainText() != replacement.originalText or
+                (replacement.sourceRevision >= 0 and
+                 editor->document()->revision() != replacement.sourceRevision))
+                return fail(QStringLiteral(
+                    "تغير نص ملف مفتوح بعد حساب الاستبدال: %1")
+                                .arg(filePath));
+        } else {
+            QFile input(filePath);
+            if (not input.open(QIODevice::ReadOnly))
+                return fail(QStringLiteral("تعذر قراءة الملف: %1").arg(filePath));
+            if (input.readAll() != replacement.originalBytes)
+                return fail(QStringLiteral(
+                    "تغير ملف على القرص بعد حساب الاستبدال: %1")
+                                .arg(filePath));
+        }
+        prepared.push_back({&replacement, editor});
+    }
 
-                if (!fileHadMatch) {
-                    fileHadMatch = true;
-                    ++fileCount;
-                }
-                ++matchCount;
-                searchView->addResult(path, lineNumber, match.capturedStart() + 1,
-                                      lineText, match.captured(0));
+    auto writeBytes = [](const QString &filePath,
+                         const QByteArray &bytes) -> bool {
+        QSaveFile output(filePath);
+        if (not output.open(QIODevice::WriteOnly)) return false;
+        return output.write(bytes) == bytes.size() and output.commit();
+    };
+    QVector<const ProjectReplacementFile *> committed;
+    for (const PreparedFile &file : prepared) {
+        if (file.editor) continue;
+        QFile current(file.replacement->filePath);
+        QByteArray currentBytes;
+        const bool readable = current.open(QIODevice::ReadOnly);
+        if (readable) {
+            currentBytes = current.readAll();
+            current.close();
+        }
+        if (not readable or
+            currentBytes != file.replacement->originalBytes or
+            not writeBytes(file.replacement->filePath,
+                           file.replacement->updatedBytes)) {
+            QStringList rollbackFailures;
+            for (auto it = committed.crbegin(); it != committed.crend(); ++it) {
+                if (not writeBytes((*it)->filePath, (*it)->originalBytes))
+                    rollbackFailures.push_back((*it)->filePath);
             }
+            QString message = QStringLiteral(
+                "تعذر حفظ الملف بأمان: %1").arg(file.replacement->filePath);
+            if (not rollbackFailures.isEmpty()) {
+                message += QStringLiteral(
+                    "\nتعذر أيضاً استرجاع الملفات التالية:\n%1")
+                               .arg(rollbackFailures.join(QLatin1Char('\n')));
+            }
+            return fail(message);
         }
+        committed.push_back(file.replacement);
     }
 
-    searchView->setResultCount(fileCount, matchCount);
+    for (const PreparedFile &file : prepared) {
+        if (not file.editor) continue;
+        const int oldPosition = file.editor->textCursor().position();
+        QTextCursor cursor(file.editor->document());
+        cursor.beginEditBlock();
+        cursor.select(QTextCursor::Document);
+        cursor.insertText(file.replacement->updatedText);
+        cursor.endEditBlock();
+        cursor.setPosition(qMin(oldPosition, file.editor->document()->characterCount() - 1));
+        file.editor->setTextCursor(cursor);
+    }
+    m_projectSearchService->invalidateCache();
+    return true;
 }
 
 
@@ -1292,7 +1543,10 @@ void Qalam::focusSearchInFiles()
         m_layoutManager->activityBar()->setCurrentView(QalamActivityBar::ViewType::Search);
     }
     if (m_layoutManager->sidebar()->searchView()) {
-        m_layoutManager->sidebar()->searchView()->focusSearchInput();
+        QalamSearchView *searchView =
+            m_layoutManager->sidebar()->searchView();
+        searchView->focusSearchInput();
+        searchView->scheduleSearch();
     }
 }
 
@@ -1917,6 +2171,11 @@ void Qalam::attachAnalysisToEditor(QalamEditor *editor)
         editor->setProperty("qalam.lsp.attached", true);
         connect(editor, &QPlainTextEdit::textChanged, this, [this, editor]() {
             scheduleEditorAnalysis(editor);
+            if (m_layoutManager and m_layoutManager->sidebar() and
+                m_layoutManager->sidebar()->searchView() and
+                m_layoutManager->sidebar()->searchView()->isVisible()) {
+                m_layoutManager->sidebar()->searchView()->scheduleSearch();
+            }
         });
         connect(editor, &QalamEditor::completionRequested, this,
                 [this, editor](const QString &filePath, int line, int character) {

@@ -49,6 +49,10 @@ One deferred item from Phase 2:
   whole-word matching, regular expressions, wraparound navigation, counts,
   highlight-all, capture-aware replacement, and one-step undo for replace-all
   without hiding compiler diagnostics
+- **Responsive project search** -- the sidebar scans indexed UTF-8 files on a
+  cancellable worker, honors common nested `.gitignore` rules, searches current
+  unsaved editor buffers, reports Arabic progress, caches unchanged queries,
+  and prepares confirmed stale-safe project replacements
 - **Consistent visual actions** -- search, replace, run/stop, panel, explorer,
   command-center, and recent-file actions use one registered SVG vocabulary,
   with automated checks against missing or unregistered assets
@@ -107,8 +111,7 @@ One deferred item from Phase 2:
 
 | Area | Issue |
 |------|-------|
-| Editor Search | `QalamSearchPanel` has find but **no replace** functionality; `isWholeWord()` hardcoded to `false` |
-| Sidebar Search | `QalamSearchView` UI exists but search is **not wired** -- `searchRequested` signal emitted but nothing connects to scan files; `addResult()` never called; replace buttons nonfunctional |
+| Project Search Inventory | Search observes changed file metadata and current editor revisions, but newly created or deleted external files still require a workspace-index refresh |
 | Ecosystem Build UX | Structured Baa checks, authoritative Takween target selection, JSONL progress, and explicit cancellation exist; full descendant-process ownership and end-to-end GUI fixtures remain |
 | ANSI Colors | `QalamConsole::appendOutput()` has ANSI parsing but is dead code; active path `flushPending()` does NOT render colors |
 | Auto-save Error | `QalamAutoSave.cpp:35` -- `file.open()` failure is silently ignored |
@@ -202,12 +205,13 @@ One deferred item from Phase 2:
 
 ### 5.2 Project-Wide Search
 
-- [ ] 5.2.1 Implement file scanner that connects to `QalamSearchView::searchRequested` signal
-- [ ] 5.2.2 Scan all files in open folder recursively, respecting `.gitignore` patterns
-- [ ] 5.2.3 Populate `QalamSearchView` results tree via `addResult()`
-- [ ] 5.2.4 Wire up project-wide replace functionality
-- [ ] 5.2.5 Add search progress indicator
-- [ ] 5.2.6 Implement result caching and incremental update
+- [x] 5.2.1 Connect `QalamSearchView::searchRequested` to a cancellable worker scanner
+- [x] 5.2.2 Scan eligible files recursively with generated-directory and common nested `.gitignore` exclusions
+- [x] 5.2.3 Populate the grouped result tree with exact one-based line and column locations
+- [x] 5.2.4 Add confirmed project replace with regex captures, UTF-8/BOM preservation, stale-snapshot refusal, atomic closed-file writes, best-effort rollback, and one undo block per open editor
+- [x] 5.2.5 Show localized progress, skipped-file and result-limit state without blocking the UI
+- [x] 5.2.6 Cache unchanged searches by file metadata and open-editor revision while searching unsaved overlays instead of stale disk text
+- [ ] 5.2.7 Incrementally refresh the file inventory when external tools create, delete, or rename project files
 
 ### 5.3 Build Error Integration
 

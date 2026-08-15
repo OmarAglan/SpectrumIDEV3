@@ -64,6 +64,10 @@ void QalamSidebar::setupUi()
     connect(m_explorerView, &QalamExplorerView::openEditorCloseRequested, this, &QalamSidebar::openEditorCloseRequested);
     connect(m_explorerView, &QalamExplorerView::openFolderRequested, this, &QalamSidebar::openFolderRequested);
     connect(m_searchView, &QalamSearchView::searchRequested, this, &QalamSidebar::searchRequested);
+    connect(m_searchView, &QalamSearchView::searchCancelled,
+            this, &QalamSidebar::searchCancelled);
+    connect(m_searchView, &QalamSearchView::replaceRequested,
+            this, &QalamSidebar::replaceRequested);
     connect(m_searchView, &QalamSearchView::resultClicked, this, [this](const QString &path, int, int) {
         emit fileSelected(path);
     });
