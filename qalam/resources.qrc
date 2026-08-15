@@ -22,6 +22,12 @@
         <file>resources/replace.svg</file>
         <file>resources/replace-all.svg</file>
         <file>resources/trash.svg</file>
+        <file>resources/match-case.svg</file>
+        <file>resources/match-case-active.svg</file>
+        <file>resources/match-word.svg</file>
+        <file>resources/match-word-active.svg</file>
+        <file>resources/regex.svg</file>
+        <file>resources/regex-active.svg</file>
         <file>resources/file-new.svg</file>
         <file>resources/folder.svg</file>
         <file>resources/folder-open.svg</file>

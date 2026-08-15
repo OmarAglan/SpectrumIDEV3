@@ -530,7 +530,7 @@ QString QalamTheme::searchViewStyleSheet() {
             background-color: transparent;
         }
         
-        #optionBtn {
+        QPushButton[searchOption="true"] {
             background-color: transparent;
             border: 1px solid transparent;
             border-radius: 2px;
@@ -539,11 +539,11 @@ QString QalamTheme::searchViewStyleSheet() {
             font-size: 11px;
         }
         
-        #optionBtn:hover {
+        QPushButton[searchOption="true"]:hover {
             background-color: %7;
         }
         
-        #optionBtn:checked {
+        QPushButton[searchOption="true"]:checked {
             background-color: %8;
             border: 1px solid %5;
         }

@@ -6,6 +6,18 @@
 #include <QFileInfo>
 #include <QRegularExpression>
 
+namespace {
+
+QIcon checkableIcon(const QString &normalPath, const QString &checkedPath)
+{
+    QIcon icon;
+    icon.addFile(normalPath, QSize(), QIcon::Normal, QIcon::Off);
+    icon.addFile(checkedPath, QSize(), QIcon::Normal, QIcon::On);
+    return icon;
+}
+
+}
+
 QalamSearchView::QalamSearchView(QWidget *parent)
     : QWidget(parent)
 {
@@ -17,6 +29,8 @@ QalamSearchView::QalamSearchView(QWidget *parent)
 void QalamSearchView::setupUi()
 {
     using namespace Constants;
+
+    setLayoutDirection(Qt::RightToLeft);
     
     m_mainLayout = new QVBoxLayout(this);
     m_mainLayout->setContentsMargins(10, 10, 10, 10);
@@ -65,20 +79,38 @@ void QalamSearchView::setupUi()
     optionsLayout->setContentsMargins(0, 0, 0, 0);
     optionsLayout->setSpacing(4);
     
-    m_caseSensitiveBtn = new QPushButton("Aa");
-    m_caseSensitiveBtn->setObjectName("optionBtn");
+    m_caseSensitiveBtn = new QPushButton();
+    m_caseSensitiveBtn->setObjectName("caseSensitiveButton");
+    m_caseSensitiveBtn->setProperty("searchOption", true);
+    m_caseSensitiveBtn->setIcon(checkableIcon(
+        QStringLiteral(":/icons/resources/match-case.svg"),
+        QStringLiteral(":/icons/resources/match-case-active.svg")));
+    m_caseSensitiveBtn->setIconSize(QSize(18, 18));
+    m_caseSensitiveBtn->setAccessibleName(QStringLiteral("مطابقة حالة الأحرف"));
     m_caseSensitiveBtn->setToolTip("مطابقة حالة الأحرف");
     m_caseSensitiveBtn->setCheckable(true);
     m_caseSensitiveBtn->setFixedSize(28, 24);
     
-    m_wholeWordBtn = new QPushButton("ab");
-    m_wholeWordBtn->setObjectName("optionBtn");
+    m_wholeWordBtn = new QPushButton();
+    m_wholeWordBtn->setObjectName("wholeWordButton");
+    m_wholeWordBtn->setProperty("searchOption", true);
+    m_wholeWordBtn->setIcon(checkableIcon(
+        QStringLiteral(":/icons/resources/match-word.svg"),
+        QStringLiteral(":/icons/resources/match-word-active.svg")));
+    m_wholeWordBtn->setIconSize(QSize(18, 18));
+    m_wholeWordBtn->setAccessibleName(QStringLiteral("مطابقة كلمة كاملة"));
     m_wholeWordBtn->setToolTip("كلمة كاملة فقط");
     m_wholeWordBtn->setCheckable(true);
     m_wholeWordBtn->setFixedSize(28, 24);
     
-    m_regexBtn = new QPushButton(".*");
-    m_regexBtn->setObjectName("optionBtn");
+    m_regexBtn = new QPushButton();
+    m_regexBtn->setObjectName("regexButton");
+    m_regexBtn->setProperty("searchOption", true);
+    m_regexBtn->setIcon(checkableIcon(
+        QStringLiteral(":/icons/resources/regex.svg"),
+        QStringLiteral(":/icons/resources/regex-active.svg")));
+    m_regexBtn->setIconSize(QSize(18, 18));
+    m_regexBtn->setAccessibleName(QStringLiteral("استخدام تعبير نمطي"));
     m_regexBtn->setToolTip("تعبير نمطي (Regex)");
     m_regexBtn->setCheckable(true);
     m_regexBtn->setFixedSize(28, 24);
@@ -91,10 +123,10 @@ void QalamSearchView::setupUi()
     m_toggleReplaceBtn->setFixedSize(24, 24);
     
     optionsLayout->addWidget(m_toggleReplaceBtn);
-    optionsLayout->addStretch();
     optionsLayout->addWidget(m_caseSensitiveBtn);
     optionsLayout->addWidget(m_wholeWordBtn);
     optionsLayout->addWidget(m_regexBtn);
+    optionsLayout->addStretch();
     
     m_mainLayout->addWidget(m_optionsContainer);
     
@@ -295,7 +327,7 @@ void QalamSearchView::applyStyles()
         }
         
         /* Option buttons */
-        #optionBtn {
+        QPushButton[searchOption="true"] {
             background-color: transparent;
             border: 1px solid transparent;
             border-radius: 3px;
@@ -304,11 +336,11 @@ void QalamSearchView::applyStyles()
             font-weight: bold;
         }
         
-        #optionBtn:hover {
+        QPushButton[searchOption="true"]:hover {
             background-color: %8;
         }
         
-        #optionBtn:checked {
+        QPushButton[searchOption="true"]:checked {
             background-color: %6;
             color: %4;
             border-color: %6;
