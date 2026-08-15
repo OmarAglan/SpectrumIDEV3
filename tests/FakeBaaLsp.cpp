@@ -155,10 +155,40 @@ int main(int argc, char *argv[])
                             {"completionProvider", QJsonObject{
                                 {"resolveProvider", false},
                                 {"triggerCharacters", QJsonArray{"ا", "#"}}
+                            }},
+                            {"experimental", QJsonObject{
+                                {"baaLogEvent", QJsonObject{
+                                    {"schemaVersion", "baa-lsp-log-v1"},
+                                    {"transport", "local-stdio"},
+                                    {"telemetry", false}
+                                }}
                             }}
                         }},
                         {"serverInfo", QJsonObject{{"name", "Fake Baa-LSP"}, {"version", "test"}}}
                     }}
+                });
+            } else if (method == "initialized") {
+                const QJsonObject validEvent{
+                    {"schema_version", "baa-lsp-log-v1"},
+                    {"sequence", 1},
+                    {"severity", "info"},
+                    {"component", "workspace"},
+                    {"event", "workspace.plan.loaded"},
+                    {"message", "Loaded the Takween project plan."},
+                    {"data", QJsonObject{{"source_count", 2}}}
+                };
+                send(output, QJsonObject{
+                    {"jsonrpc", "2.0"},
+                    {"method", "baa/logEvent"},
+                    {"params", validEvent}
+                });
+                QJsonObject duplicateEvent = validEvent;
+                duplicateEvent.insert("event", "workspace.plan.empty");
+                duplicateEvent.insert("severity", "warning");
+                send(output, QJsonObject{
+                    {"jsonrpc", "2.0"},
+                    {"method", "baa/logEvent"},
+                    {"params", duplicateEvent}
                 });
             } else if (method == "textDocument/didOpen") {
                 const QJsonObject document = params.value("textDocument").toObject();

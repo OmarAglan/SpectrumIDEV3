@@ -561,6 +561,18 @@ void Qalam::connectSignals()
                     m_layoutManager->statusBar()->showMessage(message, 3500);
                 }
             });
+    connect(m_languageClient, &BaaLanguageClient::structuredLogReceived,
+            this, [this](const BaaLogEvent &event) {
+                if (m_layoutManager and m_layoutManager->panelArea()) {
+                    m_layoutManager->panelArea()->appendOutput(
+                        event.formattedLine() + QLatin1Char('\n'));
+                }
+                if (event.lspType() <= 2 and m_layoutManager and
+                    m_layoutManager->statusBar()) {
+                    m_layoutManager->statusBar()->showMessage(
+                        event.arabicSummary(), 5000);
+                }
+            });
     connect(m_buildManager, &BuildManager::toolingFinished, this,
             [this](const QString &operation, int exitCode) {
         if (exitCode != 0 and exitCode != -2 and

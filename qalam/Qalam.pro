@@ -28,6 +28,7 @@ SOURCES += Qalam.cpp \
     main.cpp \
     ../source/core/CommandRegistry.cpp \
     ../source/language/BaaLanguageClient.cpp \
+    ../source/language/BaaLogEvent.cpp \
     ../source/language/BaaWorkspaceEdit.cpp \
     ../source/language/DiagnosticParser.cpp \
     ../source/language/DiagnosticsModel.cpp \
@@ -69,6 +70,7 @@ HEADERS += Qalam.h \
     Constants.h \
     ../source/core/CommandRegistry.h \
     ../source/language/BaaLanguageClient.h \
+    ../source/language/BaaLogEvent.h \
     ../source/language/BaaCodeAction.h \
     ../source/language/BaaDocumentSymbol.h \
     ../source/language/BaaCompletionItem.h \

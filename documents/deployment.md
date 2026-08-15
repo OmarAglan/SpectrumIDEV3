@@ -275,7 +275,7 @@ Both jobs build the pinned Baa-LSP, Baa, and Nazm revisions and publish combined
 Qalam + Baa-LSP + Baa + Nazm artifacts. Windows uploads a runtime-complete ZIP;
 Linux uploads a `.tar.gz` whose Qt libraries are provided by the target distribution.
 The workflow pins Baa-LSP commit
-`c88dd6573e23d289e28528aaae1cd39b8a5d2f09` and Baa commit
+`162ef31afd6decf1fdce23f3352d948ca2240122` and Baa commit
 `d5ee0c0df7288669f378be24990623f7f0d0f0b0`, plus Nazm commit
 `f7fcf8f6d2bf629daf708b3b6028e22c74683ce6`, including compiler-owned
 parameter hints and an Arabic-only assembler path in the portable payload.

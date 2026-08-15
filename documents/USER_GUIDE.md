@@ -31,6 +31,9 @@ The editor supports:
   arguments as muted overlays. They are not inserted into the file, are excluded
   when the argument already explains itself, and disappear if their document
   version becomes stale.
+- **Language-server status:** validated Baa-LSP events appear as Arabic plain
+  text in the **المخرجات** (Output) tab. Qalam keeps only the newest 500 text
+  blocks; log content is never interpreted as HTML and no telemetry is sent.
 - **Compiler-backed navigation:** `F12` opens the exact declaration selected by
   Baa's semantic analysis, including declarations in headers. `Shift+F12`
   lists scope-correct references across the Takween project in the search

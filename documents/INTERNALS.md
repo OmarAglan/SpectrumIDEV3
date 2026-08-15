@@ -57,6 +57,8 @@ The heart of Qalam is `TEditor`, a custom `QPlainTextEdit` subclass.
 - **`TTitleBar`:** Custom title bar with embedded menu and system buttons.
 - **`TSidebar`:** Stacked widget for Explorer and Search views.
 - **`TPanelArea`:** Bottom panel hosting Problems, Output, and Terminal tabs.
+  Output is a read-only plain-text view capped at 500 blocks; it is the retained
+  presentation surface for validated local Baa-LSP operational events.
 
 #### 4. Managers (`source/managers`)
 - **`FileManager`:** Handles file open/save, recent files, drag-and-drop, and file size safety checks.
@@ -73,6 +75,9 @@ The heart of Qalam is `TEditor`, a custom `QPlainTextEdit` subclass.
   open-document ownership per Takween root, publishes standard dynamic
   `workspaceFolders`, and watches only `مشروع.تكوين`/`تكوين.قفل` so Baa-LSP can
   ask Takween to refresh the authoritative project plan.
+  It opts into `baa-lsp-log-v1`, validates the server's local/no-telemetry
+  capability and every bounded monotonic event, then emits a typed
+  `BaaLogEvent`; it never parses a human log message for behavior.
   Cursor-sensitive completion flushes the newest full-text
   document change before requesting compiler-scoped symbols and exact UTF-16
   edits, rejects obsolete responses, and passes standard snippet tab stops to

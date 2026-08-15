@@ -33,6 +33,8 @@ Unsaved documents are analyzed in memory, results are tied to the exact document
 - Compiler-owned semantic highlighting and canonical formatting.
 - Nested folding plus semantic expand/shrink selection.
 - Compiler-owned Arabic parameter hints rendered as source-safe editor overlays.
+- Telemetry-free, strictly validated Baa-LSP events rendered as bounded Arabic
+  plain text in the Output panel.
 - Takween targets and structured build, run, test, clean, and cancellation workflows.
 - File explorer, command palette, problems panel, embedded console, themes, autosave, and crash recovery.
 - Deterministic Windows runtime deployment with no recurring manual DLL or `PATH` repair.

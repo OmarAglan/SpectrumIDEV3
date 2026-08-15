@@ -45,6 +45,7 @@ add_qalam_test(test_takween_protocol TestTakweenProtocol.cpp)
 add_qalam_test(test_process_worker TestProcessWorker.cpp)
 add_qalam_test(test_snippet_manager TestSnippetManager.cpp)
 add_qalam_test(test_symbol_outline_view TestSymbolOutlineView.cpp)
+add_qalam_test(test_panel_area TestPanelArea.cpp)
 
 add_qalam_test(test_lsp_message_framer TestLspMessageFramer.cpp)
 add_qalam_test(test_editor_semantic_requests TestEditorSemanticRequests.cpp)

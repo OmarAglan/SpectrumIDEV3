@@ -7,6 +7,7 @@
 #include "BaaInlayHint.h"
 #include "BaaFoldingRange.h"
 #include "BaaLocation.h"
+#include "BaaLogEvent.h"
 #include "BaaSemanticToken.h"
 #include "BaaSelectionRange.h"
 #include "BaaSignatureHelp.h"
@@ -160,6 +161,7 @@ signals:
                              int character,
                              const BaaWorkspaceEdit &edit);
     void renameFailed(const QString &filePath, const QString &message);
+    void structuredLogReceived(const BaaLogEvent &event);
     void logMessage(const QString &message, int type);
 
 private slots:
@@ -284,6 +286,8 @@ private:
     void handleMessage(const QByteArray &jsonBody);
     void handleResponse(const QJsonObject &message);
     void handleNotification(const QJsonObject &message);
+    bool parseStructuredLogEvent(const QJsonObject &params,
+                                 BaaLogEvent *event);
     void handlePublishDiagnostics(const QJsonObject &params);
     void clearServerSession();
     void scheduleRestart();
@@ -364,6 +368,8 @@ private:
     bool m_documentFormattingProvider{};
     bool m_renameProvider{};
     bool m_prepareRenameProvider{};
+    bool m_structuredLogProvider{};
+    qint64 m_lastStructuredLogSequence{};
     int m_maxRestartAttempts{3};
     int m_initialRestartDelayMilliseconds{250};
     int m_restartResetAfterMilliseconds{30000};

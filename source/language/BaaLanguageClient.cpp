@@ -38,6 +38,65 @@ bool nonnegativeInt(const QJsonValue &value, int *result)
     return true;
 }
 
+bool stableDottedIdentifier(const QString &value)
+{
+    if (value.isEmpty() or value.size() > 96) return false;
+    const QStringList segments = value.split(QLatin1Char('.'));
+    for (const QString &segment : segments) {
+        if (segment.isEmpty() or segment.size() > 32) return false;
+        for (qsizetype index = 0; index < segment.size(); ++index) {
+            const ushort code = segment.at(index).unicode();
+            const bool lower = code >= 'a' and code <= 'z';
+            const bool digit = code >= '0' and code <= '9';
+            const bool hyphen = code == '-';
+            if (index == 0 and not lower) return false;
+            if (index == segment.size() - 1 and not (lower or digit))
+                return false;
+            if (not (lower or digit or hyphen)) return false;
+        }
+    }
+    return true;
+}
+
+bool stableDataKey(const QString &value)
+{
+    if (value.isEmpty() or value.size() > 64) return false;
+    for (qsizetype index = 0; index < value.size(); ++index) {
+        const ushort code = value.at(index).unicode();
+        const bool lower = code >= 'a' and code <= 'z';
+        const bool digit = code >= '0' and code <= '9';
+        if ((index == 0 and not lower) or
+            (index > 0 and not (lower or digit or code == '_')))
+            return false;
+    }
+    return true;
+}
+
+bool boundedScalarData(const QJsonObject &data)
+{
+    if (data.size() > 16) return false;
+    for (auto it = data.constBegin(); it != data.constEnd(); ++it) {
+        if (not stableDataKey(it.key())) return false;
+        const QJsonValue &value = it.value();
+        if (value.isNull() or value.isBool()) continue;
+        if (value.isString()) {
+            const QString text = value.toString();
+            if (text.size() > 512 or text.contains(QChar::Null)) return false;
+            continue;
+        }
+        if (value.isDouble()) {
+            const qint64 integer = value.toInteger(
+                std::numeric_limits<qint64>::min());
+            if (integer == std::numeric_limits<qint64>::min() or
+                value.toDouble() != static_cast<double>(integer))
+                return false;
+            continue;
+        }
+        return false;
+    }
+    return true;
+}
+
 QJsonObject documentEndPosition(const QString &text)
 {
     int line = 0;
@@ -1028,6 +1087,12 @@ void BaaLanguageClient::sendInitialize()
             {QStringLiteral("name"), QStringLiteral("Qalam")},
             {QStringLiteral("version"), QStringLiteral("3.3.0")}
         }},
+        {QStringLiteral("initializationOptions"), QJsonObject{
+            {QStringLiteral("baaStructuredLogs"), QJsonObject{
+                {QStringLiteral("schemaVersion"),
+                 QStringLiteral("baa-lsp-log-v1")}
+            }}
+        }},
         {QStringLiteral("rootUri"), rootUri.isEmpty() ? QJsonValue::Null : QJsonValue(rootUri)},
         {QStringLiteral("capabilities"), QJsonObject{
             {QStringLiteral("general"), QJsonObject{
@@ -1331,6 +1396,20 @@ void BaaLanguageClient::handleResponse(const QJsonObject &message)
             emit logMessage(QStringLiteral("لا يستخدم Baa-LSP ترميز المواضع UTF-16 المتوقع."), 1);
             return;
         }
+        const QJsonObject structuredLogCapability =
+            capabilities.value(QStringLiteral("experimental"))
+                .toObject()
+                .value(QStringLiteral("baaLogEvent"))
+                .toObject();
+        const QJsonValue telemetry =
+            structuredLogCapability.value(QStringLiteral("telemetry"));
+        m_structuredLogProvider =
+            structuredLogCapability.value(QStringLiteral("schemaVersion"))
+                    .toString() == QStringLiteral("baa-lsp-log-v1") and
+            structuredLogCapability.value(QStringLiteral("transport"))
+                    .toString() == QStringLiteral("local-stdio") and
+            telemetry.isBool() and not telemetry.toBool(true);
+        m_lastStructuredLogSequence = 0;
         const QJsonValue documentSymbolProvider =
             capabilities.value(QStringLiteral("documentSymbolProvider"));
         m_documentSymbolProvider = documentSymbolProvider.isObject() or
@@ -1794,10 +1873,76 @@ void BaaLanguageClient::handleNotification(const QJsonObject &message)
     const QJsonObject params = message.value(QStringLiteral("params")).toObject();
     if (method == QStringLiteral("textDocument/publishDiagnostics")) {
         handlePublishDiagnostics(params);
-    } else if (method == QStringLiteral("window/logMessage")) {
+    } else if (method == QStringLiteral("baa/logEvent")) {
+        BaaLogEvent event;
+        if (not m_structuredLogProvider or
+            not parseStructuredLogEvent(params, &event)) {
+            emit logMessage(
+                QStringLiteral("تجاهل قلم حدث سجل غير صالح من Baa-LSP."), 2);
+            return;
+        }
+        emit structuredLogReceived(event);
+    } else if (method == QStringLiteral("window/logMessage") and
+               not m_structuredLogProvider) {
         emit logMessage(params.value(QStringLiteral("message")).toString(),
                         params.value(QStringLiteral("type")).toInt(4));
     }
+}
+
+bool BaaLanguageClient::parseStructuredLogEvent(const QJsonObject &params,
+                                                BaaLogEvent *event)
+{
+    if (not event or params.size() != 7 or
+        params.value(QStringLiteral("schema_version")).toString() !=
+            QStringLiteral("baa-lsp-log-v1"))
+        return false;
+
+    const QJsonValue sequenceValue =
+        params.value(QStringLiteral("sequence"));
+    if (not sequenceValue.isDouble()) return false;
+    const qint64 sequence = sequenceValue.toInteger(-1);
+    if (sequence <= 0 or sequence <= m_lastStructuredLogSequence or
+        sequenceValue.toDouble() != static_cast<double>(sequence))
+        return false;
+
+    const QString severity =
+        params.value(QStringLiteral("severity")).toString();
+    if (severity != QStringLiteral("error") and
+        severity != QStringLiteral("warning") and
+        severity != QStringLiteral("info") and
+        severity != QStringLiteral("debug"))
+        return false;
+
+    const QString component =
+        params.value(QStringLiteral("component")).toString();
+    const QString eventId =
+        params.value(QStringLiteral("event")).toString();
+    if (not stableDottedIdentifier(component) or
+        not stableDottedIdentifier(eventId) or
+        not eventId.startsWith(component + QLatin1Char('.')))
+        return false;
+
+    const QJsonValue messageValue =
+        params.value(QStringLiteral("message"));
+    if (not messageValue.isString()) return false;
+    const QString fallbackMessage = messageValue.toString();
+    if (fallbackMessage.isEmpty() or fallbackMessage.size() > 4096 or
+        fallbackMessage.contains(QChar::Null))
+        return false;
+
+    const QJsonValue dataValue = params.value(QStringLiteral("data"));
+    if (not dataValue.isObject() or
+        not boundedScalarData(dataValue.toObject()))
+        return false;
+
+    event->sequence = sequence;
+    event->severity = severity;
+    event->component = component;
+    event->event = eventId;
+    event->message = fallbackMessage;
+    event->data = dataValue.toObject();
+    m_lastStructuredLogSequence = sequence;
+    return true;
 }
 
 void BaaLanguageClient::handlePublishDiagnostics(const QJsonObject &params)
@@ -2433,6 +2578,8 @@ void BaaLanguageClient::clearServerSession()
     m_documentFormattingProvider = false;
     m_renameProvider = false;
     m_prepareRenameProvider = false;
+    m_structuredLogProvider = false;
+    m_lastStructuredLogSequence = 0;
     m_pendingSymbolRequests.clear();
     m_pendingTokenRequests.clear();
     m_pendingFoldingRequests.clear();

@@ -12,6 +12,8 @@ add_library(qalam_core STATIC
     language/BaaInlayHint.h
     language/BaaFoldingRange.h
     language/BaaLocation.h
+    language/BaaLogEvent.cpp
+    language/BaaLogEvent.h
     language/BaaSignatureHelp.h
     language/BaaSemanticToken.h
     language/BaaSelectionRange.h

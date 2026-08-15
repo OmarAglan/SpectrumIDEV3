@@ -126,6 +126,16 @@ void TestBaaLanguageClient::synchronizesDocumentsAndRejectsStaleDiagnostics()
     QString renamePlaceholder;
     BaaLocation renameRange;
     BaaWorkspaceEdit lastWorkspaceEdit;
+    QVector<BaaLogEvent> structuredLogs;
+    QStringList localLogs;
+    connect(&client, &BaaLanguageClient::structuredLogReceived, this,
+            [&](const BaaLogEvent &event) {
+                structuredLogs.push_back(event);
+            });
+    connect(&client, &BaaLanguageClient::logMessage, this,
+            [&](const QString &message, int) {
+                localLogs.push_back(message);
+            });
     connect(&client, &BaaLanguageClient::diagnosticsPublished, this,
             [&](const QString &publishedPath, int version,
                 const QVector<Diagnostic> &diagnostics) {
@@ -180,6 +190,26 @@ void TestBaaLanguageClient::synchronizesDocumentsAndRejectsStaleDiagnostics()
     QCOMPARE(client.synchronizeDocument(filePath,
         QStringLiteral("صحيح الرئيسية() {\n    مفقود = ١.\n}\n"), 7, workspace.path()), 1);
     QTRY_COMPARE_WITH_TIMEOUT(client.state(), BaaLanguageClient::State::Ready, 5000);
+    QTRY_COMPARE_WITH_TIMEOUT(structuredLogs.size(), 1, 5000);
+    QCOMPARE(structuredLogs.first().sequence, 1);
+    QCOMPARE(structuredLogs.first().severity, QStringLiteral("info"));
+    QCOMPARE(structuredLogs.first().component, QStringLiteral("workspace"));
+    QCOMPARE(structuredLogs.first().event,
+             QStringLiteral("workspace.plan.loaded"));
+    QCOMPARE(structuredLogs.first().data.value(QStringLiteral("source_count"))
+                 .toInt(),
+             2);
+    QCOMPARE(structuredLogs.first().arabicSummary(),
+             QStringLiteral("حُمّلت خطة تكوين وفيها 2 من ملفات مصدر باء."));
+    QVERIFY(structuredLogs.first().formattedLine().startsWith(
+        QStringLiteral("[معلومة]")));
+    QTRY_VERIFY_WITH_TIMEOUT(
+        std::any_of(localLogs.cbegin(), localLogs.cend(),
+                    [](const QString &message) {
+                        return message.contains(QStringLiteral(
+                            "حدث سجل غير صالح"));
+                    }),
+        5000);
     QTRY_COMPARE_WITH_TIMEOUT(lastVersion, 1, 5000);
     QCOMPARE(lastDiagnostics.size(), 1);
     QCOMPARE(lastDiagnostics.first().line, 2);
@@ -660,6 +690,13 @@ void TestBaaLanguageClient::publishesWorkspaceFolderAndManifestChanges()
     QVERIFY(initializeParams.value(QStringLiteral("capabilities")).toObject()
                 .value(QStringLiteral("workspace")).toObject()
                 .value(QStringLiteral("workspaceFolders")).toBool(false));
+    QCOMPARE(initializeParams.value(QStringLiteral("initializationOptions"))
+                 .toObject()
+                 .value(QStringLiteral("baaStructuredLogs"))
+                 .toObject()
+                 .value(QStringLiteral("schemaVersion"))
+                 .toString(),
+             QStringLiteral("baa-lsp-log-v1"));
 
     QCOMPARE(client.synchronizeDocument(secondSource,
                                          QStringLiteral("صحيح الثاني() {}\n"),

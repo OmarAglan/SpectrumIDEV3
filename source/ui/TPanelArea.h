@@ -7,6 +7,7 @@
 #include <QStackedWidget>
 #include <QPushButton>
 #include <QLabel>
+#include <QPlainTextEdit>
 
 class TConsole;
 
@@ -58,6 +59,8 @@ public:
     /// Add output text
     void appendOutput(const QString& text);
     void clearOutput();
+    QString outputText() const;
+    int outputBlockCount() const;
     
     /// Update the problems badge count
     void updateProblemsBadge();
@@ -98,8 +101,7 @@ private:
     QWidget* m_problemsContent{nullptr};
     
     // Output display
-    QLabel* m_outputLabel{nullptr};
-    QString m_outputBuffer;
+    QPlainTextEdit* m_outputText{nullptr};
     
     // Header buttons
     QPushButton* m_closeBtn{nullptr};

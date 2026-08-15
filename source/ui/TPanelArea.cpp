@@ -134,20 +134,19 @@ void TPanelArea::setupOutputView()
     m_outputView = new QWidget(this);
     QVBoxLayout* layout = new QVBoxLayout(m_outputView);
     layout->setContentsMargins(0, 0, 0, 0);
-    
-    QScrollArea* scroll = new QScrollArea(m_outputView);
-    scroll->setWidgetResizable(true);
-    scroll->setFrameShape(QFrame::NoFrame);
-    
-    m_outputLabel = new QLabel(scroll);
-    m_outputLabel->setAlignment(Qt::AlignTop | Qt::AlignRight);
-    m_outputLabel->setWordWrap(true);
-    m_outputLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
-    m_outputLabel->setStyleSheet(QString("QLabel { padding: 8px; color: %1; }")
-                                 .arg(Constants::Colors::TextSecondary));
-    
-    scroll->setWidget(m_outputLabel);
-    layout->addWidget(scroll);
+
+    m_outputText = new QPlainTextEdit(m_outputView);
+    m_outputText->setObjectName(QStringLiteral("languageOutput"));
+    m_outputText->setReadOnly(true);
+    m_outputText->setMaximumBlockCount(500);
+    m_outputText->setLineWrapMode(QPlainTextEdit::WidgetWidth);
+    m_outputText->setLayoutDirection(Qt::RightToLeft);
+    m_outputText->setFrameShape(QFrame::NoFrame);
+    m_outputText->setStyleSheet(
+        QString("QPlainTextEdit { padding: 8px; color: %1; background: transparent; }")
+            .arg(Constants::Colors::TextSecondary));
+
+    layout->addWidget(m_outputText);
 }
 
 void TPanelArea::setupTerminal()
@@ -306,14 +305,27 @@ void TPanelArea::updateProblemsBadge()
 
 void TPanelArea::appendOutput(const QString& text)
 {
-    m_outputBuffer += text;
-    m_outputLabel->setText(m_outputBuffer);
+    if (!m_outputText || text.isEmpty()) return;
+    QTextCursor cursor = m_outputText->textCursor();
+    cursor.movePosition(QTextCursor::End);
+    cursor.insertText(text);
+    m_outputText->setTextCursor(cursor);
+    m_outputText->ensureCursorVisible();
 }
 
 void TPanelArea::clearOutput()
 {
-    m_outputBuffer.clear();
-    m_outputLabel->clear();
+    if (m_outputText) m_outputText->clear();
+}
+
+QString TPanelArea::outputText() const
+{
+    return m_outputText ? m_outputText->toPlainText() : QString();
+}
+
+int TPanelArea::outputBlockCount() const
+{
+    return m_outputText ? m_outputText->blockCount() : 0;
 }
 
 void TPanelArea::setCollapsed(bool collapsed)

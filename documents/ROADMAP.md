@@ -317,7 +317,7 @@ One deferred item from Phase 2:
 artifacts passed and were uploaded by
 [run 31506739091](https://github.com/OmarAglan/Qalam-IDE/actions/runs/31506739091).
 The current workflow pins Baa-LSP commit
-`c88dd6573e23d289e28528aaae1cd39b8a5d2f09` and Baa commit
+`162ef31afd6decf1fdce23f3352d948ca2240122` and Baa commit
 `d5ee0c0df7288669f378be24990623f7f0d0f0b0`, with Nazm commit
 `f7fcf8f6d2bf629daf708b3b6028e22c74683ce6`. The earlier combined-artifact
 baseline passed in
@@ -430,6 +430,9 @@ the compiler/Nazm-bundled inlay-hints candidate requires a new green CI receipt.
 - [x] 9.1.18 Render compiler-owned Arabic parameter-name hints through
   `textDocument/inlayHint`, with UTF-16 validation, version cancellation,
   source-safe painting, and accessible hint-count metadata
+- [x] 9.1.19 Consume opt-in `baa-lsp-log-v1` events with strict sequence,
+  identifier, and bounded-data validation; render Arabic summaries in a
+  500-block plain-text Output view and reject replayed or telemetry payloads
 
   Cross-platform receipt:
   [Baa-LSP 31509393734](https://github.com/OmarAglan/Baa-LSP/actions/runs/31509393734)
@@ -453,6 +456,9 @@ the compiler/Nazm-bundled inlay-hints candidate requires a new green CI receipt.
 - [x] 9.2.6 Build as a standalone, Qt-free LSP binary
 - [x] 9.2.7 Consume strict `inlay-hints-json-v1`, cache complete per-version
   results, filter standard request ranges, and never infer parameter names
+- [x] 9.2.8 Advertise and serve telemetry-free `baa-lsp-log-v1`, preserve
+  standard `window/logMessage` fallback, and sanitize paths, source,
+  environment, and raw subprocess output from operational events
 
 ### 9.3 Git Integration
 
