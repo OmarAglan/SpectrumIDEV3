@@ -38,9 +38,9 @@ QVariant CompletionModel::data(const QModelIndex &index, int role) const {
     return QVariant();
 }
 
-// --- TCompletionPopup Implementation ---
+// --- QalamCompletionPopup Implementation ---
 
-TCompletionPopup::TCompletionPopup(QWidget *parent) : QListView(parent), footerHeight(52) {
+QalamCompletionPopup::QalamCompletionPopup(QWidget *parent) : QListView(parent), footerHeight(52) {
     // 1. Visual Properties for the Container
     setWindowFlags(Qt::Popup | Qt::FramelessWindowHint | Qt::NoDropShadowWindowHint);
     // setAttribute(Qt::WA_TranslucentBackground);
@@ -82,14 +82,14 @@ TCompletionPopup::TCompletionPopup(QWidget *parent) : QListView(parent), footerH
     setViewportMargins(0, 0, 0, footerHeight);
 }
 
-void TCompletionPopup::resizeEvent(QResizeEvent *event) {
+void QalamCompletionPopup::resizeEvent(QResizeEvent *event) {
     QListView::resizeEvent(event);
     // Force the label to stay at the bottom of the visible area
     QRect cr = contentsRect();
     infoLabel->setGeometry(cr.left(), cr.bottom() - footerHeight + 1, cr.width(), footerHeight);
 }
 
-void TCompletionPopup::currentChanged(const QModelIndex &current, const QModelIndex &previous) {
+void QalamCompletionPopup::currentChanged(const QModelIndex &current, const QModelIndex &previous) {
     QListView::currentChanged(current, previous);
     if (!current.isValid()) { infoLabel->clear(); return; }
 
@@ -117,14 +117,14 @@ void TCompletionPopup::currentChanged(const QModelIndex &current, const QModelIn
 }
 
 // --- Modern Delegate Implementation ---
-TModernCompletionDelegate::TModernCompletionDelegate(QObject *parent) : QStyledItemDelegate(parent) {}
+QalamModernCompletionDelegate::QalamModernCompletionDelegate(QObject *parent) : QStyledItemDelegate(parent) {}
 
-QSize TModernCompletionDelegate::sizeHint(const QStyleOptionViewItem &option, const QModelIndex &) const {
+QSize QalamModernCompletionDelegate::sizeHint(const QStyleOptionViewItem &option, const QModelIndex &) const {
     // Shorter rows now that description is at the bottom
     return QSize(option.rect.width(), 30);
 }
 
-void TModernCompletionDelegate::paint(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const {
+void QalamModernCompletionDelegate::paint(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const {
     painter->save();
     painter->setRenderHint(QPainter::Antialiasing);
 

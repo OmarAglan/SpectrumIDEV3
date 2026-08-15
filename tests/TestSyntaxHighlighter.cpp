@@ -1,4 +1,4 @@
-#include "TSyntaxHighlighter.h"
+#include "QalamSyntaxHighlighter.h"
 
 #include <QTest>
 #include <QTextBlock>
@@ -32,7 +32,7 @@ QColor foregroundAt(const QTextDocument &document, int position)
 void TestSyntaxHighlighter::overlaysCompilerTokensAndRestoresLocalHighlighting()
 {
     QTextDocument document;
-    TSyntaxHighlighter highlighter(&document);
+    QalamSyntaxHighlighter highlighter(&document);
     highlighter.setTheme(std::make_shared<VSCodeDarkTheme>());
     document.setPlainText(QStringLiteral("اسم ١"));
     highlighter.rehighlight();

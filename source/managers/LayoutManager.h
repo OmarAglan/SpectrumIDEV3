@@ -1,16 +1,16 @@
 #pragma once
 
-#include "TActivityBar.h"
+#include "QalamActivityBar.h"
 #include <QObject>
 
 class QTabWidget;
 class QMainWindow;
 class SearchPanel;
-class TSidebar;
-class TStatusBar;
-class TPanelArea;
-class TBreadcrumb;
-class TEditor;
+class QalamSidebar;
+class QalamStatusBar;
+class QalamPanelArea;
+class QalamBreadcrumb;
+class QalamEditor;
 
 /**
  * @brief Manages the VSCode-like layout — creates components,
@@ -27,16 +27,16 @@ public:
     void setupLayout();
 
     // --- Component accessors ---
-    TActivityBar *activityBar() const { return m_activityBar; }
-    TSidebar *sidebar() const { return m_sidebar; }
-    TStatusBar *statusBar() const { return m_statusBar; }
-    TPanelArea *panelArea() const { return m_panelArea; }
-    TBreadcrumb *breadcrumb() const { return m_breadcrumb; }
+    QalamActivityBar *activityBar() const { return m_activityBar; }
+    QalamSidebar *sidebar() const { return m_sidebar; }
+    QalamStatusBar *statusBar() const { return m_statusBar; }
+    QalamPanelArea *panelArea() const { return m_panelArea; }
+    QalamBreadcrumb *breadcrumb() const { return m_breadcrumb; }
 
     // --- Layout actions ---
 
     /// Toggle the console/panel area visibility
-    void toggleConsole(TEditor *currentEditor);
+    void toggleConsole(QalamEditor *currentEditor);
 
     /// Toggle sidebar visibility
     void toggleSidebar();
@@ -45,7 +45,7 @@ public:
     void loadFolder(const QString &path);
 
     /// Handle view changes from the activity bar
-    void onActivityViewChanged(TActivityBar::ViewType view, const QString &folderPath);
+    void onActivityViewChanged(QalamActivityBar::ViewType view, const QString &folderPath);
 
 signals:
     /// Emitted when the sidebar file explorer requests opening a folder
@@ -56,9 +56,9 @@ private:
     QTabWidget *m_tabWidget{};
     SearchPanel *m_searchBar{};
 
-    TActivityBar *m_activityBar{};
-    TSidebar *m_sidebar{};
-    TStatusBar *m_statusBar{};
-    TPanelArea *m_panelArea{};
-    TBreadcrumb *m_breadcrumb{};
+    QalamActivityBar *m_activityBar{};
+    QalamSidebar *m_sidebar{};
+    QalamStatusBar *m_statusBar{};
+    QalamPanelArea *m_panelArea{};
+    QalamBreadcrumb *m_breadcrumb{};
 };

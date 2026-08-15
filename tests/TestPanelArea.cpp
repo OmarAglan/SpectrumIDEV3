@@ -1,4 +1,4 @@
-#include "TPanelArea.h"
+#include "QalamPanelArea.h"
 
 #include <QTest>
 
@@ -12,7 +12,7 @@ private slots:
 
 void TestPanelArea::keepsBoundedPlainTextOutput()
 {
-    TPanelArea panel;
+    QalamPanelArea panel;
     panel.appendOutput(QStringLiteral("<b>نص خادم اللغة</b>\n"));
     QVERIFY(panel.outputText().contains(
         QStringLiteral("<b>نص خادم اللغة</b>")));

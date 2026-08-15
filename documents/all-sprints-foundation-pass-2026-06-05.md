@@ -9,7 +9,7 @@ This pass turns the previous feature pile into a more maintainable IDE platform.
 - Removed the committed `aqtinstall.log` from the project tree.
 - Synced `qalam/Qalam.pro` with the newer CMake feature files.
 - Added a Qt Test harness in `tests/`.
-- Replaced duplicated command-palette dialog logic with the reusable `TCommandPalette` component.
+- Replaced duplicated command-palette dialog logic with the reusable `QalamCommandPalette` component.
 - Added `CommandRegistry` as the single source for command-palette command metadata.
 - Added `DiagnosticParser` to remove compiler-output parsing from `Qalam.cpp`.
 - Added `DiagnosticsModel` as the single diagnostics store for Problems, status bar, and editor underlines.

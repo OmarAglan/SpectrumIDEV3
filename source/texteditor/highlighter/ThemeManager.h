@@ -1,5 +1,5 @@
 #pragma once
-#include "TSyntaxThemes.h"
+#include "QalamSyntaxThemes.h"
 #include <QVector>
 #include <memory>
 

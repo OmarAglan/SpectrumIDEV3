@@ -1,7 +1,7 @@
 #pragma once
 
 #include <QMainWindow>
-#include "TTitleBar.h"
+#include "QalamTitleBar.h"
 
 class QalamWindow : public QMainWindow {
     Q_OBJECT
@@ -20,7 +20,7 @@ protected:
     // We need to insert TitleBar into the layout.
 
 private:
-    TTitleBar *m_titleBar;
+    QalamTitleBar *m_titleBar;
     
     // Helper to setup the layout with title bar
     void initFrameless();

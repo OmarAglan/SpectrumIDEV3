@@ -7,7 +7,7 @@
 #include <QProcess>
 #include <QThread>
 
-class TConsole;
+class QalamConsole;
 
 class BuildManager : public QObject {
     Q_OBJECT
@@ -30,12 +30,12 @@ public:
     ~BuildManager();
 
     /// Run a Baa source file. Outputs go to the given console.
-    void runBaa(const QString &filePath, TConsole *console);
+    void runBaa(const QString &filePath, QalamConsole *console);
 
     /// Run a supported Takween project command for the project owning filePath.
     bool runTakweenCommand(const QString &filePath,
                            const QString &command,
-                           TConsole *console,
+                           QalamConsole *console,
                            const QString &targetName = QString());
 
     /// Build argv for the supported Takween project commands, or an empty list.
@@ -100,7 +100,7 @@ private:
                       const QString &contextPath,
                       const QString &operation,
                       const QString &heading,
-                      TConsole *console);
+                      QalamConsole *console);
 
     QPointer<ProcessWorker> m_worker;
     QPointer<QThread> m_buildThread;

@@ -1,5 +1,5 @@
 #include "SessionManager.h"
-#include "TExplorerView.h"
+#include "QalamExplorerView.h"
 
 #include <QSettings>
 #include <QFileInfo>
@@ -17,7 +17,7 @@ void SessionManager::saveSession(const QString &folderPath, const QByteArray &wi
     // Collect file paths of all open tabs
     QStringList openFiles;
     for (int i = 0; i < m_tabWidget->count(); ++i) {
-        TEditor *editor = qobject_cast<TEditor*>(m_tabWidget->widget(i));
+        QalamEditor *editor = qobject_cast<QalamEditor*>(m_tabWidget->widget(i));
         if (editor) {
             QString filePath = editor->currentFilePath();
             if (not filePath.isEmpty()) {
@@ -45,7 +45,7 @@ SessionManager::SessionData SessionManager::restoreSession() const
     return data;
 }
 
-void SessionManager::savePreferences(TEditor *editor, int themeIndex)
+void SessionManager::savePreferences(QalamEditor *editor, int themeIndex)
 {
     if (not editor) return;
 
@@ -56,14 +56,14 @@ void SessionManager::savePreferences(TEditor *editor, int themeIndex)
     settings.sync();
 }
 
-void SessionManager::syncOpenEditors(TExplorerView *explorerView)
+void SessionManager::syncOpenEditors(QalamExplorerView *explorerView)
 {
     if (not explorerView) return;
 
     explorerView->clearOpenEditors();
 
     for (int i = 0; i < m_tabWidget->count(); ++i) {
-        TEditor *editor = qobject_cast<TEditor*>(m_tabWidget->widget(i));
+        QalamEditor *editor = qobject_cast<QalamEditor*>(m_tabWidget->widget(i));
         if (editor) {
             QString filePath = editor->currentFilePath();
             bool modified = editor->document()->isModified();

@@ -26,10 +26,10 @@ private:
 };
 
 // --- Rich Popup View (The "Container" for List + Footer) ---
-class TCompletionPopup : public QListView {
+class QalamCompletionPopup : public QListView {
     Q_OBJECT
 public:
-    explicit TCompletionPopup(QWidget *parent = nullptr);
+    explicit QalamCompletionPopup(QWidget *parent = nullptr);
 
 protected:
     void resizeEvent(QResizeEvent *event) override;
@@ -41,10 +41,10 @@ private:
 };
 
 // --- Modern Delegate ---
-class TModernCompletionDelegate : public QStyledItemDelegate {
+class QalamModernCompletionDelegate : public QStyledItemDelegate {
     Q_OBJECT
 public:
-    explicit TModernCompletionDelegate(QObject *parent = nullptr);
+    explicit QalamModernCompletionDelegate(QObject *parent = nullptr);
     void paint(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const override;
     QSize sizeHint(const QStyleOptionViewItem &option, const QModelIndex &index) const override;
 };

@@ -36,42 +36,42 @@ add_library(qalam_core STATIC
     debug/BreakpointModel.cpp
     debug/BreakpointModel.h
     # Text Editor
-    texteditor/TEditor.cpp
-    texteditor/TBracketHandler.cpp
-    texteditor/TAutoSave.cpp
-    texteditor/TSnippetManager.cpp
-    texteditor/highlighter/TLexer.cpp
-    texteditor/highlighter/TSyntaxDefinition.cpp
-    texteditor/highlighter/TSyntaxHighlighter.cpp
+    texteditor/QalamEditor.cpp
+    texteditor/QalamBracketHandler.cpp
+    texteditor/QalamAutoSave.cpp
+    texteditor/QalamSnippetManager.cpp
+    texteditor/highlighter/QalamLexer.cpp
+    texteditor/highlighter/QalamSyntaxDefinition.cpp
+    texteditor/highlighter/QalamSyntaxHighlighter.cpp
     texteditor/autocomplete/AutoCompleteUI.cpp
     # Components
-    components/TFlatButton.cpp
-    components/TSearchPanel.cpp
-    components/TCommandPalette.cpp
-    components/TCommandPalette.h
+    components/QalamFlatButton.cpp
+    components/QalamSearchPanel.cpp
+    components/QalamCommandPalette.cpp
+    components/QalamCommandPalette.h
     # Console
-    console/TConsole.cpp
+    console/QalamConsole.cpp
     console/ProcessWorker.cpp
     # Menu
-    menubar/TMenu.cpp
+    menubar/QalamMenuBar.cpp
     # Settings
-    settings/TSettings.cpp
+    settings/QalamSettings.cpp
     # Pages
-    pages/TWelcomePage.cpp
+    pages/QalamWelcomePage.cpp
     # Sidebar
-    sidebar/TExplorerView.cpp
-    sidebar/TSearchView.cpp
-    sidebar/TSymbolOutlineView.cpp
-    sidebar/TSymbolOutlineView.h
+    sidebar/QalamExplorerView.cpp
+    sidebar/QalamSearchView.cpp
+    sidebar/QalamSymbolOutlineView.cpp
+    sidebar/QalamSymbolOutlineView.h
     # UI Components
     ui/QalamTheme.cpp
-    ui/TTitleBar.cpp
+    ui/QalamTitleBar.cpp
     ui/QalamWindow.cpp
-    ui/TActivityBar.cpp
-    ui/TSidebar.cpp
-    ui/TBreadcrumb.cpp
-    ui/TPanelArea.cpp
-    ui/TStatusBar.cpp
+    ui/QalamActivityBar.cpp
+    ui/QalamSidebar.cpp
+    ui/QalamBreadcrumb.cpp
+    ui/QalamPanelArea.cpp
+    ui/QalamStatusBar.cpp
     # Managers
     managers/FileManager.cpp
     managers/BuildManager.cpp

@@ -1,4 +1,4 @@
-#include "TSnippetManager.h"
+#include "QalamSnippetManager.h"
 
 #include <QPlainTextEdit>
 #include <QTest>
@@ -18,7 +18,7 @@ void TestSnippetManager::expandsStandardPlaceholdersAndPreservesIndentation()
     cursor.setPosition(4);
     cursor.setPosition(5, QTextCursor::KeepAnchor);
 
-    TSnippetManager manager(&editor);
+    QalamSnippetManager manager(&editor);
     manager.insertSnippet(
         QStringLiteral("صحيح ${1:اسم}() {\n\t${0}\n}"), cursor);
 

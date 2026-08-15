@@ -37,6 +37,13 @@ function(add_qalam_test test_name source_file)
     endif()
 endfunction()
 
+add_test(
+    NAME test_qalam_naming
+    COMMAND ${CMAKE_COMMAND}
+        "-DQALAM_ROOT=${CMAKE_SOURCE_DIR}"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/CheckQalamNaming.cmake"
+)
+
 add_qalam_test(test_diagnostic_parser TestDiagnosticParser.cpp)
 add_qalam_test(test_workspace_indexer TestWorkspaceIndexer.cpp)
 add_qalam_test(test_command_registry TestCommandRegistry.cpp)

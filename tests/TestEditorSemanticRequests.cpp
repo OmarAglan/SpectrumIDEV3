@@ -1,4 +1,4 @@
-#include "TEditor.h"
+#include "QalamEditor.h"
 
 #include <QCoreApplication>
 #include <QImage>
@@ -24,14 +24,14 @@ void TestEditorSemanticRequests::requestsSignaturesFromArabicEditingTriggers()
     QTemporaryDir workspace(QStringLiteral("qalam-semantic-مسار-XXXXXX"));
     QVERIFY(workspace.isValid());
 
-    TEditor editor;
+    QalamEditor editor;
     editor.setFilePath(workspace.filePath(QStringLiteral("رئيسي.baa")));
     editor.setPlainText(QStringLiteral("اجمع"));
     QTextCursor cursor = editor.textCursor();
     cursor.movePosition(QTextCursor::End);
     editor.setTextCursor(cursor);
 
-    QSignalSpy requests(&editor, &TEditor::signatureHelpRequested);
+    QSignalSpy requests(&editor, &QalamEditor::signatureHelpRequested);
 
     QTest::keyClicks(&editor, QStringLiteral("("));
     QCOMPARE(editor.toPlainText(), QStringLiteral("اجمع()"));
@@ -55,7 +55,7 @@ void TestEditorSemanticRequests::requestsSignaturesFromArabicEditingTriggers()
 
 void TestEditorSemanticRequests::keepsPairsAndSelectionsInLogicalDocumentOrder()
 {
-    TEditor editor;
+    QalamEditor editor;
     editor.setPlainText(QStringLiteral("مرحبا"));
     QTextCursor cursor = editor.textCursor();
     cursor.setPosition(0);
@@ -86,7 +86,7 @@ void TestEditorSemanticRequests::keepsPairsAndSelectionsInLogicalDocumentOrder()
 
 void TestEditorSemanticRequests::expandsAndShrinksCompilerOwnedSelections()
 {
-    TEditor editor;
+    QalamEditor editor;
     editor.setFilePath(QStringLiteral("رئيسي.baa"));
     const QString source =
         QStringLiteral("صحيح الرئيسية() {\n    صحيح س = ١.\n}\n");
@@ -97,7 +97,7 @@ void TestEditorSemanticRequests::expandsAndShrinksCompilerOwnedSelections()
     cursor.setPosition(cursor.block().position() + character);
     editor.setTextCursor(cursor);
 
-    QSignalSpy requests(&editor, &TEditor::selectionRangeRequested);
+    QSignalSpy requests(&editor, &QalamEditor::selectionRangeRequested);
     QTest::keyClick(&editor, Qt::Key_Right,
                     Qt::ShiftModifier | Qt::AltModifier);
     QCOMPARE(requests.size(), 1);
@@ -142,7 +142,7 @@ void TestEditorSemanticRequests::expandsAndShrinksCompilerOwnedSelections()
 
 void TestEditorSemanticRequests::keepsLiteralBracesOutOfLocalFolding()
 {
-    TEditor editor;
+    QalamEditor editor;
     editor.setFilePath(QStringLiteral("رئيسي.baa"));
     editor.setPlainText(QStringLiteral(
         "صحيح الرئيسية() {\n"
@@ -159,7 +159,7 @@ void TestEditorSemanticRequests::keepsLiteralBracesOutOfLocalFolding()
 
 void TestEditorSemanticRequests::rendersInlayHintsWithoutChangingSourceText()
 {
-    TEditor editor;
+    QalamEditor editor;
     editor.resize(640, 240);
     const QString source = QStringLiteral(
         "صحيح اجمع(صحيح أول، صحيح ثان) { إرجع أول + ثان. }\n"

@@ -334,12 +334,12 @@ QString QalamTheme::globalStyleSheet() const {
 QString QalamTheme::activityBarStyleSheet() {
     using namespace Constants;
     return QString(R"(
-        TActivityBar {
+        QalamActivityBar {
             background-color: %1;
             border-left: 1px solid %2;
         }
         
-        TActivityBar QPushButton {
+        QalamActivityBar QPushButton {
             background-color: transparent;
             border: none;
             border-radius: 0px;
@@ -347,16 +347,16 @@ QString QalamTheme::activityBarStyleSheet() {
             margin: 0px;
         }
         
-        TActivityBar QPushButton:hover {
+        QalamActivityBar QPushButton:hover {
             color: %3;
         }
         
-        TActivityBar QPushButton:checked {
+        QalamActivityBar QPushButton:checked {
             border-right: %4px solid %5;
             background-color: transparent;
         }
         
-        TActivityBar QPushButton:checked:hover {
+        QalamActivityBar QPushButton:checked:hover {
             background-color: transparent;
         }
     )")
@@ -371,7 +371,7 @@ QString QalamTheme::activityBarStyleSheet() {
 QString QalamTheme::sidebarStyleSheet() {
     using namespace Constants;
     return QString(R"(
-        TSidebar {
+        QalamSidebar {
             background-color: %1;
             border-left: 1px solid %2;
         }
@@ -399,7 +399,7 @@ QString QalamTheme::sidebarStyleSheet() {
 QString QalamTheme::explorerViewStyleSheet() {
     using namespace Constants;
     return QString(R"(
-        TExplorerView {
+        QalamExplorerView {
             background-color: %1;
             border: none;
         }
@@ -503,7 +503,7 @@ QString QalamTheme::explorerViewStyleSheet() {
 QString QalamTheme::searchViewStyleSheet() {
     using namespace Constants;
     return QString(R"(
-        TSearchView {
+        QalamSearchView {
             background-color: %1;
             border: none;
         }
@@ -599,7 +599,7 @@ QString QalamTheme::searchViewStyleSheet() {
 QString QalamTheme::breadcrumbStyleSheet() {
     using namespace Constants;
     return QString(R"(
-        TBreadcrumb {
+        QalamBreadcrumb {
             background-color: %1;
             border-bottom: 1px solid %2;
         }
@@ -611,7 +611,7 @@ QString QalamTheme::breadcrumbStyleSheet() {
 QString QalamTheme::panelAreaStyleSheet() {
     using namespace Constants;
     return QString(R"(
-        TPanelArea {
+        QalamPanelArea {
             background-color: %1;
             border-top: 1px solid %2;
         }
@@ -665,18 +665,18 @@ QString QalamTheme::panelAreaStyleSheet() {
 QString QalamTheme::statusBarStyleSheet() {
     using namespace Constants;
     return QString(R"(
-        TStatusBar {
+        QalamStatusBar {
             background-color: %1;
             border: none;
         }
         
-        TStatusBar QLabel {
+        QalamStatusBar QLabel {
             color: %2;
             font-size: %3px;
             padding: 0 %4px;
         }
         
-        TStatusBar QPushButton {
+        QalamStatusBar QPushButton {
             background-color: transparent;
             color: %2;
             border: none;
@@ -684,7 +684,7 @@ QString QalamTheme::statusBarStyleSheet() {
             font-size: %3px;
         }
         
-        TStatusBar QPushButton:hover {
+        QalamStatusBar QPushButton:hover {
             background-color: %5;
         }
     )")
@@ -698,7 +698,7 @@ QString QalamTheme::statusBarStyleSheet() {
 QString QalamTheme::titleBarStyleSheet() {
     using namespace Constants;
     return QString(R"(
-        TTitleBar {
+        QalamTitleBar {
             background-color: %1;
         }
         
@@ -758,7 +758,7 @@ QString QalamTheme::titleBarStyleSheet() {
 QString QalamTheme::editorStyleSheet() {
     using namespace Constants;
     return QString(R"(
-        TEditor {
+        QalamEditor {
             background-color: %1;
             color: %2;
             border: none;
@@ -834,7 +834,7 @@ QString QalamTheme::tabBarStyleSheet() {
 QString QalamTheme::consoleStyleSheet() {
     using namespace Constants;
     return QString(R"(
-        TConsole {
+        QalamConsole {
             background-color: %1;
             color: %2;
             border: none;

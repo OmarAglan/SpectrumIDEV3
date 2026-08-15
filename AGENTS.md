@@ -45,18 +45,18 @@ No lint or format checks are configured yet.
 ```
 qalam/                # App entry: main.cpp, Qalam.cpp/.h, Constants.h, resources.qrc
 source/               # Static library (qalam_core)
-├── texteditor/       # TEditor, TBracketHandler, TAutoSave, TSnippetManager
-│   ├── highlighter/  # TLexer, TSyntaxHighlighter, TToken, TSyntaxDefinition, ThemeManager
+├── texteditor/       # QalamEditor, QalamBracketHandler, QalamAutoSave, QalamSnippetManager
+│   ├── highlighter/  # QalamLexer, QalamSyntaxHighlighter, QalamToken, QalamSyntaxDefinition, ThemeManager
 │   └── autocomplete/ # AutoComplete (strategies), AutoCompleteUI
-├── console/          # TConsole, ProcessWorker
-├── components/       # TFlatButton, TSearchPanel
-├── menubar/          # TMenuBar
-├── settings/         # TSettings
-├── sidebar/          # TExplorerView, TSearchView
-├── ui/               # QalamWindow, QalamTheme, TTitleBar, TActivityBar, TSidebar,
-│                     # TBreadcrumb, TPanelArea, TStatusBar
+├── console/          # QalamConsole, ProcessWorker
+├── components/       # QalamFlatButton, QalamSearchPanel
+├── menubar/          # QalamMenuBar
+├── settings/         # QalamSettings
+├── sidebar/          # QalamExplorerView, QalamSearchView
+├── ui/               # QalamWindow, QalamTheme, QalamTitleBar, QalamActivityBar, QalamSidebar,
+│                     # QalamBreadcrumb, QalamPanelArea, QalamStatusBar
 ├── managers/         # FileManager, BuildManager, SessionManager, LayoutManager
-└── pages/            # TWelcomePage
+└── pages/            # QalamWelcomePage
 documents/            # ROADMAP.md, INTERNALS.md, USER_GUIDE.md, LANGUAGE.md
 ```
 
@@ -67,7 +67,7 @@ documents/            # ROADMAP.md, INTERNALS.md, USER_GUIDE.md, LANGUAGE.md
 `#pragma once` in all headers. Order: own header, project-local headers, blank line, Qt headers, STL headers.
 
 ```cpp
-#include "TConsole.h"
+#include "QalamConsole.h"
 #include "Constants.h"
 #include "ui/QalamTheme.h"
 
@@ -80,7 +80,7 @@ documents/            # ROADMAP.md, INTERNALS.md, USER_GUIDE.md, LANGUAGE.md
 
 | Element            | Convention               | Examples                                      |
 |--------------------|--------------------------|-----------------------------------------------|
-| Widget/component classes | `T` prefix + PascalCase | `TEditor`, `TConsole`, `TLexer`, `TStatusBar` |
+| Qalam-owned UI/classes | `Qalam` prefix + PascalCase | `QalamEditor`, `QalamConsole`, `QalamLexer`, `QalamStatusBar` |
 | App/theme classes  | `Qalam` prefix           | `QalamWindow`, `QalamTheme`                   |
 | Manager classes    | PascalCase (no prefix)   | `FileManager`, `SessionManager`               |
 | Data/interface     | PascalCase (no prefix)   | `CompletionItem`, `ICompletionStrategy`, `SyntaxTheme` |
@@ -105,10 +105,10 @@ QString m_output{};
 ### Class Declaration Order
 
 ```cpp
-class TExample : public QWidget {
+class QalamExample : public QWidget {
     Q_OBJECT
 public:
-    explicit TExample(QWidget *parent = nullptr);
+    explicit QalamExample(QWidget *parent = nullptr);
     void publicMethod();
 public slots:
     void slotMethod();
@@ -185,15 +185,15 @@ Use `qWarning()` for non-fatal internal issues. Use `Q_UNUSED()` for intentional
 - **Singleton**: `LanguageDefinition::instance()`, `QalamTheme::instance()`
 - **Strategy**: `ICompletionStrategy` → `KeywordStrategy`, `BuiltinStrategy`, `SnippetStrategy`, `DynamicWordStrategy`
 - **State Machine**: `LexerState` → `NormalState`, `StringState` (with `nextState()` transitions)
-- **Observer**: Qt signals/slots throughout; `TMenuBar` emits, `Qalam` connects
+- **Observer**: Qt signals/slots throughout; `QalamMenuBar` emits, `Qalam` connects
 
 ## Common Tasks
 
-**Adding a Baa keyword:** Edit `qalam/resources/baa-language.json` (keywords array). Fallback list is in `TSyntaxDefinition.cpp:loadDefaults()`.
+**Adding a Baa keyword:** Edit `qalam/resources/baa-language.json` (keywords array). Fallback list is in `QalamSyntaxDefinition.cpp:loadDefaults()`.
 
-**Adding a snippet:** Add entry in `SnippetStrategy::getSuggestions()` (`AutoComplete.cpp`) with a `SnippetId`. Add navigation in `TSnippetManager::setupNavigation()`.
+**Adding a snippet:** Add entry in `SnippetStrategy::getSuggestions()` (`AutoComplete.cpp`) with a `SnippetId`. Add navigation in `QalamSnippetManager::setupNavigation()`.
 
-**Adding a setting:** Add key to `Constants.h`, add UI in `TSettings::createAppearancePage()`, connect in `Qalam::openSettings()`.
+**Adding a setting:** Add key to `Constants.h`, add UI in `QalamSettings::createAppearancePage()`, connect in `Qalam::openSettings()`.
 
 **Adding a source file:** Add to `source/CMakeLists.txt` target sources, then reconfigure CMake.
 

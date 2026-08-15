@@ -1,5 +1,5 @@
 #include "BuildManager.h"
-#include "TConsole.h"
+#include "QalamConsole.h"
 #include "Constants.h"
 
 #include <QSettings>
@@ -281,7 +281,7 @@ void BuildManager::stop()
     cleanupBuild();
 }
 
-void BuildManager::runBaa(const QString &filePath, TConsole *console)
+void BuildManager::runBaa(const QString &filePath, QalamConsole *console)
 {
     if (!console) return;
 
@@ -312,7 +312,7 @@ void BuildManager::runBaa(const QString &filePath, TConsole *console)
 
 bool BuildManager::runTakweenCommand(const QString &filePath,
                                      const QString &command,
-                                     TConsole *console,
+                                     QalamConsole *console,
                                      const QString &targetName)
 {
     if (!console) return false;
@@ -339,7 +339,7 @@ void BuildManager::startProcess(const QString &requestedProgram,
                                 const QString &contextPath,
                                 const QString &operation,
                                 const QString &heading,
-                                TConsole *console)
+                                QalamConsole *console)
 {
     if (!console) return;
     QString program = requestedProgram;
@@ -441,7 +441,7 @@ void BuildManager::startProcess(const QString &requestedProgram,
 
     QThread *thread = m_buildThread.data();
     ProcessWorker *worker = m_worker.data();
-    QPointer<TConsole> safeConsole(console);
+    QPointer<QalamConsole> safeConsole(console);
 
     connect(m_worker, &ProcessWorker::finished, this,
             [this, safeConsole, thread, operation, eventFilePath](int code) {
@@ -493,7 +493,7 @@ void BuildManager::startProcess(const QString &requestedProgram,
         m_worker = nullptr;
     });
 
-    connect(console, &TConsole::commandEntered,
+    connect(console, &QalamConsole::commandEntered,
             m_worker, &ProcessWorker::sendInput);
 
     emit buildStarted();

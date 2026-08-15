@@ -14,21 +14,21 @@
 
 QalamWindow::QalamWindow(QWidget *parent) : QMainWindow(parent) {
     // 1. Setup Title Bar
-    m_titleBar = new TTitleBar(this);
+    m_titleBar = new QalamTitleBar(this);
     
-    connect(m_titleBar, &TTitleBar::minimizeClicked, this, &QMainWindow::showMinimized);
-    connect(m_titleBar, &TTitleBar::maximizeRestoreClicked, [this]() {
+    connect(m_titleBar, &QalamTitleBar::minimizeClicked, this, &QMainWindow::showMinimized);
+    connect(m_titleBar, &QalamTitleBar::maximizeRestoreClicked, [this]() {
         if (isMaximized()) showNormal();
         else showMaximized();
     });
-    connect(m_titleBar, &TTitleBar::closeClicked, this, &QMainWindow::close);
-    connect(m_titleBar, &TTitleBar::commandCenterClicked, this, &QalamWindow::commandCenterClicked);
+    connect(m_titleBar, &QalamTitleBar::closeClicked, this, &QMainWindow::close);
+    connect(m_titleBar, &QalamTitleBar::commandCenterClicked, this, &QalamWindow::commandCenterClicked);
     
     // Set menu widget to title bar (QMainWindow feature) or add to layout?
     // QMainWindow::setMenuWidget() puts it at top. Perfect.
     setMenuWidget(m_titleBar);
 
-    connect(this, &QWidget::windowTitleChanged, m_titleBar, &TTitleBar::setTitle);
+    connect(this, &QWidget::windowTitleChanged, m_titleBar, &QalamTitleBar::setTitle);
     
     // 2. Window Flags for Custom Frame
     setWindowFlags(Qt::FramelessWindowHint | Qt::WindowSystemMenuHint | Qt::WindowMinimizeButtonHint | Qt::WindowMaximizeButtonHint);

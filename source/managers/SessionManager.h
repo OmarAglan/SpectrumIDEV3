@@ -1,11 +1,11 @@
 #pragma once
 
-#include "TEditor.h"
+#include "QalamEditor.h"
 #include "Constants.h"
 #include <QObject>
 #include <QTabWidget>
 
-class TExplorerView;
+class QalamExplorerView;
 
 /**
  * @brief Manages session persistence — saving/restoring open tabs,
@@ -32,10 +32,10 @@ public:
     SessionData restoreSession() const;
 
     /// Save user preferences (font, theme) from the current editor state
-    void savePreferences(TEditor *editor, int themeIndex);
+    void savePreferences(QalamEditor *editor, int themeIndex);
 
     /// Sync the list of open editors to the given explorer view
-    void syncOpenEditors(TExplorerView *explorerView);
+    void syncOpenEditors(QalamExplorerView *explorerView);
 
 private:
     QTabWidget *m_tabWidget{};

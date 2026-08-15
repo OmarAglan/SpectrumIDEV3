@@ -1,14 +1,14 @@
 #include "LayoutManager.h"
 
-#include "TActivityBar.h"
-#include "TSidebar.h"
-#include "TStatusBar.h"
-#include "TPanelArea.h"
-#include "TBreadcrumb.h"
-#include "TExplorerView.h"
-#include "TConsole.h"
-#include "TSearchPanel.h"
-#include "TEditor.h"
+#include "QalamActivityBar.h"
+#include "QalamSidebar.h"
+#include "QalamStatusBar.h"
+#include "QalamPanelArea.h"
+#include "QalamBreadcrumb.h"
+#include "QalamExplorerView.h"
+#include "QalamConsole.h"
+#include "QalamSearchPanel.h"
+#include "QalamEditor.h"
 #include "Constants.h"
 
 #include <QMainWindow>
@@ -35,11 +35,11 @@ LayoutManager::LayoutManager(QMainWindow *window, QTabWidget *tabWidget,
 void LayoutManager::setupLayout()
 {
     // --- Create the UI components ---
-    m_activityBar = new TActivityBar(m_window);
-    m_sidebar     = new TSidebar(m_window);
-    m_statusBar   = new TStatusBar(m_window);
-    m_breadcrumb  = new TBreadcrumb(m_window);
-    m_panelArea   = new TPanelArea(m_window);
+    m_activityBar = new QalamActivityBar(m_window);
+    m_sidebar     = new QalamSidebar(m_window);
+    m_statusBar   = new QalamStatusBar(m_window);
+    m_breadcrumb  = new QalamBreadcrumb(m_window);
+    m_panelArea   = new QalamPanelArea(m_window);
 
     // RTL-first workbench: Qalam targets Arabic-speaking developers, so the
     // Primary Side Bar and Activity Bar live on the right side. The editor text
@@ -125,13 +125,13 @@ void LayoutManager::setupLayout()
     // --- Initial visibility ---
     m_activityBar->show();
     m_sidebar->show();       // VS Code opens with the Primary Side Bar visible.
-    m_sidebar->setCurrentView(TActivityBar::ViewType::Explorer);
+    m_sidebar->setCurrentView(QalamActivityBar::ViewType::Explorer);
     m_statusBar->show();
     m_breadcrumb->hide();    // Hide by default to match VS Code top layout
     m_panelArea->hide();     // Start collapsed, like VS Code
 
     if (m_activityBar) {
-        m_activityBar->setCurrentView(TActivityBar::ViewType::Explorer);
+        m_activityBar->setCurrentView(QalamActivityBar::ViewType::Explorer);
     }
 
     // --- Set initial status bar values ---
@@ -157,7 +157,7 @@ void LayoutManager::setupLayout()
 // ===================================================================
 // Toggle the console/panel area visibility
 // ===================================================================
-void LayoutManager::toggleConsole(TEditor *currentEditor)
+void LayoutManager::toggleConsole(QalamEditor *currentEditor)
 {
     if (!m_panelArea) return;
 
@@ -165,7 +165,7 @@ void LayoutManager::toggleConsole(TEditor *currentEditor)
     m_panelArea->setVisible(isVisible);
 
     if (isVisible) {
-        m_panelArea->setCurrentTab(TPanelArea::Tab::Terminal);
+        m_panelArea->setCurrentTab(QalamPanelArea::Tab::Terminal);
         if (m_panelArea->terminal()) {
             m_panelArea->terminal()->setFocus();
         }
@@ -189,9 +189,9 @@ void LayoutManager::toggleSidebar()
     // Update activity bar state
     if (m_activityBar) {
         if (shouldBeVisible) {
-            m_activityBar->setCurrentView(TActivityBar::ViewType::Explorer);
+            m_activityBar->setCurrentView(QalamActivityBar::ViewType::Explorer);
         } else {
-            m_activityBar->setCurrentView(TActivityBar::ViewType::None);
+            m_activityBar->setCurrentView(QalamActivityBar::ViewType::None);
         }
     }
 }
@@ -205,13 +205,13 @@ void LayoutManager::loadFolder(const QString &path)
         // Update sidebar with folder path and show it
         if (m_sidebar and m_sidebar->explorerView()) {
             m_sidebar->explorerView()->setRootPath(path);
-            m_sidebar->setCurrentView(TActivityBar::ViewType::Explorer);
+            m_sidebar->setCurrentView(QalamActivityBar::ViewType::Explorer);
             m_sidebar->show();
         }
 
         // Sync activity bar state
         if (m_activityBar) {
-            m_activityBar->setCurrentView(TActivityBar::ViewType::Explorer);
+            m_activityBar->setCurrentView(QalamActivityBar::ViewType::Explorer);
         }
 
         // Update breadcrumb project root
@@ -233,14 +233,14 @@ void LayoutManager::loadFolder(const QString &path)
 // ===================================================================
 // Handle view changes from the activity bar
 // ===================================================================
-void LayoutManager::onActivityViewChanged(TActivityBar::ViewType view,
+void LayoutManager::onActivityViewChanged(QalamActivityBar::ViewType view,
                                           const QString &folderPath)
 {
     m_sidebar->setCurrentView(view);
     m_sidebar->show();
 
     // Update the sidebar root path when switching to Explorer
-    if (view == TActivityBar::ViewType::Explorer and !folderPath.isEmpty()) {
+    if (view == QalamActivityBar::ViewType::Explorer and !folderPath.isEmpty()) {
         m_sidebar->explorerView()->setRootPath(folderPath);
     }
 }

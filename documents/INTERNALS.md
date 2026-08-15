@@ -16,47 +16,47 @@ Qalam IDE is built using **Qt 6 (C++23)** and follows a modular design. The proj
 /qalam                  # Main application entry (main.cpp, Qalam.cpp, Qalam.h, resources.qrc)
 /source                 # qalam_core static library
 ├── texteditor          # Custom editor components
-│   ├── highlighter     # TLexer (state-machine), TSyntaxHighlighter, LanguageDefinition
+│   ├── highlighter     # QalamLexer (state-machine), QalamSyntaxHighlighter, LanguageDefinition
 │   └── autocomplete    # AutoComplete strategies and UI
-├── console             # TConsole, ProcessWorker
-├── components          # TFlatButton, TSearchPanel
-├── menubar             # TMenuBar
-├── settings            # TSettings
-├── sidebar             # TExplorerView, TSearchView
-├── ui                  # QalamWindow, QalamTheme, TTitleBar, TActivityBar, TSidebar, TPanelArea, TStatusBar, TBreadcrumb
+├── console             # QalamConsole, ProcessWorker
+├── components          # QalamFlatButton, QalamSearchPanel
+├── menubar             # QalamMenuBar
+├── settings            # QalamSettings
+├── sidebar             # QalamExplorerView, QalamSearchView
+├── ui                  # QalamWindow, QalamTheme, QalamTitleBar, QalamActivityBar, QalamSidebar, QalamPanelArea, QalamStatusBar, QalamBreadcrumb
 ├── managers            # FileManager, BuildManager, SessionManager, LayoutManager
-└── pages               # TWelcomePage
+└── pages               # QalamWelcomePage
 ```
 
 ### Key Components
 
 #### 1. Text Editor (`source/texteditor`)
-The heart of Qalam is `TEditor`, a custom `QPlainTextEdit` subclass.
-- **`TLexer`:** A state-based lexer using `QStringView` for zero-copy syntax highlighting.
-- **`TSyntaxHighlighter`:** Integrates `TLexer` with Qt's `QSyntaxHighlighter` for real-time coloring.
-- **Completion UI:** `TEditor` requests `textDocument/completion` after Arabic
+The heart of Qalam is `QalamEditor`, a custom `QPlainTextEdit` subclass.
+- **`QalamLexer`:** A state-based lexer using `QStringView` for zero-copy syntax highlighting.
+- **`QalamSyntaxHighlighter`:** Integrates `QalamLexer` with Qt's `QSyntaxHighlighter` for real-time coloring.
+- **Completion UI:** `QalamEditor` requests `textDocument/completion` after Arabic
   input, and displays only version-matched Baa-LSP results. Those results
   include Baa-owned builtins, parameters, visible locals, and explicitly
   included declarations. It does not own a copied keyword, builtin, snippet,
   or scope table.
 - **Semantic tooltips:** delayed identifier hover requests and call-signature
-  requests flow through Baa-LSP. `TEditor` renders version-matched Markdown and
+  requests flow through Baa-LSP. `QalamEditor` renders version-matched Markdown and
   the active Arabic parameter, but owns no keyword, builtin, type, or signature
   rules.
-- **`TBracketHandler`:** Handles bracket/quote auto-pairing, skip-over, and selection wrapping.
-- **`TSnippetManager`:** Manages code snippets with Tab/Enter placeholder navigation.
-- **`TAutoSave`:** Handles automatic backup to `.~` files.
+- **`QalamBracketHandler`:** Handles bracket/quote auto-pairing, skip-over, and selection wrapping.
+- **`QalamSnippetManager`:** Manages code snippets with Tab/Enter placeholder navigation.
+- **`QalamAutoSave`:** Handles automatic backup to `.~` files.
 
 #### 2. Console (`source/console`)
-`TConsole` provides an interactive terminal.
+`QalamConsole` provides an interactive terminal.
 - **`ProcessWorker`:** Runs in a background `QThread` with mutex-protected buffers for the compiler or external scripts, keeping the UI responsive.
 
 #### 3. Framing & Theme (`source/ui`)
 - **`QalamWindow`:** Handles the frameless window implementation with native Windows snap/shadow and RTL layout.
 - **`QalamTheme`:** Singleton managing CSS-based themes for consistent styling across all components.
-- **`TTitleBar`:** Custom title bar with embedded menu and system buttons.
-- **`TSidebar`:** Stacked widget for Explorer and Search views.
-- **`TPanelArea`:** Bottom panel hosting Problems, Output, and Terminal tabs.
+- **`QalamTitleBar`:** Custom title bar with embedded menu and system buttons.
+- **`QalamSidebar`:** Stacked widget for Explorer and Search views.
+- **`QalamPanelArea`:** Bottom panel hosting Problems, Output, and Terminal tabs.
   Output is a read-only plain-text view capped at 500 blocks; it is the retained
   presentation surface for validated local Baa-LSP operational events.
 
@@ -68,9 +68,9 @@ The heart of Qalam is `TEditor`, a custom `QPlainTextEdit` subclass.
   requests. Baa-LSP—not Qalam—owns compiler invocation and UTF-8 byte to UTF-16
   position conversion. The client caches hierarchical document symbols only
   when their response matches the current document version and cancels obsolete
-  symbol requests. `TSymbolOutlineView` renders that version-matched hierarchy
+  symbol requests. `QalamSymbolOutlineView` renders that version-matched hierarchy
   for the current editor. Project-symbol search requests `workspace/symbol`
-  once, then lets `TCommandPalette` filter the returned Baa-owned index locally;
+  once, then lets `QalamCommandPalette` filter the returned Baa-owned index locally;
   Qalam does not scan manifests or parse source for semantic symbols. It tracks
   open-document ownership per Takween root, publishes standard dynamic
   `workspaceFolders`, and watches only `مشروع.تكوين`/`تكوين.قفل` so Baa-LSP can
@@ -81,7 +81,7 @@ The heart of Qalam is `TEditor`, a custom `QPlainTextEdit` subclass.
   Cursor-sensitive completion flushes the newest full-text
   document change before requesting compiler-scoped symbols and exact UTF-16
   edits, rejects obsolete responses, and passes standard snippet tab stops to
-  `TSnippetManager`. See
+  `QalamSnippetManager`. See
   `documents/BAA_LSP_INTEGRATION_AR.md`. Hover and signature requests use the
   same immediate full-text flush, cancellation, and document-version checks.
   Project navigation starts at the nearest Takween root. Prepared rename
@@ -147,8 +147,8 @@ load-time protection remains automatic.
 ### Adding a setting
 
 1. Add the key constant to `Constants.h` in the appropriate `Settings` namespace.
-2. Add UI widget creation in `TSettings::createAppearancePage()` (or a new page method).
-3. Wire up the load/save logic in `TSettings::loadSettings()` and `applySettings()`.
+2. Add UI widget creation in `QalamSettings::createAppearancePage()` (or a new page method).
+3. Wire up the load/save logic in `QalamSettings::loadSettings()` and `applySettings()`.
 4. Connect the change signal in `Qalam::openSettings()` to propagate changes.
 
 ## Build System

@@ -1,4 +1,4 @@
-#include "TSymbolOutlineView.h"
+#include "QalamSymbolOutlineView.h"
 
 #include <QSignalSpy>
 #include <QTest>
@@ -36,7 +36,7 @@ void TestSymbolOutlineView::rendersFiltersAndActivatesCompilerSymbols()
     function.line = 8;
     function.column = 6;
 
-    TSymbolOutlineView view;
+    QalamSymbolOutlineView view;
     view.resize(320, 400);
     view.setSymbols(
         QStringLiteral("C:/مشروع/رئيسي.baa"),
@@ -54,7 +54,7 @@ void TestSymbolOutlineView::rendersFiltersAndActivatesCompilerSymbols()
     QVERIFY(tree->topLevelItem(1)->isHidden());
 
     QSignalSpy activated(
-        &view, &TSymbolOutlineView::symbolActivated);
+        &view, &QalamSymbolOutlineView::symbolActivated);
     QTreeWidgetItem *fieldItem =
         tree->topLevelItem(0)->child(0);
     QVERIFY(QMetaObject::invokeMethod(

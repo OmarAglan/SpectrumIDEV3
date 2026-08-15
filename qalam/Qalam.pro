@@ -35,36 +35,36 @@ SOURCES += Qalam.cpp \
     ../source/language/LspMessageFramer.cpp \
     ../source/workspace/WorkspaceIndexer.cpp \
     ../source/debug/BreakpointModel.cpp \
-    ../source/components/TFlatButton.cpp \
-    ../source/components/TSearchPanel.cpp \
-    ../source/components/TCommandPalette.cpp \
+    ../source/components/QalamFlatButton.cpp \
+    ../source/components/QalamSearchPanel.cpp \
+    ../source/components/QalamCommandPalette.cpp \
     ../source/console/ProcessWorker.cpp \
-    ../source/console/TConsole.cpp \
+    ../source/console/QalamConsole.cpp \
     ../source/managers/BuildManager.cpp \
     ../source/managers/FileManager.cpp \
     ../source/managers/LayoutManager.cpp \
     ../source/managers/SessionManager.cpp \
-    ../source/menubar/TMenu.cpp \
-    ../source/pages/TWelcomePage.cpp \
-    ../source/settings/TSettings.cpp \
-    ../source/sidebar/TExplorerView.cpp \
-    ../source/sidebar/TSearchView.cpp \
-    ../source/texteditor/TAutoSave.cpp \
-    ../source/texteditor/TBracketHandler.cpp \
-    ../source/texteditor/TEditor.cpp \
-    ../source/texteditor/TSnippetManager.cpp \
+    ../source/menubar/QalamMenuBar.cpp \
+    ../source/pages/QalamWelcomePage.cpp \
+    ../source/settings/QalamSettings.cpp \
+    ../source/sidebar/QalamExplorerView.cpp \
+    ../source/sidebar/QalamSearchView.cpp \
+    ../source/texteditor/QalamAutoSave.cpp \
+    ../source/texteditor/QalamBracketHandler.cpp \
+    ../source/texteditor/QalamEditor.cpp \
+    ../source/texteditor/QalamSnippetManager.cpp \
     ../source/texteditor/autocomplete/AutoCompleteUI.cpp \
-    ../source/texteditor/highlighter/TLexer.cpp \
-    ../source/texteditor/highlighter/TSyntaxDefinition.cpp \
-    ../source/texteditor/highlighter/TSyntaxHighlighter.cpp \
+    ../source/texteditor/highlighter/QalamLexer.cpp \
+    ../source/texteditor/highlighter/QalamSyntaxDefinition.cpp \
+    ../source/texteditor/highlighter/QalamSyntaxHighlighter.cpp \
     ../source/ui/QalamTheme.cpp \
     ../source/ui/QalamWindow.cpp \
-    ../source/ui/TActivityBar.cpp \
-    ../source/ui/TBreadcrumb.cpp \
-    ../source/ui/TPanelArea.cpp \
-    ../source/ui/TSidebar.cpp \
-    ../source/ui/TStatusBar.cpp \
-    ../source/ui/TTitleBar.cpp
+    ../source/ui/QalamActivityBar.cpp \
+    ../source/ui/QalamBreadcrumb.cpp \
+    ../source/ui/QalamPanelArea.cpp \
+    ../source/ui/QalamSidebar.cpp \
+    ../source/ui/QalamStatusBar.cpp \
+    ../source/ui/QalamTitleBar.cpp
 
 HEADERS += Qalam.h \
     Constants.h \
@@ -85,40 +85,40 @@ HEADERS += Qalam.h \
     ../source/language/LspMessageFramer.h \
     ../source/workspace/WorkspaceIndexer.h \
     ../source/debug/BreakpointModel.h \
-    ../source/components/TFlatButton.h \
-    ../source/components/TSearchPanel.h \
-    ../source/components/TCommandPalette.h \
+    ../source/components/QalamFlatButton.h \
+    ../source/components/QalamSearchPanel.h \
+    ../source/components/QalamCommandPalette.h \
     ../source/console/ProcessWorker.h \
-    ../source/console/TConsole.h \
+    ../source/console/QalamConsole.h \
     ../source/managers/BuildManager.h \
     ../source/managers/FileManager.h \
     ../source/managers/LayoutManager.h \
     ../source/managers/SessionManager.h \
-    ../source/menubar/TMenu.h \
-    ../source/pages/TWelcomePage.h \
-    ../source/settings/TSettings.h \
-    ../source/sidebar/TExplorerView.h \
-    ../source/sidebar/TSearchView.h \
-    ../source/texteditor/TAutoSave.h \
-    ../source/texteditor/TBracketHandler.h \
-    ../source/texteditor/TEditor.h \
-    ../source/texteditor/TSnippetManager.h \
+    ../source/menubar/QalamMenuBar.h \
+    ../source/pages/QalamWelcomePage.h \
+    ../source/settings/QalamSettings.h \
+    ../source/sidebar/QalamExplorerView.h \
+    ../source/sidebar/QalamSearchView.h \
+    ../source/texteditor/QalamAutoSave.h \
+    ../source/texteditor/QalamBracketHandler.h \
+    ../source/texteditor/QalamEditor.h \
+    ../source/texteditor/QalamSnippetManager.h \
     ../source/texteditor/autocomplete/AutoComplete.h \
     ../source/texteditor/autocomplete/AutoCompleteUI.h \
-    ../source/texteditor/highlighter/TLexer.h \
-    ../source/texteditor/highlighter/TSyntaxDefinition.h \
-    ../source/texteditor/highlighter/TSyntaxHighlighter.h \
-    ../source/texteditor/highlighter/TSyntaxThemes.h \
-    ../source/texteditor/highlighter/TToken.h \
+    ../source/texteditor/highlighter/QalamLexer.h \
+    ../source/texteditor/highlighter/QalamSyntaxDefinition.h \
+    ../source/texteditor/highlighter/QalamSyntaxHighlighter.h \
+    ../source/texteditor/highlighter/QalamSyntaxThemes.h \
+    ../source/texteditor/highlighter/QalamToken.h \
     ../source/texteditor/highlighter/ThemeManager.h \
     ../source/ui/QalamTheme.h \
     ../source/ui/QalamWindow.h \
-    ../source/ui/TActivityBar.h \
-    ../source/ui/TBreadcrumb.h \
-    ../source/ui/TPanelArea.h \
-    ../source/ui/TSidebar.h \
-    ../source/ui/TStatusBar.h \
-    ../source/ui/TTitleBar.h
+    ../source/ui/QalamActivityBar.h \
+    ../source/ui/QalamBreadcrumb.h \
+    ../source/ui/QalamPanelArea.h \
+    ../source/ui/QalamSidebar.h \
+    ../source/ui/QalamStatusBar.h \
+    ../source/ui/QalamTitleBar.h
 
 # Windows executable icon and native frame libraries
 win32 {

@@ -21,9 +21,9 @@ FileManager::FileManager(QTabWidget *tabWidget, QWidget *parentWindow, QObject *
 {
 }
 
-TEditor *FileManager::currentEditor() const
+QalamEditor *FileManager::currentEditor() const
 {
-    return qobject_cast<TEditor*>(m_tabWidget->currentWidget());
+    return qobject_cast<QalamEditor*>(m_tabWidget->currentWidget());
 }
 
 QString FileManager::normalizePath(const QString &filePath) const
@@ -66,12 +66,12 @@ void FileManager::removeBackupForPath(const QString &filePath) const
     }
 }
 
-TEditor *FileManager::createEditor(const QString &filePath)
+QalamEditor *FileManager::createEditor(const QString &filePath)
 {
-    auto *editor = new TEditor(m_parentWindow);
+    auto *editor = new QalamEditor(m_parentWindow);
     editor->setFilePath(filePath);
 
-    connect(editor, &TEditor::openRequest, this, [this](const QString &requestedPath) {
+    connect(editor, &QalamEditor::openRequest, this, [this](const QString &requestedPath) {
         openFile(requestedPath);
     });
     connect(editor->document(), &QTextDocument::modificationChanged, this, [this]() {
@@ -102,7 +102,7 @@ FileManager::SaveAction FileManager::needSave()
     return needSave(currentEditor());
 }
 
-FileManager::SaveAction FileManager::needSave(TEditor *editor)
+FileManager::SaveAction FileManager::needSave(QalamEditor *editor)
 {
     if (editor and editor->document()->isModified()) {
         QString displayName;
@@ -147,7 +147,7 @@ FileManager::SaveAction FileManager::needSave(TEditor *editor)
 
 void FileManager::newFile()
 {
-    TEditor *newEditor = createEditor();
+    QalamEditor *newEditor = createEditor();
     const int index = m_tabWidget->addTab(newEditor, nextUntitledName());
     m_tabWidget->setCurrentIndex(index);
 
@@ -169,7 +169,7 @@ void FileManager::openFile(QString filePath)
 
     // Check if file is already open in a tab
     for (int i = 0; i < m_tabWidget->count(); ++i) {
-        TEditor *editor = qobject_cast<TEditor*>(m_tabWidget->widget(i));
+        QalamEditor *editor = qobject_cast<QalamEditor*>(m_tabWidget->widget(i));
         if (editor and normalizePath(editor->currentFilePath()) == normalizedPath) {
             m_tabWidget->setCurrentIndex(i);
             return;
@@ -211,7 +211,7 @@ void FileManager::openFile(QString filePath)
     QString content = in.readAll();
     file.close();
 
-    TEditor *newEditor = createEditor(normalizedPath);
+    QalamEditor *newEditor = createEditor(normalizedPath);
     newEditor->setPlainText(content);
     newEditor->document()->setModified(false);
 
@@ -257,7 +257,7 @@ void FileManager::openFile(QString filePath)
     emit openEditorsChanged();
 }
 
-bool FileManager::saveEditor(TEditor *editor)
+bool FileManager::saveEditor(QalamEditor *editor)
 {
     if (!editor) return false;
 
@@ -308,7 +308,7 @@ void FileManager::saveFile()
     (void) saveEditor(currentEditor());
 }
 
-bool FileManager::saveEditorAs(TEditor *editor)
+bool FileManager::saveEditorAs(QalamEditor *editor)
 {
     if (!editor) return false;
 

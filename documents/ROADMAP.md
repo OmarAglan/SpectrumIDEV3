@@ -22,10 +22,10 @@ Phases 1-3 have been completed and are archived here for reference.
 |-------|-------------|--------|
 | Phase 1: Stability | Fixed 14 critical/functional bugs (comment toggle, cursor direction, multi-line strings, crash guards, exit flow) | **Complete** |
 | Phase 2: Memory & Performance | Fixed leaks, hot-path copies, O(n^2) trimming, cached themes, dynamic word shrinking | **Complete** |
-| Phase 3: Architecture Refactoring | Single keyword source, TEditor decomposition, QalamTheme adoption, data-driven language definitions | **Complete** |
+| Phase 3: Architecture Refactoring | Single keyword source, QalamEditor decomposition, QalamTheme adoption, data-driven language definitions | **Complete** |
 
 One deferred item from Phase 2:
-- 2.7 Remove redundant `QString value` from `TToken` *(low risk/reward -- carry forward to Phase 4)*
+- 2.7 Remove redundant `QString value` from `QalamToken` *(low risk/reward -- carry forward to Phase 4)*
 
 ---
 
@@ -42,8 +42,11 @@ One deferred item from Phase 2:
 - **Centralized theme engine** (`QalamTheme`, 805 lines) providing consistent styling
 - **Session persistence** -- restores tabs, geometry, folder, preferences
 - **Modern signal/slot connections** -- 100% pointer-to-member syntax, zero string-based connections
+- **Qalam-owned naming** -- legacy `T*` source files and types have migrated to
+  collision-safe `Qalam*` names, with a configure-independent CMake guard that
+  prevents the old prefix from returning
 - **Smart pointer usage** -- `std::shared_ptr` for themes and `QPointer` for cross-process/UI lifetime guards
-- **Thread safety** -- `QMutex` in `ProcessWorker` and `TConsole`, proper thread lifecycle in `BuildManager`
+- **Thread safety** -- `QMutex` in `ProcessWorker` and `QalamConsole`, proper thread lifecycle in `BuildManager`
 - **Live Baa diagnostics** -- versioned unsaved documents flow through Baa-LSP,
   with stale-result rejection and span/code/hint presentation in Qalam
 - **Compiler-owned semantic coloring** -- Baa `tokens-json-v1` and bound
@@ -69,14 +72,14 @@ One deferred item from Phase 2:
 | File | Line(s) | Issue |
 |------|---------|-------|
 | `AutoCompleteUI.cpp` | 49-57, 62-71, 130 | Hardcoded colors (`#1e202e`, `#4b5263`, `#abb2bf`, `#3e4451`) instead of `QalamTheme`/`Constants` |
-| `TMenu.cpp` | (inline CSS) | Menu bar/dropdown CSS hardcoded, not using `QalamTheme` |
-| `TSettings.cpp` | 8 | Hardcoded `#1e202e` |
-| `TWelcomePage.cpp` | 247 | Hardcoded `#5cb8ff` |
+| `QalamMenuBar.cpp` | (inline CSS) | Menu bar/dropdown CSS hardcoded, not using `QalamTheme` |
+| `QalamSettings.cpp` | 8 | Hardcoded `#1e202e` |
+| `QalamWelcomePage.cpp` | 247 | Hardcoded `#5cb8ff` |
 | `LayoutManager.cpp` | 61 | Hardcoded `#007acc` splitter color |
 | `LayoutManager.cpp` | 79 | Hardcoded splitter sizes `{700, 200}` |
-| `TEditor.cpp` | 113-114 | Zoom limits `5.0`/`50` not in Constants |
-| `TEditor.cpp` | 133-134, 322, 372 | Font fallback `10`/`18`, line number width `30`, paint offset `12` |
-| `TConsole.h` | 56 | `m_maxLines = 2000` vs `Constants::Console::MaxBufferLines = 10000` |
+| `QalamEditor.cpp` | 113-114 | Zoom limits `5.0`/`50` not in Constants |
+| `QalamEditor.cpp` | 133-134, 322, 372 | Font fallback `10`/`18`, line number width `30`, paint offset `12` |
+| `QalamConsole.h` | 56 | `m_maxLines = 2000` vs `Constants::Console::MaxBufferLines = 10000` |
 | `ProcessWorker.cpp` | 16 | Flush timer `20`ms vs `Constants::Timing::FlushInterval = 25`ms |
 | `Qalam.cpp` | 56-61 | Window geometry magic numbers `100`, `6`, `30` |
 
@@ -84,12 +87,12 @@ One deferred item from Phase 2:
 
 - Inconsistent `m_` prefix on private members across classes
 - Missing `explicit` on some single-argument constructors
-- Pass-by-value where `const&` is appropriate (`TEditor::updateFontType(QString)`, `FileManager::openFile(QString)`)
-- Dead code: `TConsole::appendOutput()`, `StateType` enum
+- Pass-by-value where `const&` is appropriate (`QalamEditor::updateFontType(QString)`, `FileManager::openFile(QString)`)
+- Dead code: `QalamConsole::appendOutput()`, `StateType` enum
 - `Constants.h` lines 5-6 use `const QString` at namespace scope (per-TU copies) -- should be `inline const`
 - `QalamWindow.h:23` declares `void initFrameless()` but it's never defined or called
-- `TEditor.h:88` -- QCompleter member named `c` -- poor naming
-- `TWelcomePage.cpp` includes `<QtWidgets>` (kitchen-sink include)
+- `QalamEditor.h:88` -- QCompleter member named `c` -- poor naming
+- `QalamWelcomePage.cpp` includes `<QtWidgets>` (kitchen-sink include)
 - Mixed logical operators: some files use `and`/`or`/`not`, others use `&&`/`||`/`!`
 - `.pro` file is stale and can't build the current codebase
 
@@ -97,11 +100,11 @@ One deferred item from Phase 2:
 
 | Area | Issue |
 |------|-------|
-| Editor Search | `TSearchPanel` has find but **no replace** functionality; `isWholeWord()` hardcoded to `false` |
-| Sidebar Search | `TSearchView` UI exists but search is **not wired** -- `searchRequested` signal emitted but nothing connects to scan files; `addResult()` never called; replace buttons nonfunctional |
+| Editor Search | `QalamSearchPanel` has find but **no replace** functionality; `isWholeWord()` hardcoded to `false` |
+| Sidebar Search | `QalamSearchView` UI exists but search is **not wired** -- `searchRequested` signal emitted but nothing connects to scan files; `addResult()` never called; replace buttons nonfunctional |
 | Ecosystem Build UX | Structured Baa checks, authoritative Takween target selection, JSONL progress, and explicit cancellation exist; full descendant-process ownership and end-to-end GUI fixtures remain |
-| ANSI Colors | `TConsole::appendOutput()` has ANSI parsing but is dead code; active path `flushPending()` does NOT render colors |
-| Auto-save Error | `TAutoSave.cpp:35` -- `file.open()` failure is silently ignored |
+| ANSI Colors | `QalamConsole::appendOutput()` has ANSI parsing but is dead code; active path `flushPending()` does NOT render colors |
+| Auto-save Error | `QalamAutoSave.cpp:35` -- `file.open()` failure is silently ignored |
 | Settings | Only editor appearance (font size/family/theme); no compiler path UI, no keybinding config, no auto-save interval config; "Advanced" category commented out |
 | File Explorer | No rename/delete files, no new file/folder from context menu, no close-all tabs |
 | Keyboard Shortcuts | `Ctrl+N` (new file) and `Ctrl+O` (open file) mentioned in USER_GUIDE.md but not wired as shortcuts |
@@ -110,12 +113,12 @@ One deferred item from Phase 2:
 
 #### Architecture Concerns
 
-- `TEditor` still 927 lines with broad responsibilities despite decomposition
+- `QalamEditor` still 927 lines with broad responsibilities despite decomposition
 - `QalamTheme` at 805 lines -- growing, may need sub-theme modules
-- `TWelcomePage::applyStyles()` is 144 lines of inline CSS -- should use `QalamTheme`
+- `QalamWelcomePage::applyStyles()` is 144 lines of inline CSS -- should use `QalamTheme`
 - `QSettings` construction repeated ~15 times instead of a helper
-- Tab iteration pattern (`for i in tabWidget.count, qobject_cast<TEditor*>`) repeated ~5 times across `Qalam.cpp` and `SessionManager.cpp`
-- ANSI color switch blocks duplicated in `TConsole.cpp` (lines 264-277 and 278-292)
+- Tab iteration pattern (`for i in tabWidget.count, qobject_cast<QalamEditor*>`) repeated ~5 times across `Qalam.cpp` and `SessionManager.cpp`
+- ANSI color switch blocks duplicated in `QalamConsole.cpp` (lines 264-277 and 278-292)
 - No `[[nodiscard]]`, `std::optional`, structured bindings, or `consteval` usage
 
 ---
@@ -135,7 +138,7 @@ One deferred item from Phase 2:
 ### 4.2 Naming & Consistency
 
 - [ ] 4.2.1 Apply `m_` prefix consistently to all private members across all classes
-- [ ] 4.2.2 Rename `TEditor.h:88` member `c` to `m_completer`
+- [ ] 4.2.2 Rename `QalamEditor.h:88` member `c` to `m_completer`
 - [ ] 4.2.3 Add `explicit` to all single-argument constructors missing it
 - [ ] 4.2.4 Standardize logical operators: use `and`/`or`/`not` consistently per AGENTS.md
 - [ ] 4.2.5 Fix pass-by-value to `const&` where appropriate (`updateFontType`, `openFile`, etc.)
@@ -144,29 +147,29 @@ One deferred item from Phase 2:
 
 - [ ] 4.3.1 Fix `Constants.h` to use `inline const` or `constexpr` instead of `const QString`
 - [ ] 4.3.2 Extract remaining magic numbers to `Constants.h` (zoom limits, font fallbacks, geometry offsets, splitter sizes)
-- [ ] 4.3.3 Align `TConsole::m_maxLines` with `Constants::Console::MaxBufferLines`
+- [ ] 4.3.3 Align `QalamConsole::m_maxLines` with `Constants::Console::MaxBufferLines`
 - [ ] 4.3.4 Align `ProcessWorker` flush timer with `Constants::Timing::FlushInterval`
-- [ ] 4.3.5 Remove dead code: `TConsole::appendOutput()`, `StateType` enum
+- [ ] 4.3.5 Remove dead code: `QalamConsole::appendOutput()`, `StateType` enum
 - [ ] 4.3.6 Remove undeclared `QalamWindow::initFrameless()` declaration
-- [ ] 4.3.7 Remove redundant `QString value` from `TToken` (carried from Phase 2.7)
+- [ ] 4.3.7 Remove redundant `QString value` from `QalamToken` (carried from Phase 2.7)
 - [ ] 4.3.8 Delete or update stale `.pro` file
-- [ ] 4.3.9 Remove redundant Arabic digit checks in `TLexer` (`QChar::isDigit()` already covers them)
-- [ ] 4.3.10 Replace `<QtWidgets>` include in `TWelcomePage.cpp` with specific headers
+- [ ] 4.3.9 Remove redundant Arabic digit checks in `QalamLexer` (`QChar::isDigit()` already covers them)
+- [ ] 4.3.10 Replace `<QtWidgets>` include in `QalamWelcomePage.cpp` with specific headers
 
 ### 4.4 Theme Consistency
 
 - [ ] 4.4.1 Migrate `AutoCompleteUI.cpp` hardcoded colors to `QalamTheme`/`Constants`
-- [ ] 4.4.2 Migrate `TMenu.cpp` inline CSS to `QalamTheme::menuBarStyleSheet()`
-- [ ] 4.4.3 Migrate `TSettings.cpp` hardcoded color to `Constants`
-- [ ] 4.4.4 Migrate `TWelcomePage.cpp` hardcoded color to `Constants`
+- [ ] 4.4.2 Migrate `QalamMenuBar.cpp` inline CSS to `QalamTheme::menuBarStyleSheet()`
+- [ ] 4.4.3 Migrate `QalamSettings.cpp` hardcoded color to `Constants`
+- [ ] 4.4.4 Migrate `QalamWelcomePage.cpp` hardcoded color to `Constants`
 - [ ] 4.4.5 Migrate `LayoutManager.cpp` hardcoded splitter color to `Constants`
-- [ ] 4.4.6 Move `TWelcomePage::applyStyles()` (144 lines) to use `QalamTheme`
+- [ ] 4.4.6 Move `QalamWelcomePage::applyStyles()` (144 lines) to use `QalamTheme`
 
 ### 4.5 Code Deduplication
 
 - [ ] 4.5.1 Create `QSettings` helper (e.g. `AppSettings::instance()` or free function) to eliminate ~15 repeated constructions
 - [ ] 4.5.2 Extract tab iteration helper (`forEachEditor(callback)`) to reduce 5+ duplicated loops
-- [ ] 4.5.3 Deduplicate ANSI color switch blocks in `TConsole.cpp` into a shared color map
+- [ ] 4.5.3 Deduplicate ANSI color switch blocks in `QalamConsole.cpp` into a shared color map
 
 ### 4.6 Modern C++ Improvements
 
@@ -184,17 +187,17 @@ One deferred item from Phase 2:
 
 ### 5.1 Editor Search & Replace
 
-- [ ] 5.1.1 Add replace input field and replace/replace-all buttons to `TSearchPanel`
+- [ ] 5.1.1 Add replace input field and replace/replace-all buttons to `QalamSearchPanel`
 - [ ] 5.1.2 Implement `isWholeWord()` properly (currently hardcoded `false`)
-- [ ] 5.1.3 Add regex search toggle to `TSearchPanel`
+- [ ] 5.1.3 Add regex search toggle to `QalamSearchPanel`
 - [ ] 5.1.4 Add match count display (e.g. "3 of 12")
 - [ ] 5.1.5 Add highlight-all-matches visual indicator
 
 ### 5.2 Project-Wide Search
 
-- [ ] 5.2.1 Implement file scanner that connects to `TSearchView::searchRequested` signal
+- [ ] 5.2.1 Implement file scanner that connects to `QalamSearchView::searchRequested` signal
 - [ ] 5.2.2 Scan all files in open folder recursively, respecting `.gitignore` patterns
-- [ ] 5.2.3 Populate `TSearchView` results tree via `addResult()`
+- [ ] 5.2.3 Populate `QalamSearchView` results tree via `addResult()`
 - [ ] 5.2.4 Wire up project-wide replace functionality
 - [ ] 5.2.5 Add search progress indicator
 - [ ] 5.2.6 Implement result caching and incremental update
@@ -202,7 +205,7 @@ One deferred item from Phase 2:
 ### 5.3 Build Error Integration
 
 - [x] 5.3.1 Parse `diagnostics-json-v1` plus compatibility text (span/code/message/severity/hint)
-- [x] 5.3.2 Feed parsed errors to `TPanelArea::addProblem()`
+- [x] 5.3.2 Feed parsed errors to `QalamPanelArea::addProblem()`
 - [x] 5.3.3 Add inline error indicators in editor (squiggly underlines and tooltips)
 - [x] 5.3.4 Click-to-navigate from Problems panel to error location in editor
 - [x] 5.3.5 Replace or clear problems on a successful editor check/run start
@@ -244,7 +247,7 @@ One deferred item from Phase 2:
 ### 5.8 Missing Editor Features
 
 - [ ] 5.8.1 Add matching bracket highlight at cursor position (colored box/underline)
-- [ ] 5.8.2 Fix auto-save silent failure -- show warning on `file.open()` failure (`TAutoSave.cpp:35`)
+- [ ] 5.8.2 Fix auto-save silent failure -- show warning on `file.open()` failure (`QalamAutoSave.cpp:35`)
 - [x] 5.8.3 Add Go-to-Definition for Baa symbols (compiler-resolved across the
   Takween source closure)
 - [ ] 5.8.4 Add matching tag/bracket highlight on hover
@@ -265,12 +268,12 @@ One deferred item from Phase 2:
 
 ### 6.2 Core Unit Tests
 
-- [ ] 6.2.1 `TLexer` tests: single-line tokens, multi-line strings, edge cases, escape sequences, Arabic digits, operators
-- [ ] 6.2.2 `TSyntaxDefinition` tests: keyword loading from JSON, fallback defaults
+- [ ] 6.2.1 `QalamLexer` tests: single-line tokens, multi-line strings, edge cases, escape sequences, Arabic digits, operators
+- [ ] 6.2.2 `QalamSyntaxDefinition` tests: keyword loading from JSON, fallback defaults
 - [ ] 6.2.3 `LanguageDefinition` tests: singleton access, keyword/builtin lists
 - [x] 6.2.4 Baa-LSP completion client test: version matching, exact edit range, Arabic label, and symbol kind
-- [ ] 6.2.5 `TBracketHandler` tests: pairing, skip-over, wrapping, edge cases
-- [x] 6.2.6 `TSnippetManager` tests: standard placeholders, navigation, and indentation
+- [ ] 6.2.5 `QalamBracketHandler` tests: pairing, skip-over, wrapping, edge cases
+- [x] 6.2.6 `QalamSnippetManager` tests: standard placeholders, navigation, and indentation
 
 ### 6.3 Manager Unit Tests
 

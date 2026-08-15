@@ -1,15 +1,15 @@
 #pragma once
 
-#include "TEditor.h"
-#include "TMenu.h"
-#include "TSearchPanel.h"
+#include "QalamEditor.h"
+#include "QalamMenuBar.h"
+#include "QalamSearchPanel.h"
 #include "FileManager.h"
 #include "BuildManager.h"
 #include "SessionManager.h"
 #include "LayoutManager.h"
 #include "../ui/QalamWindow.h"
 
-#include "TActivityBar.h"
+#include "QalamActivityBar.h"
 #include <QPointer>
 #include <QStringList>
 #include <QVector>
@@ -19,8 +19,8 @@ class BaaLanguageClient;
 struct BaaWorkspaceEdit;
 class CommandRegistry;
 class DiagnosticsModel;
-class TWelcomePage;
-class TCommandPalette;
+class QalamWelcomePage;
+class QalamCommandPalette;
 class WorkspaceIndexer;
 struct BaaLocation;
 struct Diagnostic;
@@ -81,11 +81,11 @@ private slots:
                             QString *error = nullptr);
     
     // VSCode-like component slots
-    void onActivityViewChanged(TActivityBar::ViewType view);
+    void onActivityViewChanged(QalamActivityBar::ViewType view);
     void onSidebarFileSelected(const QString &filePath);
 
 private:
-    TEditor *currentEditor();
+    QalamEditor *currentEditor();
     bool shouldShowWelcome() const;
     bool hasAnyEditorTabs() const;
     void showWelcomeTab();
@@ -102,8 +102,8 @@ private:
     void updateProblemsStatusBar();
     void rebuildProblemsPanel();
     void applyDiagnosticsToEditors();
-    void attachAnalysisToEditor(TEditor *editor);
-    void scheduleEditorAnalysis(TEditor *editor);
+    void attachAnalysisToEditor(QalamEditor *editor);
+    void scheduleEditorAnalysis(QalamEditor *editor);
     void handleLanguageDiagnostics(const QString &filePath,
                                    int documentVersion,
                                    const QVector<Diagnostic> &diagnostics);
@@ -119,8 +119,8 @@ private:
 
 private:
     QTabWidget *tabWidget{};
-    TMenuBar *menuBar{};
-    TSettings *setting{};
+    QalamMenuBar *menuBar{};
+    QalamSettings *setting{};
     QString folderPath{};
 
     FileManager *m_fileManager{};
@@ -134,7 +134,7 @@ private:
     BreakpointModel *m_breakpointModel{};
 
     SearchPanel *searchBar{};
-    TWelcomePage *m_welcomePage{};
-    QPointer<TCommandPalette> m_workspaceSymbolPalette;
-    TEditor *m_lastConnectedEditor{}; // Track editor for cursor position disconnect
+    QalamWelcomePage *m_welcomePage{};
+    QPointer<QalamCommandPalette> m_workspaceSymbolPalette;
+    QalamEditor *m_lastConnectedEditor{}; // Track editor for cursor position disconnect
 };

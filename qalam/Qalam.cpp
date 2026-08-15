@@ -1,16 +1,16 @@
 #include "Qalam.h"
-#include "TWelcomePage.h"
-#include "TConsole.h"
-#include "TSearchPanel.h"
+#include "QalamWelcomePage.h"
+#include "QalamConsole.h"
+#include "QalamSearchPanel.h"
 #include "Constants.h"
 
 // VSCode-like UI components (needed to call methods on LayoutManager accessors)
-#include "TActivityBar.h"
-#include "TSidebar.h"
-#include "TStatusBar.h"
-#include "TPanelArea.h"
-#include "TBreadcrumb.h"
-#include "TExplorerView.h"
+#include "QalamActivityBar.h"
+#include "QalamSidebar.h"
+#include "QalamStatusBar.h"
+#include "QalamPanelArea.h"
+#include "QalamBreadcrumb.h"
+#include "QalamExplorerView.h"
 
 #include <QVBoxLayout>
 #include <QMessageBox>
@@ -37,14 +37,14 @@
 #include <QVariant>
 #include <QTextBlock>
 #include <algorithm>
-#include "TSearchView.h"
+#include "QalamSearchView.h"
 #include "CommandRegistry.h"
 #include "DiagnosticParser.h"
 #include "DiagnosticsModel.h"
 #include "BaaLanguageClient.h"
 #include "WorkspaceIndexer.h"
 #include "BreakpointModel.h"
-#include "TCommandPalette.h"
+#include "QalamCommandPalette.h"
 
 Qalam::Qalam(const QString& filePath, QWidget *parent)
     : QalamWindow(parent)
@@ -60,7 +60,7 @@ Qalam::Qalam(const QString& filePath, QWidget *parent)
     tabWidget->setDocumentMode(true);
     tabWidget->setTabsClosable(true);
     tabWidget->setMovable(true);
-    menuBar = new TMenuBar(this);
+    menuBar = new QalamMenuBar(this);
     m_fileManager = new FileManager(tabWidget, this, this);
     m_buildManager = new BuildManager(this);
     m_languageClient = new BaaLanguageClient(this);
@@ -96,7 +96,7 @@ Qalam::Qalam(const QString& filePath, QWidget *parent)
     // ===================================================================
     // الخطوة 3: إعداد الإعدادات
     // ===================================================================
-    setting = new TSettings(this);
+    setting = new QalamSettings(this);
 
     // ===================================================================
     // الخطوة 4: إعداد التخطيط الجديد (VSCode-like)
@@ -172,28 +172,28 @@ Qalam::~Qalam() {
 void Qalam::connectSignals()
 {
     // --- Keyboard shortcuts ---
-    // Global workbench shortcuts are owned by TMenuBar QActions so they show
+    // Global workbench shortcuts are owned by QalamMenuBar QActions so they show
     // in the menus and avoid duplicate Qt shortcut ambiguity. Editor-only
     // shortcuts stay here.
 
     auto *commentShortcut = new QShortcut(QKeySequence("Ctrl+/"), this);
     connect(commentShortcut, &QShortcut::activated, this, [this](){
-        if (TEditor* editor = currentEditor()) editor->toggleComment();
+        if (QalamEditor* editor = currentEditor()) editor->toggleComment();
     });
 
     auto *duplicateShortcut = new QShortcut(QKeySequence("Ctrl+D"), this);
     connect(duplicateShortcut, &QShortcut::activated, this, [this](){
-        if (TEditor* editor = currentEditor()) editor->duplicateLine();
+        if (QalamEditor* editor = currentEditor()) editor->duplicateLine();
     });
 
     auto *moveUpShortcut = new QShortcut(QKeySequence("Alt+Up"), this);
     connect(moveUpShortcut, &QShortcut::activated, this, [this](){
-        if (TEditor* editor = currentEditor()) editor->moveLineUp();
+        if (QalamEditor* editor = currentEditor()) editor->moveLineUp();
     });
 
     auto *moveDownShortcut = new QShortcut(QKeySequence("Alt+Down"), this);
     connect(moveDownShortcut, &QShortcut::activated, this, [this](){
-        if (TEditor* editor = currentEditor()) editor->moveLineDown();
+        if (QalamEditor* editor = currentEditor()) editor->moveLineDown();
     });
 
     auto *stopToolingShortcut = new QShortcut(QKeySequence("Shift+F5"), this);
@@ -220,35 +220,35 @@ void Qalam::connectSignals()
             this, &Qalam::showWorkspaceSymbols);
 
     // --- Menu bar signals ---
-    connect(menuBar, &TMenuBar::newRequested, this, &Qalam::newFileFromUi);
-    connect(menuBar, &TMenuBar::openFileRequested, this, [this]() { openFileFromUi(QString()); });
-    connect(menuBar, &TMenuBar::saveRequested, m_fileManager, &FileManager::saveFile);
-    connect(menuBar, &TMenuBar::saveAsRequested, m_fileManager, &FileManager::saveFileAs);
-    connect(menuBar, &TMenuBar::settingsRequest, this, &Qalam::openSettings);
-    connect(menuBar, &TMenuBar::exitRequested, this, &Qalam::exitApp);
-    connect(menuBar, &TMenuBar::buildRequested, this, &Qalam::buildTakweenProject);
-    connect(menuBar, &TMenuBar::runRequested, this, &Qalam::runBaa);
-    connect(menuBar, &TMenuBar::testRequested, this, &Qalam::testTakweenProject);
-    connect(menuBar, &TMenuBar::cleanRequested, this, &Qalam::cleanTakweenProject);
-    connect(menuBar, &TMenuBar::aboutRequested, this, &Qalam::aboutQalam);
-    connect(menuBar, &TMenuBar::openFolderRequested, this, &Qalam::handleOpenFolderMenu);
-    connect(menuBar, &TMenuBar::commandPaletteRequested, this, &Qalam::showCommandPalette);
-    connect(menuBar, &TMenuBar::quickOpenRequested, this, &Qalam::showQuickOpen);
-    connect(menuBar, &TMenuBar::findRequested, this, &Qalam::showFindBar);
-    connect(menuBar, &TMenuBar::findInFilesRequested, this, &Qalam::focusSearchInFiles);
-    connect(menuBar, &TMenuBar::goToLineRequested, this, &Qalam::goToLine);
-    connect(menuBar, &TMenuBar::toggleSidebarRequested, this, &Qalam::toggleSidebar);
-    connect(menuBar, &TMenuBar::togglePanelRequested, this, &Qalam::toggleConsole);
-    connect(menuBar, &TMenuBar::problemsRequested, this, &Qalam::openProblemsPanel);
-    connect(menuBar, &TMenuBar::debugPanelRequested, this, &Qalam::openDebugPanel);
-    connect(menuBar, &TMenuBar::goToDefinitionRequested, this, &Qalam::goToDefinition);
-    connect(menuBar, &TMenuBar::findReferencesRequested, this, &Qalam::findReferences);
+    connect(menuBar, &QalamMenuBar::newRequested, this, &Qalam::newFileFromUi);
+    connect(menuBar, &QalamMenuBar::openFileRequested, this, [this]() { openFileFromUi(QString()); });
+    connect(menuBar, &QalamMenuBar::saveRequested, m_fileManager, &FileManager::saveFile);
+    connect(menuBar, &QalamMenuBar::saveAsRequested, m_fileManager, &FileManager::saveFileAs);
+    connect(menuBar, &QalamMenuBar::settingsRequest, this, &Qalam::openSettings);
+    connect(menuBar, &QalamMenuBar::exitRequested, this, &Qalam::exitApp);
+    connect(menuBar, &QalamMenuBar::buildRequested, this, &Qalam::buildTakweenProject);
+    connect(menuBar, &QalamMenuBar::runRequested, this, &Qalam::runBaa);
+    connect(menuBar, &QalamMenuBar::testRequested, this, &Qalam::testTakweenProject);
+    connect(menuBar, &QalamMenuBar::cleanRequested, this, &Qalam::cleanTakweenProject);
+    connect(menuBar, &QalamMenuBar::aboutRequested, this, &Qalam::aboutQalam);
+    connect(menuBar, &QalamMenuBar::openFolderRequested, this, &Qalam::handleOpenFolderMenu);
+    connect(menuBar, &QalamMenuBar::commandPaletteRequested, this, &Qalam::showCommandPalette);
+    connect(menuBar, &QalamMenuBar::quickOpenRequested, this, &Qalam::showQuickOpen);
+    connect(menuBar, &QalamMenuBar::findRequested, this, &Qalam::showFindBar);
+    connect(menuBar, &QalamMenuBar::findInFilesRequested, this, &Qalam::focusSearchInFiles);
+    connect(menuBar, &QalamMenuBar::goToLineRequested, this, &Qalam::goToLine);
+    connect(menuBar, &QalamMenuBar::toggleSidebarRequested, this, &Qalam::toggleSidebar);
+    connect(menuBar, &QalamMenuBar::togglePanelRequested, this, &Qalam::toggleConsole);
+    connect(menuBar, &QalamMenuBar::problemsRequested, this, &Qalam::openProblemsPanel);
+    connect(menuBar, &QalamMenuBar::debugPanelRequested, this, &Qalam::openDebugPanel);
+    connect(menuBar, &QalamMenuBar::goToDefinitionRequested, this, &Qalam::goToDefinition);
+    connect(menuBar, &QalamMenuBar::findReferencesRequested, this, &Qalam::findReferences);
     connect(this, &QalamWindow::commandCenterClicked, this, &Qalam::showCommandPalette);
     if (m_layoutManager and m_layoutManager->sidebar() and
         m_layoutManager->sidebar()->explorerView()) {
         connect(
             m_layoutManager->sidebar()->explorerView(),
-            &TExplorerView::outlineSymbolActivated,
+            &QalamExplorerView::outlineSymbolActivated,
             this,
             [this](const QString &filePath, int line, int column) {
                 goToLocation(filePath, line, column);
@@ -262,8 +262,8 @@ void Qalam::connectSignals()
             this, [this](const QString &filePath, int documentVersion,
                          const QVector<BaaSemanticToken> &tokens) {
         for (int index = 0; index < tabWidget->count(); ++index) {
-            TEditor *editor =
-                qobject_cast<TEditor*>(tabWidget->widget(index));
+            QalamEditor *editor =
+                qobject_cast<QalamEditor*>(tabWidget->widget(index));
             if (not editor or
                 editor->property("qalam.lsp.version").toInt() !=
                     documentVersion)
@@ -280,8 +280,8 @@ void Qalam::connectSignals()
             this, [this](const QString &filePath, int documentVersion,
                          const QVector<BaaFoldingRange> &ranges) {
         for (int index = 0; index < tabWidget->count(); ++index) {
-            TEditor *editor =
-                qobject_cast<TEditor*>(tabWidget->widget(index));
+            QalamEditor *editor =
+                qobject_cast<QalamEditor*>(tabWidget->widget(index));
             if (not editor or
                 editor->property("qalam.lsp.version").toInt() !=
                     documentVersion)
@@ -298,8 +298,8 @@ void Qalam::connectSignals()
             this, [this](const QString &filePath, int documentVersion,
                          const QVector<BaaInlayHint> &hints) {
         for (int index = 0; index < tabWidget->count(); ++index) {
-            TEditor *editor =
-                qobject_cast<TEditor*>(tabWidget->widget(index));
+            QalamEditor *editor =
+                qobject_cast<QalamEditor*>(tabWidget->widget(index));
             if (not editor or
                 editor->property("qalam.lsp.version").toInt() !=
                     documentVersion)
@@ -316,7 +316,7 @@ void Qalam::connectSignals()
             this, [this](const QString &filePath, int documentVersion,
                          int line, int character,
                          const QVector<BaaSelectionRange> &ranges) {
-        TEditor *editor = currentEditor();
+        QalamEditor *editor = currentEditor();
         if (not editor or
             editor->property("qalam.lsp.version").toInt() != documentVersion)
             return;
@@ -330,7 +330,7 @@ void Qalam::connectSignals()
     connect(m_languageClient, &BaaLanguageClient::hoverPublished,
             this, [this](const QString &filePath, int documentVersion,
                          int line, int character, const BaaHover &hover) {
-        TEditor *editor = currentEditor();
+        QalamEditor *editor = currentEditor();
         if (not editor ||
             editor->property("qalam.lsp.version").toInt() != documentVersion)
             return;
@@ -343,7 +343,7 @@ void Qalam::connectSignals()
             this, [this](const QString &filePath, int documentVersion,
                          int line, int character,
                          const BaaSignatureHelp &signatureHelp) {
-        TEditor *editor = currentEditor();
+        QalamEditor *editor = currentEditor();
         if (not editor ||
             editor->property("qalam.lsp.version").toInt() != documentVersion)
             return;
@@ -536,7 +536,7 @@ void Qalam::connectSignals()
     connect(m_languageClient, &BaaLanguageClient::documentSymbolsPublished,
             this, [this](const QString &filePath, int documentVersion,
                          const QVector<BaaDocumentSymbol> &symbols) {
-        TEditor *editor = currentEditor();
+        QalamEditor *editor = currentEditor();
         if (not editor or
             editor->property("qalam.lsp.version").toInt() != documentVersion) return;
         const QString editorPath = QDir::cleanPath(
@@ -578,7 +578,7 @@ void Qalam::connectSignals()
         if (exitCode != 0 and exitCode != -2 and
             m_diagnosticsModel and m_diagnosticsModel->count() == 0) {
             QString filePath;
-            if (TEditor *editor = currentEditor()) {
+            if (QalamEditor *editor = currentEditor()) {
                 filePath = editor->currentFilePath();
             }
             QVector<Diagnostic> runnerDiagnostics;
@@ -621,7 +621,7 @@ void Qalam::connectSignals()
     connect(m_fileManager, &FileManager::fileStateChanged, this, [this]() {
         // Update modification indicators for every editor, not only the active tab.
         for (int index = 0; index < tabWidget->count(); ++index) {
-            TEditor *editor = qobject_cast<TEditor*>(tabWidget->widget(index));
+            QalamEditor *editor = qobject_cast<QalamEditor*>(tabWidget->widget(index));
             if (!editor) continue;
 
             const bool modified = editor->document()->isModified();
@@ -642,11 +642,11 @@ void Qalam::connectSignals()
     auto *panelArea = m_layoutManager->panelArea();
     auto *statusBar = m_layoutManager->statusBar();
 
-    connect(activityBar, &TActivityBar::viewChanged, this, &Qalam::onActivityViewChanged);
-    connect(activityBar, &TActivityBar::runRequested, this, &Qalam::runBaa);
+    connect(activityBar, &QalamActivityBar::viewChanged, this, &Qalam::onActivityViewChanged);
+    connect(activityBar, &QalamActivityBar::runRequested, this, &Qalam::runBaa);
 
-    connect(activityBar, &TActivityBar::viewToggled, this, [this](TActivityBar::ViewType view, bool visible) {
-        if (view == TActivityBar::ViewType::Settings) {
+    connect(activityBar, &QalamActivityBar::viewToggled, this, [this](QalamActivityBar::ViewType view, bool visible) {
+        if (view == QalamActivityBar::ViewType::Settings) {
             openSettings();
             return;
         }
@@ -658,27 +658,27 @@ void Qalam::connectSignals()
         }
     });
 
-    connect(sidebar, &TSidebar::fileSelected, this, &Qalam::onSidebarFileSelected);
-    connect(sidebar, &TSidebar::openFolderRequested, this, &Qalam::handleOpenFolderMenu);
-    connect(sidebar, &TSidebar::openEditorCloseRequested, this, &Qalam::closeEditorByPath);
-    connect(sidebar, &TSidebar::searchRequested, this, &Qalam::performProjectSearch);
+    connect(sidebar, &QalamSidebar::fileSelected, this, &Qalam::onSidebarFileSelected);
+    connect(sidebar, &QalamSidebar::openFolderRequested, this, &Qalam::handleOpenFolderMenu);
+    connect(sidebar, &QalamSidebar::openEditorCloseRequested, this, &Qalam::closeEditorByPath);
+    connect(sidebar, &QalamSidebar::searchRequested, this, &Qalam::performProjectSearch);
     if (sidebar->searchView()) {
-        connect(sidebar->searchView(), &TSearchView::resultClicked, this, &Qalam::goToLocation);
+        connect(sidebar->searchView(), &QalamSearchView::resultClicked, this, &Qalam::goToLocation);
     }
 
-    connect(statusBar, &TStatusBar::problemsClicked, this, [this]() {
-        m_layoutManager->panelArea()->setCurrentTab(TPanelArea::Tab::Problems);
+    connect(statusBar, &QalamStatusBar::problemsClicked, this, [this]() {
+        m_layoutManager->panelArea()->setCurrentTab(QalamPanelArea::Tab::Problems);
         m_layoutManager->panelArea()->show();
     });
 
-    connect(panelArea, &TPanelArea::problemClicked, this, &Qalam::goToLocation);
+    connect(panelArea, &QalamPanelArea::problemClicked, this, &Qalam::goToLocation);
 
-    connect(panelArea, &TPanelArea::closeRequested, this, [this]() {
+    connect(panelArea, &QalamPanelArea::closeRequested, this, [this]() {
         m_layoutManager->panelArea()->hide();
     });
 
-    connect(panelArea, &TPanelArea::tabChanged, this, [this](TPanelArea::Tab tab) {
-        if (tab == TPanelArea::Tab::Terminal and m_layoutManager->panelArea()->terminal()) {
+    connect(panelArea, &QalamPanelArea::tabChanged, this, [this](QalamPanelArea::Tab tab) {
+        if (tab == QalamPanelArea::Tab::Terminal and m_layoutManager->panelArea()->terminal()) {
             m_layoutManager->panelArea()->terminal()->setFocus();
         }
     });
@@ -707,7 +707,7 @@ bool Qalam::eventFilter(QObject *object, QEvent *event)
 
 void Qalam::goToLine()
 {
-    TEditor *editor = currentEditor();
+    QalamEditor *editor = currentEditor();
     if (!editor) return;
 
     bool ok;
@@ -735,7 +735,7 @@ void Qalam::showFindBar() {
 
 void Qalam::hideFindBar() {
     searchBar->hide();
-    if (TEditor* editor = currentEditor()) {
+    if (QalamEditor* editor = currentEditor()) {
         editor->setFocus();
     }
 }
@@ -776,22 +776,22 @@ void Qalam::toggleSidebar()
 void Qalam::openSettings() {
     if (setting and setting->isVisible()) return;
  
-    connect(setting, &TSettings::fontSizeChanged, this, [this](int size){
+    connect(setting, &QalamSettings::fontSizeChanged, this, [this](int size){
         for (int i = 0; i < tabWidget->count(); ++i) {
-            TEditor* editor = qobject_cast<TEditor*>(tabWidget->widget(i));
+            QalamEditor* editor = qobject_cast<QalamEditor*>(tabWidget->widget(i));
             if (editor) editor->updateFontSize(size);
         }
     }, Qt::UniqueConnection);
-    connect(setting, &TSettings::fontTypeChanged, this, [this](QString font){
+    connect(setting, &QalamSettings::fontTypeChanged, this, [this](QString font){
         for (int i = 0; i < tabWidget->count(); ++i) {
-            TEditor* editor = qobject_cast<TEditor*>(tabWidget->widget(i));
+            QalamEditor* editor = qobject_cast<QalamEditor*>(tabWidget->widget(i));
             if (editor) editor->updateFontType(font);
         }
     }, Qt::UniqueConnection);
-    connect(setting, &TSettings::highlighterThemeChanged, this, [this](int themeIdx){
+    connect(setting, &QalamSettings::highlighterThemeChanged, this, [this](int themeIdx){
         auto theme = ThemeManager::getThemeByIndex(themeIdx);
         for (int i = 0; i < tabWidget->count(); ++i) {
-            TEditor* editor = qobject_cast<TEditor*>(tabWidget->widget(i));
+            QalamEditor* editor = qobject_cast<QalamEditor*>(tabWidget->widget(i));
             if (editor) editor->updateHighlighterTheme(theme);
         }
     }, Qt::UniqueConnection);
@@ -809,7 +809,7 @@ void Qalam::onCurrentTabChanged()
     updateWindowTitle();
     updateCursorPosition();
 
-    TEditor* editor = currentEditor();
+    QalamEditor* editor = currentEditor();
 
     // Disconnect the previous editor to avoid accumulating connections.
     // Also clear the raw pointer so closing the last editor does not leave a dangling reference.
@@ -866,7 +866,7 @@ void Qalam::onCurrentTabChanged()
 
 void Qalam::updateCursorPosition()
 {
-    TEditor* editor = currentEditor();
+    QalamEditor* editor = currentEditor();
     if (editor) {
         const QTextCursor cursor = editor->textCursor();
         int line = cursor.blockNumber() + 1;
@@ -889,7 +889,7 @@ void Qalam::updateCursorPosition()
 /* ----------------------------------- Run Menu Button ----------------------------------- */
 
 void Qalam::runBaa() {
-    TEditor *editor = currentEditor();
+    QalamEditor *editor = currentEditor();
     if (!editor) return;
 
     QString filePath = editor->currentFilePath();
@@ -915,12 +915,12 @@ void Qalam::runBaa() {
         applyDiagnosticsToEditors();
         updateProblemsStatusBar();
     }
-    panelArea->setCurrentTab(TPanelArea::Tab::Terminal);
+    panelArea->setCurrentTab(QalamPanelArea::Tab::Terminal);
     panelArea->show();
     panelArea->setCollapsed(false);
 
     // Delegate build to BuildManager
-    TConsole *console = panelArea->terminal();
+    QalamConsole *console = panelArea->terminal();
     m_buildManager->runBaa(filePath, console);
 }
 
@@ -941,7 +941,7 @@ void Qalam::cleanTakweenProject()
 
 void Qalam::runTakweenProjectCommand(const QString &command)
 {
-    TEditor *editor = currentEditor();
+    QalamEditor *editor = currentEditor();
     if (not editor or editor->currentFilePath().isEmpty()) {
         QMessageBox::information(this, "مشروع تكوين", "افتح ملفًا محفوظًا داخل مشروع تكوين أولًا.");
         return;
@@ -988,7 +988,7 @@ void Qalam::runTakweenProjectCommand(const QString &command)
     if (not panelArea) return;
     panelArea->clearProblems();
     if (m_diagnosticsModel) m_diagnosticsModel->clear();
-    panelArea->setCurrentTab(TPanelArea::Tab::Terminal);
+    panelArea->setCurrentTab(QalamPanelArea::Tab::Terminal);
     panelArea->show();
     panelArea->setCollapsed(false);
 
@@ -1003,8 +1003,8 @@ void Qalam::runTakweenProjectCommand(const QString &command)
 
 //----------------
 
-TEditor* Qalam::currentEditor() {
-    return qobject_cast<TEditor*>(tabWidget->currentWidget());
+QalamEditor* Qalam::currentEditor() {
+    return qobject_cast<QalamEditor*>(tabWidget->currentWidget());
 }
 
 bool Qalam::shouldShowWelcome() const
@@ -1016,7 +1016,7 @@ bool Qalam::shouldShowWelcome() const
 bool Qalam::hasAnyEditorTabs() const
 {
     for (int i = 0; i < tabWidget->count(); ++i) {
-        if (qobject_cast<TEditor*>(tabWidget->widget(i))) {
+        if (qobject_cast<QalamEditor*>(tabWidget->widget(i))) {
             return true;
         }
     }
@@ -1037,13 +1037,13 @@ void Qalam::showWelcomeTab()
         m_welcomePage = nullptr;
     }
 
-    m_welcomePage = new TWelcomePage(tabWidget);
+    m_welcomePage = new QalamWelcomePage(tabWidget);
 
-    connect(m_welcomePage, &TWelcomePage::newFileRequested, this, &Qalam::newFileFromUi);
-    connect(m_welcomePage, &TWelcomePage::openFileRequested, this, [this]() { openFileFromUi(QString()); });
-    connect(m_welcomePage, &TWelcomePage::openFolderRequested, this, &Qalam::handleOpenFolderMenu);
-    connect(m_welcomePage, &TWelcomePage::recentFileRequested, this, &Qalam::openFileFromUi);
-    connect(m_welcomePage, &TWelcomePage::cloneRepoRequested, this, [this]() {
+    connect(m_welcomePage, &QalamWelcomePage::newFileRequested, this, &Qalam::newFileFromUi);
+    connect(m_welcomePage, &QalamWelcomePage::openFileRequested, this, [this]() { openFileFromUi(QString()); });
+    connect(m_welcomePage, &QalamWelcomePage::openFolderRequested, this, &Qalam::handleOpenFolderMenu);
+    connect(m_welcomePage, &QalamWelcomePage::recentFileRequested, this, &Qalam::openFileFromUi);
+    connect(m_welcomePage, &QalamWelcomePage::cloneRepoRequested, this, [this]() {
         QMessageBox::information(this, "استنساخ", "هذه الميزة قيد التطوير.");
     });
 
@@ -1085,7 +1085,7 @@ void Qalam::closeTab(int index)
 
     if (!tab) return;
 
-    if (auto *welcome = qobject_cast<TWelcomePage*>(tab)) {
+    if (auto *welcome = qobject_cast<QalamWelcomePage*>(tab)) {
         tabWidget->removeTab(index);
         if (welcome == m_welcomePage) {
             m_welcomePage->deleteLater();
@@ -1100,7 +1100,7 @@ void Qalam::closeTab(int index)
         return;
     }
 
-    TEditor* editor = qobject_cast<TEditor*>(tab);
+    QalamEditor* editor = qobject_cast<QalamEditor*>(tab);
     if (!editor) {
         tabWidget->removeTab(index);
         tab->deleteLater();
@@ -1147,7 +1147,7 @@ bool Qalam::maybeSaveAllModified()
     const int previousIndex = tabWidget->currentIndex();
 
     for (int i = 0; i < tabWidget->count(); ++i) {
-        TEditor *editor = qobject_cast<TEditor*>(tabWidget->widget(i));
+        QalamEditor *editor = qobject_cast<QalamEditor*>(tabWidget->widget(i));
         if (!editor or !editor->document()->isModified()) {
             continue;
         }
@@ -1175,7 +1175,7 @@ void Qalam::goToLocation(const QString &filePath, int line, int column)
     if (filePath.isEmpty()) return;
 
     openFileFromUi(filePath);
-    TEditor *editor = currentEditor();
+    QalamEditor *editor = currentEditor();
     if (!editor) return;
 
     QTextCursor cursor(editor->document());
@@ -1194,7 +1194,7 @@ void Qalam::closeEditorByPath(const QString &filePath)
     const QString targetClean = QDir::cleanPath(filePath);
 
     for (int i = 0; i < tabWidget->count(); ++i) {
-        TEditor *editor = qobject_cast<TEditor*>(tabWidget->widget(i));
+        QalamEditor *editor = qobject_cast<QalamEditor*>(tabWidget->widget(i));
         if (!editor) continue;
 
         const QString editorPath = editor->currentFilePath();
@@ -1286,9 +1286,9 @@ void Qalam::focusSearchInFiles()
     if (!m_layoutManager or !m_layoutManager->sidebar()) return;
 
     m_layoutManager->sidebar()->show();
-    m_layoutManager->sidebar()->setCurrentView(TActivityBar::ViewType::Search);
+    m_layoutManager->sidebar()->setCurrentView(QalamActivityBar::ViewType::Search);
     if (m_layoutManager->activityBar()) {
-        m_layoutManager->activityBar()->setCurrentView(TActivityBar::ViewType::Search);
+        m_layoutManager->activityBar()->setCurrentView(QalamActivityBar::ViewType::Search);
     }
     if (m_layoutManager->sidebar()->searchView()) {
         m_layoutManager->sidebar()->searchView()->focusSearchInput();
@@ -1300,7 +1300,7 @@ void Qalam::openProblemsPanel()
     auto *panel = m_layoutManager ? m_layoutManager->panelArea() : nullptr;
     if (!panel) return;
 
-    panel->setCurrentTab(TPanelArea::Tab::Problems);
+    panel->setCurrentTab(QalamPanelArea::Tab::Problems);
     panel->show();
     panel->setCollapsed(false);
 }
@@ -1311,7 +1311,7 @@ void Qalam::openDebugPanel()
     auto *panel = m_layoutManager ? m_layoutManager->panelArea() : nullptr;
     if (!panel) return;
 
-    panel->setCurrentTab(TPanelArea::Tab::Debug);
+    panel->setCurrentTab(QalamPanelArea::Tab::Debug);
     panel->show();
     panel->setCollapsed(false);
 }
@@ -1346,11 +1346,11 @@ bool Qalam::runCommandById(const QString &commandId)
     if (commandId == "code.quickFix") { quickFix(); return true; }
     if (commandId == "code.format") { formatDocument(); return true; }
     if (commandId == "code.expandSelection") {
-        if (TEditor *editor = currentEditor()) editor->expandSemanticSelection();
+        if (QalamEditor *editor = currentEditor()) editor->expandSemanticSelection();
         return true;
     }
     if (commandId == "code.shrinkSelection") {
-        if (TEditor *editor = currentEditor()) editor->shrinkSemanticSelection();
+        if (QalamEditor *editor = currentEditor()) editor->shrinkSemanticSelection();
         return true;
     }
     if (commandId == "project.build") { buildTakweenProject(); return true; }
@@ -1370,20 +1370,20 @@ bool Qalam::runCommandById(const QString &commandId)
 
 void Qalam::showCommandPalette()
 {
-    QVector<TCommandPalette::Entry> entries;
+    QVector<QalamCommandPalette::Entry> entries;
     if (m_commandRegistry) {
         for (const CommandRegistry::Command &command : m_commandRegistry->commands()) {
             entries.push_back({command.id, command.title, command.description, command.shortcut, QString()});
         }
     }
 
-    auto *palette = new TCommandPalette(this);
+    auto *palette = new QalamCommandPalette(this);
     palette->setAttribute(Qt::WA_DeleteOnClose);
     palette->setWindowTitle("لوحة الأوامر");
     palette->setPlaceholderText("اكتب اسم الأمر...");
     palette->setEmptyText("لا يوجد أمر مطابق");
     palette->setEntries(entries);
-    connect(palette, &TCommandPalette::entryActivated, this, [this](const QString &id, const QString &) {
+    connect(palette, &QalamCommandPalette::entryActivated, this, [this](const QString &id, const QString &) {
         runCommandById(id);
     });
     palette->show();
@@ -1401,7 +1401,7 @@ void Qalam::showQuickOpen()
         return;
     }
 
-    QVector<TCommandPalette::Entry> entries;
+    QVector<QalamCommandPalette::Entry> entries;
     entries.reserve(qMin(files.size(), 600));
     for (const QString &file : files) {
         const QString relative = QDir(folderPath).relativeFilePath(file);
@@ -1409,13 +1409,13 @@ void Qalam::showQuickOpen()
         if (entries.size() >= 600) break;
     }
 
-    auto *palette = new TCommandPalette(this);
+    auto *palette = new QalamCommandPalette(this);
     palette->setAttribute(Qt::WA_DeleteOnClose);
     palette->setWindowTitle("فتح سريع");
     palette->setPlaceholderText("اكتب اسم الملف...");
     palette->setEmptyText("لا يوجد ملف مطابق");
     palette->setEntries(entries);
-    connect(palette, &TCommandPalette::entryActivated, this, [this](const QString &id, const QString &payload) {
+    connect(palette, &QalamCommandPalette::entryActivated, this, [this](const QString &id, const QString &payload) {
         if (id == "file.open.path" and !payload.isEmpty()) {
             openFileFromUi(payload);
         }
@@ -1438,7 +1438,7 @@ void Qalam::showWorkspaceSymbols()
         return;
     }
 
-    auto *palette = new TCommandPalette(this);
+    auto *palette = new QalamCommandPalette(this);
     m_workspaceSymbolPalette = palette;
     palette->setAttribute(Qt::WA_DeleteOnClose);
     palette->setWindowTitle(QStringLiteral("رموز مساحة العمل"));
@@ -1453,7 +1453,7 @@ void Qalam::showWorkspaceSymbols()
     });
     connect(
         palette,
-        &TCommandPalette::entryActivated,
+        &QalamCommandPalette::entryActivated,
         this,
         [this](const QString &id, const QString &payload) {
             if (id != QStringLiteral("workspace.symbol")) return;
@@ -1474,7 +1474,7 @@ void Qalam::showWorkspaceSymbols()
             const QString &,
             const QVector<BaaWorkspaceSymbol> &symbols) {
             if (m_workspaceSymbolPalette != palette) return;
-            QVector<TCommandPalette::Entry> entries;
+            QVector<QalamCommandPalette::Entry> entries;
             entries.reserve(symbols.size());
             for (const BaaWorkspaceSymbol &symbol : symbols) {
                 const QString relativePath = folderPath.isEmpty()
@@ -1560,7 +1560,7 @@ void Qalam::handleBuildOutput(const QString &text)
     if (!m_diagnosticsModel) return;
 
     QString fallbackFile;
-    if (TEditor *editor = currentEditor()) {
+    if (QalamEditor *editor = currentEditor()) {
         fallbackFile = editor->currentFilePath();
     }
 
@@ -1571,10 +1571,10 @@ void Qalam::handleBuildOutput(const QString &text)
 void Qalam::applyDiagnosticsToEditors()
 {
     for (int index = 0; index < tabWidget->count(); ++index) {
-        auto *editor = qobject_cast<TEditor*>(tabWidget->widget(index));
+        auto *editor = qobject_cast<QalamEditor*>(tabWidget->widget(index));
         if (!editor) continue;
 
-        QVector<TEditor::Diagnostic> editorDiagnostics;
+        QVector<QalamEditor::Diagnostic> editorDiagnostics;
         if (m_diagnosticsModel) {
             for (const Diagnostic &diagnostic : m_diagnosticsModel->diagnosticsForFile(editor->currentFilePath())) {
                 editorDiagnostics.push_back({diagnostic.file, diagnostic.line, diagnostic.column,
@@ -1591,7 +1591,7 @@ bool Qalam::languageDocumentVersionIsCurrent(const QString &filePath,
     const QString wanted = QDir::cleanPath(
         QFileInfo(filePath).absoluteFilePath());
     for (int index = 0; index < tabWidget->count(); ++index) {
-        const TEditor *editor = qobject_cast<TEditor*>(tabWidget->widget(index));
+        const QalamEditor *editor = qobject_cast<QalamEditor*>(tabWidget->widget(index));
         if (not editor) continue;
         const QString current = QDir::cleanPath(
             QFileInfo(editor->currentFilePath()).absoluteFilePath());
@@ -1607,7 +1607,7 @@ QString Qalam::lineTextForLocation(const BaaLocation &location) const
     const QString wanted = QDir::cleanPath(
         QFileInfo(location.filePath).absoluteFilePath());
     for (int index = 0; index < tabWidget->count(); ++index) {
-        const TEditor *editor = qobject_cast<TEditor*>(tabWidget->widget(index));
+        const QalamEditor *editor = qobject_cast<QalamEditor*>(tabWidget->widget(index));
         if (not editor) continue;
         const QString current = QDir::cleanPath(
             QFileInfo(editor->currentFilePath()).absoluteFilePath());
@@ -1629,7 +1629,7 @@ QString Qalam::lineTextForLocation(const BaaLocation &location) const
 
 void Qalam::goToDefinition()
 {
-    TEditor *editor = currentEditor();
+    QalamEditor *editor = currentEditor();
     if (not editor or not m_languageClient or
         not BaaLanguageClient::isBaaSourcePath(editor->currentFilePath())) {
         if (m_layoutManager and m_layoutManager->statusBar()) {
@@ -1648,7 +1648,7 @@ void Qalam::goToDefinition()
 
 void Qalam::findReferences()
 {
-    TEditor *editor = currentEditor();
+    QalamEditor *editor = currentEditor();
     if (not editor or not m_languageClient or
         not BaaLanguageClient::isBaaSourcePath(editor->currentFilePath())) {
         if (m_layoutManager and m_layoutManager->statusBar()) {
@@ -1668,7 +1668,7 @@ void Qalam::findReferences()
 
 void Qalam::renameSymbol()
 {
-    TEditor *editor = currentEditor();
+    QalamEditor *editor = currentEditor();
     if (not editor or not m_languageClient or
         not BaaLanguageClient::isBaaSourcePath(editor->currentFilePath())) {
         if (m_layoutManager and m_layoutManager->statusBar()) {
@@ -1688,7 +1688,7 @@ void Qalam::renameSymbol()
 
 void Qalam::quickFix()
 {
-    TEditor *editor = currentEditor();
+    QalamEditor *editor = currentEditor();
     if (not editor or not m_languageClient or
         not BaaLanguageClient::isBaaSourcePath(editor->currentFilePath())) {
         if (m_layoutManager and m_layoutManager->statusBar()) {
@@ -1708,7 +1708,7 @@ void Qalam::quickFix()
 
 void Qalam::formatDocument()
 {
-    TEditor *editor = currentEditor();
+    QalamEditor *editor = currentEditor();
     if (not editor or not m_languageClient or
         not BaaLanguageClient::isBaaSourcePath(editor->currentFilePath())) {
         if (m_layoutManager and m_layoutManager->statusBar()) {
@@ -1735,7 +1735,7 @@ bool Qalam::applyWorkspaceEdit(const BaaWorkspaceEdit &workspaceEdit,
     struct PreparedDocument
     {
         QString filePath;
-        TEditor *editor{};
+        QalamEditor *editor{};
         QString originalText;
         QString updatedText;
         QVector<BaaTextEdit> edits;
@@ -1744,12 +1744,12 @@ bool Qalam::applyWorkspaceEdit(const BaaWorkspaceEdit &workspaceEdit,
     prepared.reserve(workspaceEdit.documents.size());
     QSet<QString> seenFiles;
 
-    auto editorForPath = [this](const QString &filePath) -> TEditor * {
+    auto editorForPath = [this](const QString &filePath) -> QalamEditor * {
         const QString wanted = QDir::cleanPath(
             QFileInfo(filePath).absoluteFilePath());
         for (int index = 0; index < tabWidget->count(); ++index) {
-            TEditor *editor =
-                qobject_cast<TEditor*>(tabWidget->widget(index));
+            QalamEditor *editor =
+                qobject_cast<QalamEditor*>(tabWidget->widget(index));
             if (not editor) continue;
             const QString current = QDir::cleanPath(
                 QFileInfo(editor->currentFilePath()).absoluteFilePath());
@@ -1861,7 +1861,7 @@ void Qalam::aboutQalam() {
 /* ----------------------------------- Other Functions ----------------------------------- */
 
 void Qalam::updateWindowTitle() {
-    TEditor* editor = currentEditor();
+    QalamEditor* editor = currentEditor();
     QString title{};
 
     if (!editor) {
@@ -1883,7 +1883,7 @@ void Qalam::updateWindowTitle() {
     setWindowModified(editor && editor->document()->isModified());
 }
 
-void Qalam::onActivityViewChanged(TActivityBar::ViewType view)
+void Qalam::onActivityViewChanged(QalamActivityBar::ViewType view)
 {
     m_layoutManager->onActivityViewChanged(view, folderPath);
 }
@@ -1901,14 +1901,14 @@ void Qalam::syncOpenEditors()
     }
 
     for (int index = 0; index < tabWidget->count(); ++index) {
-        if (TEditor *editor = qobject_cast<TEditor*>(tabWidget->widget(index))) {
+        if (QalamEditor *editor = qobject_cast<QalamEditor*>(tabWidget->widget(index))) {
             attachAnalysisToEditor(editor);
         }
     }
     scheduleEditorAnalysis(currentEditor());
 }
 
-void Qalam::attachAnalysisToEditor(TEditor *editor)
+void Qalam::attachAnalysisToEditor(QalamEditor *editor)
 {
     if (!editor or !m_languageClient) return;
 
@@ -1917,28 +1917,28 @@ void Qalam::attachAnalysisToEditor(TEditor *editor)
         connect(editor, &QPlainTextEdit::textChanged, this, [this, editor]() {
             scheduleEditorAnalysis(editor);
         });
-        connect(editor, &TEditor::completionRequested, this,
+        connect(editor, &QalamEditor::completionRequested, this,
                 [this, editor](const QString &filePath, int line, int character) {
             if (not m_languageClient or
                 not BaaLanguageClient::isBaaSourcePath(filePath)) return;
             scheduleEditorAnalysis(editor);
             m_languageClient->requestCompletion(filePath, line, character);
         });
-        connect(editor, &TEditor::hoverRequested, this,
+        connect(editor, &QalamEditor::hoverRequested, this,
                 [this, editor](const QString &filePath, int line, int character) {
             if (not m_languageClient or
                 not BaaLanguageClient::isBaaSourcePath(filePath)) return;
             scheduleEditorAnalysis(editor);
             m_languageClient->requestHover(filePath, line, character);
         });
-        connect(editor, &TEditor::signatureHelpRequested, this,
+        connect(editor, &QalamEditor::signatureHelpRequested, this,
                 [this, editor](const QString &filePath, int line, int character) {
             if (not m_languageClient or
                 not BaaLanguageClient::isBaaSourcePath(filePath)) return;
             scheduleEditorAnalysis(editor);
             m_languageClient->requestSignatureHelp(filePath, line, character);
         });
-        connect(editor, &TEditor::selectionRangeRequested, this,
+        connect(editor, &QalamEditor::selectionRangeRequested, this,
                 [this, editor](const QString &filePath,
                                int line,
                                int character) {
@@ -1948,14 +1948,14 @@ void Qalam::attachAnalysisToEditor(TEditor *editor)
             m_languageClient->requestSelectionRanges(
                 filePath, line, character);
         });
-        connect(editor, &TEditor::quickFixRequested,
+        connect(editor, &QalamEditor::quickFixRequested,
                 this, &Qalam::quickFix);
-        connect(editor, &TEditor::formatRequested,
+        connect(editor, &QalamEditor::formatRequested,
                 this, &Qalam::formatDocument);
     }
 }
 
-void Qalam::scheduleEditorAnalysis(TEditor *editor)
+void Qalam::scheduleEditorAnalysis(QalamEditor *editor)
 {
     if (!editor or !m_languageClient) return;
     const QString filePath = editor->currentFilePath();
@@ -2018,9 +2018,9 @@ void Qalam::handleLanguageDiagnostics(const QString &filePath,
 {
     if (!m_diagnosticsModel or !m_languageClient) return;
 
-    TEditor *matchingEditor = nullptr;
+    QalamEditor *matchingEditor = nullptr;
     for (int index = 0; index < tabWidget->count(); ++index) {
-        TEditor *editor = qobject_cast<TEditor*>(tabWidget->widget(index));
+        QalamEditor *editor = qobject_cast<QalamEditor*>(tabWidget->widget(index));
         if (!editor) continue;
         const QString editorPath = QDir::cleanPath(
             QFileInfo(editor->currentFilePath()).absoluteFilePath());
@@ -2042,7 +2042,7 @@ void Qalam::handleLanguageCompletion(const QString &filePath,
                                      const QVector<BaaCompletionItem> &items)
 {
     for (int index = 0; index < tabWidget->count(); ++index) {
-        TEditor *editor = qobject_cast<TEditor*>(tabWidget->widget(index));
+        QalamEditor *editor = qobject_cast<QalamEditor*>(tabWidget->widget(index));
         if (not editor) continue;
         const QString editorPath = QDir::cleanPath(
             QFileInfo(editor->currentFilePath()).absoluteFilePath());

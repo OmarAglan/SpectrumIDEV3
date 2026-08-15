@@ -1,6 +1,6 @@
 #pragma once
 
-#include "TEditor.h"
+#include "QalamEditor.h"
 #include "Constants.h"
 #include <QTabWidget>
 
@@ -18,15 +18,15 @@ public:
     explicit FileManager(QTabWidget *tabWidget, QWidget *parentWindow, QObject *parent = nullptr);
 
     /// Get the currently active editor from the tab widget
-    TEditor *currentEditor() const;
+    QalamEditor *currentEditor() const;
 
     /// Show save confirmation dialog if the current document is modified
     SaveAction needSave();
-    SaveAction needSave(TEditor *editor);
+    SaveAction needSave(QalamEditor *editor);
 
     /// Save the current or specified editor. Returns false if the save was cancelled or failed.
-    bool saveEditor(TEditor *editor);
-    bool saveEditorAs(TEditor *editor);
+    bool saveEditor(QalamEditor *editor);
+    bool saveEditorAs(QalamEditor *editor);
 
 public slots:
     void newFile();
@@ -41,7 +41,7 @@ signals:
     void openEditorsChanged();
 
 private:
-    TEditor *createEditor(const QString &filePath = QString());
+    QalamEditor *createEditor(const QString &filePath = QString());
     QString normalizePath(const QString &filePath) const;
     QString nextUntitledName() const;
     void removeBackupForPath(const QString &filePath) const;
