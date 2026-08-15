@@ -32,10 +32,17 @@ void TestSearchView::exposesVisibleSearchOptionIcons()
         QVERIFY(button->text().isEmpty());
         QVERIFY(view.rect().contains(button->geometry().center()));
 
-        const QPixmap checkedPixmap = button->icon().pixmap(
-            button->iconSize(), QIcon::Normal, QIcon::On);
+        const QPixmap normalPixmap = button->icon().pixmap(button->iconSize());
+        QVERIFY2(not normalPixmap.isNull(),
+                 qPrintable(QStringLiteral("Unrenderable icon: %1").arg(objectName)));
+
+        const qint64 normalCacheKey = button->icon().cacheKey();
+        button->click();
+        QVERIFY(button->isChecked());
+        const QPixmap checkedPixmap = button->icon().pixmap(button->iconSize());
         QVERIFY2(not checkedPixmap.isNull(),
                  qPrintable(QStringLiteral("Missing checked icon: %1").arg(objectName)));
+        QVERIFY(button->icon().cacheKey() != normalCacheKey);
     }
 
     const QString screenshotPath =
