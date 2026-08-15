@@ -99,7 +99,7 @@ target_include_directories(qalam_core PUBLIC
     managers
 )
 
-target_link_libraries(qalam_core PUBLIC Qt6::Widgets Qt6::Gui Qt6::Core)
+target_link_libraries(qalam_core PUBLIC Qt6::Widgets Qt6::Gui Qt6::Core Qt6::Svg)
 
 if(WIN32)
     target_link_libraries(qalam_core PUBLIC dwmapi user32)

@@ -43,7 +43,8 @@ For the detailed feature state and remaining production work, see the [roadmap](
 
 ## Build and run
 
-Qalam requires Qt 6, CMake 3.21 or newer, and a C++23 compiler.
+Qalam requires Qt 6 with Widgets and SVG support, CMake 3.21 or newer, and a
+C++23 compiler.
 
 ### Windows
 

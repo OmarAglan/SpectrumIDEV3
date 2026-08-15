@@ -172,7 +172,8 @@ load-time protection remains automatic.
 
 ### Prerequisites
 
-- Qt 6.x (the Windows artifact uses 6.10.2; Linux CI also checks the Ubuntu package)
+- Qt 6.x with Widgets and SVG (the Windows artifact uses 6.10.2; Linux CI also
+  checks Ubuntu's base and SVG packages)
 - MinGW 13.1+ (Windows) or GCC 13+ (Linux) or Clang 16+ (macOS)
 - CMake 3.21+
 

@@ -13,7 +13,7 @@ if(WIN32)
     enable_language(RC)
 endif()
 
-find_package(Qt6 REQUIRED COMPONENTS Widgets Gui Core)
+find_package(Qt6 REQUIRED COMPONENTS Widgets Gui Core Svg)
 
 option(QALAM_BUILD_TESTS "Build Qalam IDE tests" OFF)
 if(QALAM_BUILD_TESTS)

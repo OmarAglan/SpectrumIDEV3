@@ -25,7 +25,7 @@ This document explains how to build and package Qalam IDE on Windows, Linux, and
 
 ## Prerequisites
 
-- Qt 6.x with Widgets / GUI / Core installed
+- Qt 6.x with Widgets / GUI / Core / SVG installed
 - CMake 3.21+
 - C++23 compiler
   - Windows: Qt MinGW kit recommended
@@ -195,7 +195,7 @@ The Linux bootstrap installs common compiler/CMake/Python packages through `apt`
 
 ```bash
 sudo apt update
-sudo apt install -y build-essential cmake qt6-base-dev qt6-base-dev-tools libxcb-cursor0 libxcb-cursor-dev
+sudo apt install -y build-essential cmake qt6-base-dev qt6-base-dev-tools qt6-svg-dev libxcb-cursor0 libxcb-cursor-dev
 ```
 
 ### Manual build
