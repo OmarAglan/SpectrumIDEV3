@@ -1,6 +1,6 @@
 # Qalam IDE - Improvement Roadmap
 
-**Date:** 2026-08-11
+**Date:** 2026-08-15
 **Version:** 3.3.0
 **Codebase:** ~9,750 lines C++ across 67 files (Qt 6 + C++23)
 
@@ -45,6 +45,13 @@ One deferred item from Phase 2:
 - **Qalam-owned naming** -- legacy `T*` source files and types have migrated to
   collision-safe `Qalam*` names, with a configure-independent CMake guard that
   prevents the old prefix from returning
+- **Arabic-first editor search** -- current-document search provides Unicode
+  whole-word matching, regular expressions, wraparound navigation, counts,
+  highlight-all, capture-aware replacement, and one-step undo for replace-all
+  without hiding compiler diagnostics
+- **Consistent visual actions** -- search, replace, run/stop, panel, explorer,
+  command-center, and recent-file actions use one registered SVG vocabulary,
+  with automated checks against missing or unregistered assets
 - **Smart pointer usage** -- `std::shared_ptr` for themes and `QPointer` for cross-process/UI lifetime guards
 - **Thread safety** -- `QMutex` in `ProcessWorker` and `QalamConsole`, proper thread lifecycle in `BuildManager`
 - **Live Baa diagnostics** -- versioned unsaved documents flow through Baa-LSP,
@@ -187,11 +194,11 @@ One deferred item from Phase 2:
 
 ### 5.1 Editor Search & Replace
 
-- [ ] 5.1.1 Add replace input field and replace/replace-all buttons to `QalamSearchPanel`
-- [ ] 5.1.2 Implement `isWholeWord()` properly (currently hardcoded `false`)
-- [ ] 5.1.3 Add regex search toggle to `QalamSearchPanel`
-- [ ] 5.1.4 Add match count display (e.g. "3 of 12")
-- [ ] 5.1.5 Add highlight-all-matches visual indicator
+- [x] 5.1.1 Add replace input field and replace/replace-all buttons to `QalamSearchPanel`
+- [x] 5.1.2 Implement Unicode-aware whole-word matching for Arabic letters and marks
+- [x] 5.1.3 Add a validated regex search toggle to `QalamSearchPanel`
+- [x] 5.1.4 Add an Arabic match-count display with wrapped current-result navigation
+- [x] 5.1.5 Highlight all matches through `QalamEditor`'s composed decoration layer
 
 ### 5.2 Project-Wide Search
 
@@ -497,7 +504,7 @@ the compiler/Nazm-bundled inlay-hints candidate requires a new green CI receipt.
 | Phase | Effort | Impact | Status | Dependencies |
 |-------|--------|--------|--------|--------------|
 | Phase 4: Code Quality & Tooling | Low (2-3 days) | Medium | **Pending** | None |
-| Phase 5: Functional Completeness | Medium (1-2 weeks) | High | **Pending** | None |
+| Phase 5: Functional Completeness | Medium (1-2 weeks) | High | **In progress** | None |
 | Phase 6: Testing Infrastructure | Medium (1-2 weeks) | High | **Pending** | None |
 | Phase 7: CI/CD Pipeline | Low-Medium (2-3 days) | High | **Pending** | Phase 6 |
 | Phase 8: Core Feature Enhancements | Medium-High (2-4 weeks) | High | **Pending** | Phase 5 |

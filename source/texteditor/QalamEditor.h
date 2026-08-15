@@ -54,6 +54,10 @@ public:
     void setInlayHints(const QVector<BaaInlayHint> &hints);
     void clearInlayHints();
     int inlayHintCount() const { return m_inlayHints.size(); }
+    void setSearchHighlights(const QVector<QPair<int, int>> &matches,
+                             int currentMatchIndex);
+    void clearSearchHighlights();
+    int searchHighlightCount() const { return m_searchMatches.size(); }
     void applySemanticSelectionRanges(
         const QVector<BaaSelectionRange> &ranges,
         int requestLine,
@@ -143,6 +147,8 @@ private:
     CompletionModel *model{};
     QVector<Diagnostic> m_diagnostics;
     QVector<BaaInlayHint> m_inlayHints;
+    QVector<QPair<int, int>> m_searchMatches;
+    int m_currentSearchMatchIndex{-1};
     QString textUnderCursor() const;
     void performCompletion(bool explicitRequest = false);
     void showCompletionPopup();

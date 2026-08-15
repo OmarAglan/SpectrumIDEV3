@@ -21,7 +21,7 @@
 #include <QTabBar>
 
 LayoutManager::LayoutManager(QMainWindow *window, QTabWidget *tabWidget,
-                             SearchPanel *searchBar, QObject *parent)
+                             QalamSearchPanel *searchBar, QObject *parent)
     : QObject(parent)
     , m_window(window)
     , m_tabWidget(tabWidget)

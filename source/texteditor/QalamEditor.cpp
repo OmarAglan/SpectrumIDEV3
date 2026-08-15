@@ -203,6 +203,26 @@ void QalamEditor::clearInlayHints()
     viewport()->update();
 }
 
+void QalamEditor::setSearchHighlights(
+    const QVector<QPair<int, int>> &matches,
+    int currentMatchIndex)
+{
+    m_searchMatches = matches;
+    m_currentSearchMatchIndex =
+        currentMatchIndex >= 0 and currentMatchIndex < matches.size()
+            ? currentMatchIndex
+            : -1;
+    applyEditorDecorations();
+}
+
+void QalamEditor::clearSearchHighlights()
+{
+    if (m_searchMatches.isEmpty() and m_currentSearchMatchIndex == -1) return;
+    m_searchMatches.clear();
+    m_currentSearchMatchIndex = -1;
+    applyEditorDecorations();
+}
+
 void QalamEditor::setFoldingRanges(const QVector<BaaFoldingRange> &ranges)
 {
     QVector<FoldRegion> converted;
@@ -666,6 +686,26 @@ void QalamEditor::applyEditorDecorations() {
         selection.cursor = textCursor();
         selection.cursor.clearSelection();
         extraSelections.append(selection);
+    }
+
+    for (int index = 0; index < m_searchMatches.size(); ++index) {
+        const auto &[start, length] = m_searchMatches.at(index);
+        if (start < 0 or length <= 0 or
+            start + length > document()->characterCount()) {
+            continue;
+        }
+
+        QTextCursor cursor(document());
+        cursor.setPosition(start);
+        cursor.setPosition(start + length, QTextCursor::KeepAnchor);
+
+        QTextEdit::ExtraSelection searchSelection;
+        searchSelection.cursor = cursor;
+        searchSelection.format.setBackground(QColor(
+            index == m_currentSearchMatchIndex
+                ? Constants::Colors::Selection
+                : Constants::Colors::SelectionHighlight));
+        extraSelections.append(searchSelection);
     }
 
     for (const Diagnostic &diagnostic : m_diagnostics) {

@@ -8,6 +8,7 @@ class TestPanelArea : public QObject
 
 private slots:
     void keepsBoundedPlainTextOutput();
+    void loadsPanelActionIcons();
 };
 
 void TestPanelArea::keepsBoundedPlainTextOutput()
@@ -27,6 +28,22 @@ void TestPanelArea::keepsBoundedPlainTextOutput()
     panel.clearOutput();
     QVERIFY(panel.outputText().isEmpty());
     QCOMPARE(panel.outputBlockCount(), 1);
+}
+
+void TestPanelArea::loadsPanelActionIcons()
+{
+    QalamPanelArea panel;
+    const auto requireIcon = [&panel](const QString &objectName) {
+        auto *button = panel.findChild<QPushButton *>(objectName);
+        QVERIFY2(button, qPrintable(QStringLiteral("Missing button: %1").arg(objectName)));
+        QVERIFY2(not button->icon().isNull(),
+                 qPrintable(QStringLiteral("Missing icon: %1").arg(objectName)));
+    };
+
+    requireIcon(QStringLiteral("panelMaximizeButton"));
+    requireIcon(QStringLiteral("panelCloseButton"));
+    requireIcon(QStringLiteral("debugRunButton"));
+    requireIcon(QStringLiteral("debugStopButton"));
 }
 
 QTEST_MAIN(TestPanelArea)

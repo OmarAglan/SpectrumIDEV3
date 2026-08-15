@@ -133,7 +133,7 @@ private:
     WorkspaceIndexer *m_workspaceIndexer{};
     BreakpointModel *m_breakpointModel{};
 
-    SearchPanel *searchBar{};
+    QalamSearchPanel *searchBar{};
     QalamWelcomePage *m_welcomePage{};
     QPointer<QalamCommandPalette> m_workspaceSymbolPalette;
     QalamEditor *m_lastConnectedEditor{}; // Track editor for cursor position disconnect

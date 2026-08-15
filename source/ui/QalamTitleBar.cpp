@@ -28,6 +28,8 @@ void QalamTitleBar::setupUi() {
 
     m_commandCenterBtn = new QPushButton("قلم  —  ابحث أو نفّذ أمرًا", this);
     m_commandCenterBtn->setObjectName("commandCenterButton");
+    m_commandCenterBtn->setIcon(QIcon(QStringLiteral(":/icons/resources/search.svg")));
+    m_commandCenterBtn->setIconSize(QSize(14, 14));
     m_commandCenterBtn->setFixedSize(430, 22);
     m_commandCenterBtn->setCursor(Qt::PointingHandCursor);
     m_commandCenterBtn->setToolTip("لوحة الأوامر (Ctrl+Shift+P)");

@@ -5,7 +5,7 @@
 
 class QTabWidget;
 class QMainWindow;
-class SearchPanel;
+class QalamSearchPanel;
 class QalamSidebar;
 class QalamStatusBar;
 class QalamPanelArea;
@@ -21,7 +21,7 @@ class LayoutManager : public QObject {
 
 public:
     explicit LayoutManager(QMainWindow *window, QTabWidget *tabWidget,
-                           SearchPanel *searchBar, QObject *parent = nullptr);
+                           QalamSearchPanel *searchBar, QObject *parent = nullptr);
 
     /// Build and install the full layout onto the main window
     void setupLayout();
@@ -54,7 +54,7 @@ signals:
 private:
     QMainWindow *m_window{};
     QTabWidget *m_tabWidget{};
-    SearchPanel *m_searchBar{};
+    QalamSearchPanel *m_searchBar{};
 
     QalamActivityBar *m_activityBar{};
     QalamSidebar *m_sidebar{};

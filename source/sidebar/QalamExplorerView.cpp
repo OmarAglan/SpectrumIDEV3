@@ -81,6 +81,8 @@ void QalamExplorerView::setupUi()
     
     QPushButton *openFolderBtn = new QPushButton("فتح مجلد");
     openFolderBtn->setObjectName("openFolderBtn");
+    openFolderBtn->setIcon(QIcon(QStringLiteral(":/icons/resources/folder-open.svg")));
+    openFolderBtn->setIconSize(QSize(18, 18));
     openFolderBtn->setCursor(Qt::PointingHandCursor);
     connect(openFolderBtn, &QPushButton::clicked, this, &QalamExplorerView::openFolderRequested);
     

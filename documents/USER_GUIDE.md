@@ -165,12 +165,17 @@ Baa style.
 
 ### Editor Search (`Ctrl+F`)
 Find text within the current file:
-- Find next: Enter or click down arrow
-- Find previous: Shift+Enter or click up arrow
-- Case-sensitive toggle: Click "Cc" button
-- Wrap-around: Automatically wraps to beginning/end
-
-**Note:** Replace functionality is planned for a future release (see [ROADMAP.md](ROADMAP.md)).
+- Find next with Enter or the down arrow; find previous with Shift+Enter or the
+  up arrow. Navigation wraps at the beginning and end.
+- Toggle `Aa` for case-sensitive matching, `ab` for an entire Unicode word, or
+  `.*` for a regular expression. Arabic combining marks remain part of a word.
+- The result counter and editor highlights show every match while distinguishing
+  the current result. Search highlights compose with Baa diagnostic underlines.
+- Use **استبدال** for the current result or **استبدال الكل** for the complete
+  document. Replace-all is one undoable edit.
+- In regular-expression mode, replacement text may use `$1` or `\1` for a
+  captured group. Invalid and zero-length patterns are rejected safely.
+- Escape closes the panel and removes only search highlights.
 
 ### Project Search (`Ctrl+Shift+F`)
 Search across all files in the opened project folder.

@@ -44,6 +44,13 @@ add_test(
         -P "${CMAKE_CURRENT_SOURCE_DIR}/CheckQalamNaming.cmake"
 )
 
+add_test(
+    NAME test_qalam_icons
+    COMMAND ${CMAKE_COMMAND}
+        "-DQALAM_ROOT=${CMAKE_SOURCE_DIR}"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/CheckQalamIcons.cmake"
+)
+
 add_qalam_test(test_diagnostic_parser TestDiagnosticParser.cpp)
 add_qalam_test(test_workspace_indexer TestWorkspaceIndexer.cpp)
 add_qalam_test(test_command_registry TestCommandRegistry.cpp)
@@ -53,6 +60,9 @@ add_qalam_test(test_process_worker TestProcessWorker.cpp)
 add_qalam_test(test_snippet_manager TestSnippetManager.cpp)
 add_qalam_test(test_symbol_outline_view TestSymbolOutlineView.cpp)
 add_qalam_test(test_panel_area TestPanelArea.cpp)
+add_qalam_test(test_search_panel TestSearchPanel.cpp)
+target_sources(test_panel_area PRIVATE ../qalam/resources.qrc)
+target_sources(test_search_panel PRIVATE ../qalam/resources.qrc)
 
 add_qalam_test(test_lsp_message_framer TestLspMessageFramer.cpp)
 add_qalam_test(test_editor_semantic_requests TestEditorSemanticRequests.cpp)

@@ -74,7 +74,7 @@ Qalam::Qalam(const QString& filePath, QWidget *parent)
     m_workspaceIndexer = new WorkspaceIndexer(this);
     m_breakpointModel = new BreakpointModel(this);
 
-    searchBar = new SearchPanel(this);
+    searchBar = new QalamSearchPanel(this);
     searchBar->hide();
 
     m_layoutManager = new LayoutManager(this, tabWidget, searchBar, this);
@@ -612,9 +612,9 @@ void Qalam::connectSignals()
     connect(tabWidget, &QTabWidget::currentChanged, this, &Qalam::onCurrentTabChanged);
 
     // --- Search bar signals ---
-    // Search logic is now handled internally by SearchPanel.
+    // Search logic is handled internally by QalamSearchPanel.
     // We only need to connect the close signal and sync the active editor.
-    connect(searchBar, &SearchPanel::closed, this, &Qalam::hideFindBar);
+    connect(searchBar, &QalamSearchPanel::closed, this, &Qalam::hideFindBar);
 
     // --- FileManager signals ---
     connect(m_fileManager, &FileManager::fileStateChanged, this, &Qalam::updateWindowTitle);
@@ -734,6 +734,7 @@ void Qalam::showFindBar() {
 }
 
 void Qalam::hideFindBar() {
+    searchBar->clearHighlights();
     searchBar->hide();
     if (QalamEditor* editor = currentEditor()) {
         editor->setFocus();

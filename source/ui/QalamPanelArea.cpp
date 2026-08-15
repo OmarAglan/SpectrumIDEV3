@@ -67,16 +67,20 @@ QWidget* QalamPanelArea::createHeaderBar()
     
     // Control buttons on the left (in RTL, added last)
     m_maximizeBtn = new QPushButton(this);
+    m_maximizeBtn->setObjectName(QStringLiteral("panelMaximizeButton"));
     m_maximizeBtn->setFixedSize(20, 20);
-    m_maximizeBtn->setText("□");
+    m_maximizeBtn->setIcon(QIcon(QStringLiteral(":/icons/resources/maximize.svg")));
+    m_maximizeBtn->setIconSize(QSize(14, 14));
     m_maximizeBtn->setCursor(Qt::PointingHandCursor);
     m_maximizeBtn->setToolTip("تكبير");
     connect(m_maximizeBtn, &QPushButton::clicked, this, &QalamPanelArea::maximizeRequested);
     layout->addWidget(m_maximizeBtn);
     
     m_closeBtn = new QPushButton(this);
+    m_closeBtn->setObjectName(QStringLiteral("panelCloseButton"));
     m_closeBtn->setFixedSize(20, 20);
-    m_closeBtn->setText("×");
+    m_closeBtn->setIcon(QIcon(QStringLiteral(":/icons/resources/close.svg")));
+    m_closeBtn->setIconSize(QSize(14, 14));
     m_closeBtn->setCursor(Qt::PointingHandCursor);
     m_closeBtn->setToolTip("إغلاق");
     connect(m_closeBtn, &QPushButton::clicked, this, &QalamPanelArea::closeRequested);
@@ -179,12 +183,16 @@ void QalamPanelArea::setupDebugView()
     auto *buttonsRow = new QHBoxLayout();
     buttonsRow->setDirection(QBoxLayout::RightToLeft);
     buttonsRow->setSpacing(8);
-    auto *runButton = new QPushButton("▶ تشغيل F5", m_debugView);
-    runButton->setObjectName("debugActionButton");
+    auto *runButton = new QPushButton("تشغيل F5", m_debugView);
+    runButton->setObjectName("debugRunButton");
+    runButton->setIcon(QIcon(QStringLiteral(":/icons/resources/run.svg")));
+    runButton->setIconSize(QSize(16, 16));
     runButton->setToolTip("استخدم F5 لتشغيل ملف باء الحالي");
     buttonsRow->addWidget(runButton);
-    auto *stopButton = new QPushButton("■ إيقاف", m_debugView);
-    stopButton->setObjectName("debugActionButton");
+    auto *stopButton = new QPushButton("إيقاف", m_debugView);
+    stopButton->setObjectName("debugStopButton");
+    stopButton->setIcon(QIcon(QStringLiteral(":/icons/resources/stop.svg")));
+    stopButton->setIconSize(QSize(16, 16));
     stopButton->setEnabled(false);
     buttonsRow->addWidget(stopButton);
     buttonsRow->addStretch(1);

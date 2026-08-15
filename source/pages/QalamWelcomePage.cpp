@@ -181,6 +181,8 @@ void QalamWelcomePage::setupUi()
 
     m_clearRecentsBtn = new QPushButton("مسح الكل", recentHeader);
     m_clearRecentsBtn->setObjectName("welcomeClearRecents");
+    m_clearRecentsBtn->setIcon(QIcon(QStringLiteral(":/icons/resources/trash.svg")));
+    m_clearRecentsBtn->setIconSize(QSize(14, 14));
     m_clearRecentsBtn->setFlat(true);
     m_clearRecentsBtn->setCursor(Qt::PointingHandCursor);
     connect(m_clearRecentsBtn, &QPushButton::clicked, this, &QalamWelcomePage::onClearRecentsRequested);

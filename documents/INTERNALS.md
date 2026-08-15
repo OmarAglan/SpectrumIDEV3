@@ -46,6 +46,16 @@ The heart of Qalam is `QalamEditor`, a custom `QPlainTextEdit` subclass.
 - **`QalamBracketHandler`:** Handles bracket/quote auto-pairing, skip-over, and selection wrapping.
 - **`QalamSnippetManager`:** Manages code snippets with Tab/Enter placeholder navigation.
 - **`QalamAutoSave`:** Handles automatic backup to `.~` files.
+- **`QalamSearchPanel`:** Owns current-document literal/regex matching,
+  Unicode-aware Arabic word boundaries, wrapped navigation, replacement, and
+  match counts. It publishes position/length ranges to `QalamEditor`, whose
+  single decoration compositor layers search backgrounds with the current line
+  and Baa diagnostic underlines. Closing the panel clears those ranges, so a
+  hidden search cannot leak highlights across editor tabs.
+- **SVG action resources:** Visual actions use the registered vector set under
+  `qalam/resources`. `test_qalam_icons` scans source references and verifies
+  that each asset exists and is registered; widget tests also prove the key
+  action icons load through Qt's resource system.
 
 #### 2. Console (`source/console`)
 `QalamConsole` provides an interactive terminal.

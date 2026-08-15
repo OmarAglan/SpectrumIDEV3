@@ -37,6 +37,9 @@ void QalamSearchView::setupUi()
     m_searchInput = new QLineEdit();
     m_searchInput->setObjectName("searchInput");
     m_searchInput->setPlaceholderText("بحث");
+    m_searchInput->addAction(
+        QIcon(QStringLiteral(":/icons/resources/search.svg")),
+        QLineEdit::LeadingPosition);
     m_searchInput->setClearButtonEnabled(true);
     
     searchRowLayout->addWidget(m_searchInput);
@@ -45,6 +48,9 @@ void QalamSearchView::setupUi()
     m_replaceInput = new QLineEdit();
     m_replaceInput->setObjectName("replaceInput");
     m_replaceInput->setPlaceholderText("استبدال");
+    m_replaceInput->addAction(
+        QIcon(QStringLiteral(":/icons/resources/replace.svg")),
+        QLineEdit::LeadingPosition);
     m_replaceInput->setClearButtonEnabled(true);
     m_replaceInput->hide();
     
