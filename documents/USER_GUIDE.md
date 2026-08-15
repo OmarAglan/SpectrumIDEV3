@@ -13,6 +13,10 @@ Welcome to **Qalam IDE**, the professional environment for Arabic-syntax program
 1. Open your `.baa` file.
 2. Ensure you have the Baa compiler installed (default path: `baa/baa.exe` relative to the IDE).
 3. Use **تشغيل** (Run) from the build menu to compile and execute your program.
+   For a standalone `.baa` file, Qalam builds into its application cache, then
+   launches the new executable with the source folder as its working directory.
+   Program stdout and stderr appear after **مخرجات البرنامج** in the
+   **الطرفية** tab, and the input field remains connected to the running program.
 
 ## Interface Overview
 

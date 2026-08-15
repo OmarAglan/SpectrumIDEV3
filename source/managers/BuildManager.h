@@ -100,7 +100,12 @@ private:
                       const QString &contextPath,
                       const QString &operation,
                       const QString &heading,
-                      QalamConsole *console);
+                      QalamConsole *console,
+                      bool usesTakweenEvents = false,
+                      const QString &followUpProgram = QString(),
+                      const QStringList &followUpArguments = {},
+                      const QString &followUpWorkingDirectory = QString(),
+                      const QString &followUpHeading = QString());
 
     QPointer<ProcessWorker> m_worker;
     QPointer<QThread> m_buildThread;

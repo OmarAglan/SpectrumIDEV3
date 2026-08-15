@@ -220,6 +220,7 @@ One deferred item from Phase 2:
 - [x] 5.3.3 Add inline error indicators in editor (squiggly underlines and tooltips)
 - [x] 5.3.4 Click-to-navigate from Problems panel to error location in editor
 - [x] 5.3.5 Replace or clear problems on a successful editor check/run start
+- [x] 5.3.6 Make standalone F5 compile to Qalam's cache, launch only the newly built executable, and stream program stdout/stderr/stdin through the Terminal panel
 
 ### 5.4 Console ANSI Colors
 

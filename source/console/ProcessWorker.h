@@ -13,7 +13,11 @@ public:
     explicit ProcessWorker(const QString &program,
                            const QStringList &args,
                            const QString &workingDir,
-                           const QString &eventFilePath = QString());
+                           const QString &eventFilePath = QString(),
+                           const QString &followUpProgram = QString(),
+                           const QStringList &followUpArgs = {},
+                           const QString &followUpWorkingDir = QString(),
+                           const QString &followUpHeading = QString());
 
 signals:
     void outputReady(const QString &text);
@@ -36,6 +40,10 @@ private:
     QStringList args{};
     QString workingDir{};
     QString eventFilePath{};
+    QString followUpProgram{};
+    QStringList followUpArgs{};
+    QString followUpWorkingDir{};
+    QString followUpHeading{};
     QProcess *process{};
     QString outputBuffer{};
     QString errorBuffer{};
@@ -43,9 +51,13 @@ private:
     QMutex bufferMutex{};  // Mutex for thread-safe buffer access
     bool m_finishedEmitted{};
     bool m_cancelRequested{};
+    bool m_followUpStarted{};
     qint64 m_eventOffset{};
     QByteArray m_eventBuffer{};
 
     void emitFinishedOnce(int exitCode);
     void drainEventFile(bool finalRead = false);
+    void startProcessPhase(const QString &phaseProgram,
+                           const QStringList &phaseArgs,
+                           const QString &phaseWorkingDir);
 };

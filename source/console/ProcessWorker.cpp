@@ -51,11 +51,19 @@ bool bundledBaaEnvironment(const QString &program,
 ProcessWorker::ProcessWorker(const QString &program,
                              const QStringList &args,
                              const QString &workingDir,
-                             const QString &eventFilePath)
+                             const QString &eventFilePath,
+                             const QString &followUpProgram,
+                             const QStringList &followUpArgs,
+                             const QString &followUpWorkingDir,
+                             const QString &followUpHeading)
     : program(program),
       args(args),
       workingDir(workingDir),
       eventFilePath(eventFilePath),
+      followUpProgram(followUpProgram),
+      followUpArgs(followUpArgs),
+      followUpWorkingDir(followUpWorkingDir),
+      followUpHeading(followUpHeading),
       process(nullptr),
       flushTimer(nullptr)
 {
@@ -80,17 +88,13 @@ void ProcessWorker::start() {
     process = new QProcess(this);
     m_finishedEmitted = false;
     m_cancelRequested = false;
+    m_followUpStarted = false;
     m_eventOffset = 0;
     m_eventBuffer.clear();
+    outputBuffer.clear();
+    errorBuffer.clear();
 
-    process->setProgram(program);
-    process->setArguments(args);
-    process->setWorkingDirectory(workingDir);
     process->setProcessChannelMode(QProcess::SeparateChannels);
-    QProcessEnvironment environment;
-    if (bundledBaaEnvironment(program, &environment)) {
-        process->setProcessEnvironment(environment);
-    }
 
     // Connect read signals
     connect(process, &QProcess::readyReadStandardOutput,
@@ -110,8 +114,34 @@ void ProcessWorker::start() {
                 if (flushTimer && flushTimer->isActive())
                     flushTimer->stop();
 
-                // Flush any remaining buffered data
+                // Flush any remaining buffered data from this phase.
                 flushBuffers();
+
+                if (not m_cancelRequested and
+                    not m_followUpStarted and
+                    not followUpProgram.isEmpty() and
+                    status == QProcess::NormalExit and
+                    code == 0) {
+                    if (not QFileInfo(followUpProgram).isExecutable()) {
+                        emit errorReady(
+                            QStringLiteral("\n❌ نجح البناء لكن لم يُنشأ البرنامج المتوقع: ") +
+                            followUpProgram + QLatin1Char('\n'));
+                        drainEventFile(true);
+                        emitFinishedOnce(-1);
+                        return;
+                    }
+
+                    m_followUpStarted = true;
+                    if (not followUpHeading.isEmpty()) {
+                        emit outputReady(followUpHeading);
+                    }
+                    startProcessPhase(
+                        followUpProgram,
+                        followUpArgs,
+                        followUpWorkingDir.isEmpty() ? workingDir : followUpWorkingDir);
+                    return;
+                }
+
                 drainEventFile(true);
 
                 emitFinishedOnce(m_cancelRequested
@@ -129,7 +159,21 @@ void ProcessWorker::start() {
         }
     });
 
-    // Start the process (non-blocking)
+    // Start the compiler/tool process (non-blocking).
+    startProcessPhase(program, args, workingDir);
+}
+
+void ProcessWorker::startProcessPhase(const QString &phaseProgram,
+                                      const QStringList &phaseArgs,
+                                      const QString &phaseWorkingDir)
+{
+    process->setProgram(phaseProgram);
+    process->setArguments(phaseArgs);
+    process->setWorkingDirectory(phaseWorkingDir);
+
+    QProcessEnvironment environment = QProcessEnvironment::systemEnvironment();
+    bundledBaaEnvironment(phaseProgram, &environment);
+    process->setProcessEnvironment(environment);
     process->start();
 }
 void ProcessWorker::onReadyReadOutput() {

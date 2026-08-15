@@ -17,6 +17,8 @@ private slots:
     void tailsCompleteAndFinalJsonLines();
     void reportsRequestedCancellation();
     void suppliesBundledBaaHome();
+    void runsFollowUpProcessAndCapturesOutput();
+    void skipsFollowUpProcessAfterFailure();
 };
 
 void TestProcessWorker::tailsCompleteAndFinalJsonLines()
@@ -139,6 +141,55 @@ void TestProcessWorker::suppliesBundledBaaHome()
 #endif
 }
 
+void TestProcessWorker::runsFollowUpProcessAndCapturesOutput()
+{
+    QTemporaryDir temporary;
+    QVERIFY(temporary.isValid());
+    ProcessWorker worker(
+        QCoreApplication::applicationFilePath(),
+        {"--helper-exit", "0"},
+        temporary.path(),
+        {},
+        QCoreApplication::applicationFilePath(),
+        {"--helper-output", "7"},
+        temporary.path(),
+        QStringLiteral("\n▶ مخرجات البرنامج:\n"));
+    QSignalSpy output(&worker, &ProcessWorker::outputReady);
+    QSignalSpy finished(&worker, &ProcessWorker::finished);
+
+    worker.start();
+    QTRY_COMPARE_WITH_TIMEOUT(finished.size(), 1, 5000);
+    QCOMPARE(finished.first().first().toInt(), 7);
+
+    QString combinedOutput;
+    for (const QList<QVariant> &arguments : output) {
+        combinedOutput += arguments.first().toString();
+    }
+    QVERIFY(combinedOutput.contains(QStringLiteral("مخرجات البرنامج")));
+    QVERIFY(combinedOutput.contains(QStringLiteral("ناتج باء من البرنامج")));
+}
+
+void TestProcessWorker::skipsFollowUpProcessAfterFailure()
+{
+    QTemporaryDir temporary;
+    QVERIFY(temporary.isValid());
+    const QString markerPath = temporary.filePath(QStringLiteral("شُغّل.txt"));
+    ProcessWorker worker(
+        QCoreApplication::applicationFilePath(),
+        {"--helper-exit", "4"},
+        temporary.path(),
+        {},
+        QCoreApplication::applicationFilePath(),
+        {"--helper-marker", markerPath},
+        temporary.path());
+    QSignalSpy finished(&worker, &ProcessWorker::finished);
+
+    worker.start();
+    QTRY_COMPARE_WITH_TIMEOUT(finished.size(), 1, 5000);
+    QCOMPARE(finished.first().first().toInt(), 4);
+    QVERIFY(not QFileInfo::exists(markerPath));
+}
+
 int main(int argc, char **argv)
 {
     QCoreApplication application(argc, argv);
@@ -156,6 +207,25 @@ int main(int argc, char **argv)
     }
     if (arguments.contains("--helper-wait")) {
         QThread::sleep(30);
+        return 0;
+    }
+    const int exitHelper = arguments.indexOf("--helper-exit");
+    if (exitHelper >= 0 and exitHelper + 1 < arguments.size()) {
+        return arguments.at(exitHelper + 1).toInt();
+    }
+    const int outputHelper = arguments.indexOf("--helper-output");
+    if (outputHelper >= 0 and outputHelper + 1 < arguments.size()) {
+        QFile output;
+        if (not output.open(stdout, QIODevice::WriteOnly)) return 21;
+        output.write(QStringLiteral("ناتج باء من البرنامج\n").toUtf8());
+        output.flush();
+        return arguments.at(outputHelper + 1).toInt();
+    }
+    const int markerHelper = arguments.indexOf("--helper-marker");
+    if (markerHelper >= 0 and markerHelper + 1 < arguments.size()) {
+        QFile marker(arguments.at(markerHelper + 1));
+        if (not marker.open(QIODevice::WriteOnly | QIODevice::Truncate)) return 22;
+        marker.write("started");
         return 0;
     }
     TestProcessWorker test;

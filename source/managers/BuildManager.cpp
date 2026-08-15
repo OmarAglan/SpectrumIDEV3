@@ -4,6 +4,7 @@
 
 #include <QSettings>
 #include <QCoreApplication>
+#include <QCryptographicHash>
 #include <QDir>
 #include <QFileInfo>
 #include <QFile>
@@ -11,6 +12,37 @@
 #include <QMetaObject>
 #include <QPointer>
 #include <QUuid>
+
+namespace {
+
+QString standaloneRunExecutablePath(const QString &sourcePath)
+{
+    QString cacheRoot = QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
+    if (cacheRoot.isEmpty()) {
+        cacheRoot = QStandardPaths::writableLocation(QStandardPaths::TempLocation);
+    }
+    if (cacheRoot.isEmpty()) cacheRoot = QDir::tempPath();
+
+    QDir runDirectory(QDir(cacheRoot).filePath(QStringLiteral("تشغيل")));
+    if (not runDirectory.exists() and not QDir().mkpath(runDirectory.absolutePath())) {
+        return QString();
+    }
+
+    QString identity = QFileInfo(sourcePath).canonicalFilePath();
+    if (identity.isEmpty()) identity = QFileInfo(sourcePath).absoluteFilePath();
+    const QString digest = QString::fromLatin1(
+        QCryptographicHash::hash(identity.toUtf8(), QCryptographicHash::Sha256)
+            .toHex()
+            .left(16));
+#if defined(Q_OS_WIN)
+    const QString executableName = QStringLiteral("برنامج-%1.exe").arg(digest);
+#else
+    const QString executableName = QStringLiteral("برنامج-%1").arg(digest);
+#endif
+    return runDirectory.filePath(executableName);
+}
+
+}
 
 BuildManager::BuildManager(QObject *parent)
     : QObject(parent)
@@ -289,6 +321,7 @@ void BuildManager::runBaa(const QString &filePath, QalamConsole *console)
     QStringList args = { filePath };
     QString workingDir = QFileInfo(filePath).absolutePath();
     bool usingTakween = false;
+    QString followUpProgram;
 
     const QString projectRoot = findTakweenProjectRoot(filePath);
     if (!projectRoot.isEmpty()) {
@@ -301,13 +334,31 @@ void BuildManager::runBaa(const QString &filePath, QalamConsole *console)
         }
     }
 
+    if (not usingTakween) {
+        followUpProgram = standaloneRunExecutablePath(filePath);
+        if (followUpProgram.isEmpty()) {
+            console->clear();
+            console->appendPlainTextThreadSafe(
+                QStringLiteral("❌ تعذر إنشاء مجلد تشغيل مؤقت لبرنامج باء.\n"));
+            emit toolingFinished(QStringLiteral("run"), -1);
+            return;
+        }
+        QFile::remove(followUpProgram);
+        args << QStringLiteral("-o") << followUpProgram;
+    }
+
     startProcess(program,
                  args,
                  workingDir,
                  filePath,
-                 usingTakween ? "run" : "baa",
+                 QStringLiteral("run"),
                  usingTakween ? "🚀 تشغيل مشروع تكوين...\n" : "🚀 بدء تشغيل ملف باء...\n",
-                 console);
+                 console,
+                 usingTakween,
+                 followUpProgram,
+                 {},
+                 workingDir,
+                 usingTakween ? QString() : QStringLiteral("\n▶ مخرجات البرنامج:\n"));
 }
 
 bool BuildManager::runTakweenCommand(const QString &filePath,
@@ -329,7 +380,8 @@ bool BuildManager::runTakweenCommand(const QString &filePath,
     else if (normalized == "test") heading = "🧪 اختبار مشروع تكوين...\n";
     else if (normalized == "clean") heading = "🧹 تنظيف مشروع تكوين...\n";
 
-    startProcess(takween, arguments, projectRoot, filePath, normalized, heading, console);
+    startProcess(
+        takween, arguments, projectRoot, filePath, normalized, heading, console, true);
     return true;
 }
 
@@ -339,7 +391,12 @@ void BuildManager::startProcess(const QString &requestedProgram,
                                 const QString &contextPath,
                                 const QString &operation,
                                 const QString &heading,
-                                QalamConsole *console)
+                                QalamConsole *console,
+                                bool usesTakweenEvents,
+                                const QString &followUpProgram,
+                                const QStringList &followUpArguments,
+                                const QString &followUpWorkingDirectory,
+                                const QString &followUpHeading)
 {
     if (!console) return;
     QString program = requestedProgram;
@@ -375,8 +432,6 @@ void BuildManager::startProcess(const QString &requestedProgram,
 
     QStringList processArguments = arguments;
     QString eventFilePath;
-    const bool usesTakweenEvents =
-        operation == "build" or operation == "run" or operation == "test" or operation == "clean";
     if (usesTakweenEvents) {
         QString temporaryRoot = QStandardPaths::writableLocation(QStandardPaths::TempLocation);
         if (temporaryRoot.isEmpty()) temporaryRoot = QDir::tempPath();
@@ -392,7 +447,15 @@ void BuildManager::startProcess(const QString &requestedProgram,
     m_terminalEventExitCode = 0;
     m_cancelRequested = false;
 
-    m_worker = new ProcessWorker(program, processArguments, workingDirectory, eventFilePath);
+    m_worker = new ProcessWorker(
+        program,
+        processArguments,
+        workingDirectory,
+        eventFilePath,
+        followUpProgram,
+        followUpArguments,
+        followUpWorkingDirectory,
+        followUpHeading);
     m_buildThread = new QThread(this);
 
     m_worker->moveToThread(m_buildThread);
