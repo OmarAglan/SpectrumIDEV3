@@ -224,9 +224,11 @@ One deferred item from Phase 2:
 
 ### 5.4 Console ANSI Colors
 
-- [ ] 5.4.1 Integrate ANSI color parsing into the active `flushPending()` code path
-- [ ] 5.4.2 Support 256-color and true-color ANSI codes (extended SGR)
-- [ ] 5.4.3 Remove the dead `appendOutput()` method after migration
+- [x] 5.4.1 Integrate streaming ANSI color parsing into the active `flushPending()` code path
+- [x] 5.4.2 Support standard, bright, 256-color, and true-color ANSI SGR codes
+- [x] 5.4.3 Remove the dead `appendOutput()` method after migration
+- [x] 5.4.4 Preserve parser state across fragmented process reads and reset it when the terminal is cleared
+- [x] 5.4.5 Cover Arabic text, split escape sequences, formatting resets, 256-color, true-color, bounded large output, UTF-8 stdin, and cancellation with Qt tests
 
 ### 5.5 File Explorer Enhancements
 

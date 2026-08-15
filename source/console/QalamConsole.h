@@ -4,6 +4,7 @@
 #include <QPlainTextEdit>
 #include <QLineEdit>
 #include <QProcess>
+#include <QTextCharFormat>
 #include <QTimer>
 #include <QMutex>
 #include <QVector>
@@ -39,6 +40,8 @@ private:
 
     QMutex m_pendingMutex{};
     QString m_pending{}; // staging text waiting for GUI flush
+    QString m_ansiRemainder{};
+    QTextCharFormat m_ansiFormat{};
 
     // history
     QVector<QString> m_history{};
@@ -48,10 +51,9 @@ private:
     bool m_autoscroll{};
 
     // helpers
-    void appendOutput(const QString &text); // needs to run in GUI thread
-    QString ansiToHtmlFragment(const QString &chunk); // simple ansi -> html/text formatting
+    void appendAnsiText(const QString &text);
+    void applySgr(const QString &parameters);
     bool eventFilter(QObject *obj, QEvent *ev) override;
 
     int m_maxLines = 2000;         // آخر 2000 سطر
 };
-

@@ -6,7 +6,6 @@
 #include <QTextCursor>
 #include <QTextCharFormat>
 #include <QKeyEvent>
-#include <QRegularExpression>
 #include <QTextBlockFormat>
 #include <QApplication>
 #include <QMutexLocker>
@@ -17,6 +16,46 @@
 #include <utility>
 
 namespace {
+QColor ansiBaseColor(int index)
+{
+    static const QColor colors[] = {
+        QColor(0, 0, 0),
+        QColor(205, 49, 49),
+        QColor(13, 188, 121),
+        QColor(229, 229, 16),
+        QColor(36, 114, 200),
+        QColor(188, 63, 188),
+        QColor(17, 168, 205),
+        QColor(229, 229, 229),
+        QColor(102, 102, 102),
+        QColor(241, 76, 76),
+        QColor(35, 209, 139),
+        QColor(245, 245, 67),
+        QColor(59, 142, 234),
+        QColor(214, 112, 214),
+        QColor(41, 184, 219),
+        QColor(255, 255, 255),
+    };
+    return colors[qBound(0, index, 15)];
+}
+
+QColor ansi256Color(int index)
+{
+    index = qBound(0, index, 255);
+    if (index < 16) return ansiBaseColor(index);
+
+    if (index < 232) {
+        static const int levels[] = {0, 95, 135, 175, 215, 255};
+        const int cubeIndex = index - 16;
+        return QColor(levels[cubeIndex / 36],
+                      levels[(cubeIndex / 6) % 6],
+                      levels[cubeIndex % 6]);
+    }
+
+    const int gray = 8 + ((index - 232) * 10);
+    return QColor(gray, gray, gray);
+}
+
 QString decodeProcessBytes(const QByteArray &data)
 {
 #if defined(Q_OS_WIN)
@@ -41,6 +80,8 @@ QalamConsole::QalamConsole(QWidget *parent)
     m_autoscroll(true)
 {
     // UI
+    m_output->setObjectName(QStringLiteral("consoleOutput"));
+    m_input->setObjectName(QStringLiteral("consoleInput"));
     m_output->setReadOnly(true);
     m_output->setUndoRedoEnabled(false);
     m_output->setWordWrapMode(QTextOption::WordWrap);
@@ -121,6 +162,8 @@ void QalamConsole::stopCmd()
 void QalamConsole::clear()
 {
     m_output->clear();
+    m_ansiRemainder.clear();
+    m_ansiFormat = QTextCharFormat{};
     QMutexLocker locker(&m_pendingMutex);
     m_pending.clear();
 }
@@ -214,9 +257,7 @@ void QalamConsole::flushPending()
         m_pending.clear();
     }
 
-    QTextCursor cursor(m_output->document());
-    cursor.movePosition(QTextCursor::End);
-    cursor.insertText(chunk);
+    appendAnsiText(chunk);
 
     const int excessBlocks = m_output->document()->blockCount() - m_maxLines;
     if (excessBlocks > 0) {
@@ -235,80 +276,128 @@ void QalamConsole::flushPending()
     }
 }
 
-void QalamConsole::appendOutput(const QString &text)
+void QalamConsole::appendAnsiText(const QString &text)
 {
-    static QRegularExpression re("\x1B\\[([0-9;]+)m");
-    QRegularExpressionMatch match;
+    const QString input = std::exchange(m_ansiRemainder, QString{}) + text;
+    QTextCursor cursor(m_output->document());
+    cursor.movePosition(QTextCursor::End);
 
-    QTextCursor cur = m_output->textCursor();
-    cur.movePosition(QTextCursor::End);
-    m_output->setTextCursor(cur);
-
-    QTextCharFormat curFmt = m_output->currentCharFormat();
-
-    QString s = text;
-    int idx = 0;
-    while ((match = re.match(s, idx)).hasMatch()) {
-        int start = match.capturedStart();
-        int end = match.capturedEnd();
-        if (start > idx) {
-            QString piece = s.mid(idx, start - idx);
-            m_output->moveCursor(QTextCursor::End);
-            m_output->setCurrentCharFormat(curFmt);
-            m_output->insertPlainText(piece);
+    int plainStart = 0;
+    int index = 0;
+    while (index < input.size()) {
+        if (input.at(index) != QChar(0x1b)) {
+            ++index;
+            continue;
         }
-        QString codeStr = match.captured(1);
-        QStringList parts = codeStr.split(';');
-        for (const QString &p : parts) {
-            bool ok = false;
-            int v = p.toInt(&ok);
-            if (!ok) continue;
-            if (v == 0) {
-                curFmt = QTextCharFormat();
-            } else if (v == 1) {
-                curFmt.setFontWeight(QFont::Bold);
-            } else if (v >= 30 && v <= 37) {
-                QColor c;
-                switch (v) {
-                case 30: c = Qt::black; break;
-                case 31: c = Qt::red; break;
-                case 32: c = Qt::green; break;
-                case 33: c = QColor(255, 165, 0); break;
-                case 34: c = Qt::blue; break;
-                case 35: c = Qt::magenta; break;
-                case 36: c = Qt::cyan; break;
-                case 37: c = Qt::lightGray; break;
-                default: c = Qt::white; break;
+
+        if (index > plainStart) {
+            cursor.insertText(input.mid(plainStart, index - plainStart), m_ansiFormat);
+        }
+
+        if (index + 1 >= input.size()) {
+            m_ansiRemainder = input.mid(index);
+            return;
+        }
+
+        if (input.at(index + 1) != QLatin1Char('[')) {
+            ++index;
+            plainStart = index;
+            continue;
+        }
+
+        int sequenceEnd = index + 2;
+        while (sequenceEnd < input.size()) {
+            const ushort value = input.at(sequenceEnd).unicode();
+            if (value >= 0x40 and value <= 0x7e) break;
+            ++sequenceEnd;
+        }
+
+        if (sequenceEnd >= input.size()) {
+            m_ansiRemainder = input.mid(index);
+            return;
+        }
+
+        if (input.at(sequenceEnd) == QLatin1Char('m')) {
+            applySgr(input.mid(index + 2, sequenceEnd - index - 2));
+        }
+        index = sequenceEnd + 1;
+        plainStart = index;
+    }
+
+    if (plainStart < input.size()) {
+        cursor.insertText(input.mid(plainStart), m_ansiFormat);
+    }
+}
+
+void QalamConsole::applySgr(const QString &parameters)
+{
+    const QStringList parts = parameters.isEmpty()
+        ? QStringList{QStringLiteral("0")}
+        : parameters.split(QLatin1Char(';'), Qt::KeepEmptyParts);
+
+    for (int index = 0; index < parts.size(); ++index) {
+        bool ok = false;
+        const int code = parts.at(index).isEmpty() ? 0 : parts.at(index).toInt(&ok);
+        if (not ok and not parts.at(index).isEmpty()) continue;
+
+        if (code == 0) {
+            m_ansiFormat = QTextCharFormat{};
+        } else if (code == 1) {
+            m_ansiFormat.setFontWeight(QFont::Bold);
+        } else if (code == 3) {
+            m_ansiFormat.setFontItalic(true);
+        } else if (code == 4) {
+            m_ansiFormat.setFontUnderline(true);
+        } else if (code == 22) {
+            m_ansiFormat.setFontWeight(QFont::Normal);
+        } else if (code == 23) {
+            m_ansiFormat.setFontItalic(false);
+        } else if (code == 24) {
+            m_ansiFormat.setFontUnderline(false);
+        } else if (code >= 30 and code <= 37) {
+            m_ansiFormat.setForeground(ansiBaseColor(code - 30));
+        } else if (code == 39) {
+            m_ansiFormat.clearForeground();
+        } else if (code >= 40 and code <= 47) {
+            m_ansiFormat.setBackground(ansiBaseColor(code - 40));
+        } else if (code == 49) {
+            m_ansiFormat.clearBackground();
+        } else if (code >= 90 and code <= 97) {
+            m_ansiFormat.setForeground(ansiBaseColor(code - 90 + 8));
+        } else if (code >= 100 and code <= 107) {
+            m_ansiFormat.setBackground(ansiBaseColor(code - 100 + 8));
+        } else if ((code == 38 or code == 48) and index + 1 < parts.size()) {
+            const bool foreground = code == 38;
+            bool modeOk = false;
+            const int mode = parts.at(++index).toInt(&modeOk);
+            QColor color;
+
+            if (modeOk and mode == 5 and index + 1 < parts.size()) {
+                bool colorOk = false;
+                const int colorIndex = parts.at(++index).toInt(&colorOk);
+                if (colorOk and colorIndex >= 0 and colorIndex <= 255) {
+                    color = ansi256Color(colorIndex);
                 }
-                curFmt.setForeground(c);
-            } else if (v >= 40 && v <= 47) {
-                QColor c;
-                switch (v) {
-                case 40: c = Qt::black; break;
-                case 41: c = Qt::red; break;
-                case 42: c = Qt::green; break;
-                case 43: c = QColor(255, 165, 0); break;
-                case 44: c = Qt::blue; break;
-                case 45: c = Qt::magenta; break;
-                case 46: c = Qt::cyan; break;
-                case 47: c = Qt::lightGray; break;
-                default: c = Qt::white; break;
+            } else if (modeOk and mode == 2 and index + 3 < parts.size()) {
+                bool redOk = false;
+                bool greenOk = false;
+                bool blueOk = false;
+                const int red = parts.at(++index).toInt(&redOk);
+                const int green = parts.at(++index).toInt(&greenOk);
+                const int blue = parts.at(++index).toInt(&blueOk);
+                if (redOk and greenOk and blueOk
+                    and red >= 0 and red <= 255
+                    and green >= 0 and green <= 255
+                    and blue >= 0 and blue <= 255) {
+                    color = QColor(red, green, blue);
                 }
-                curFmt.setBackground(c);
+            }
+
+            if (color.isValid()) {
+                if (foreground) m_ansiFormat.setForeground(color);
+                else m_ansiFormat.setBackground(color);
             }
         }
-        idx = end;
-    }
-    if (idx < s.length()) {
-        QString rest = s.mid(idx);
-        m_output->moveCursor(QTextCursor::End);
-        m_output->setCurrentCharFormat(curFmt);
-        m_output->insertPlainText(rest);
-    }
-
-    if (m_autoscroll) {
-        QScrollBar *sb = m_output->verticalScrollBar();
-        sb->setValue(sb->maximum());
     }
 }
 
@@ -346,4 +435,3 @@ bool QalamConsole::eventFilter(QObject *obj, QEvent *ev)
     }
     return QWidget::eventFilter(obj, ev);
 }
-

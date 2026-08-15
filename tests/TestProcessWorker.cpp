@@ -19,6 +19,7 @@ private slots:
     void suppliesBundledBaaHome();
     void runsFollowUpProcessAndCapturesOutput();
     void skipsFollowUpProcessAfterFailure();
+    void forwardsUtf8InputToTheRunningProgram();
 };
 
 void TestProcessWorker::tailsCompleteAndFinalJsonLines()
@@ -190,6 +191,30 @@ void TestProcessWorker::skipsFollowUpProcessAfterFailure()
     QVERIFY(not QFileInfo::exists(markerPath));
 }
 
+void TestProcessWorker::forwardsUtf8InputToTheRunningProgram()
+{
+    QTemporaryDir temporary;
+    QVERIFY(temporary.isValid());
+    ProcessWorker worker(
+        QCoreApplication::applicationFilePath(),
+        {"--helper-input"},
+        temporary.path());
+    QSignalSpy output(&worker, &ProcessWorker::outputReady);
+    QSignalSpy finished(&worker, &ProcessWorker::finished);
+
+    worker.start();
+    QTest::qWait(100);
+    worker.sendInput(QStringLiteral("مدخل عربي"));
+    QTRY_COMPARE_WITH_TIMEOUT(finished.size(), 1, 5000);
+    QCOMPARE(finished.first().first().toInt(), 0);
+
+    QString combinedOutput;
+    for (const QList<QVariant> &arguments : output) {
+        combinedOutput += arguments.first().toString();
+    }
+    QVERIFY(combinedOutput.contains(QStringLiteral("استقبل: مدخل عربي")));
+}
+
 int main(int argc, char **argv)
 {
     QCoreApplication application(argc, argv);
@@ -207,6 +232,16 @@ int main(int argc, char **argv)
     }
     if (arguments.contains("--helper-wait")) {
         QThread::sleep(30);
+        return 0;
+    }
+    if (arguments.contains("--helper-input")) {
+        QFile input;
+        QFile output;
+        if (not input.open(stdin, QIODevice::ReadOnly)) return 23;
+        if (not output.open(stdout, QIODevice::WriteOnly)) return 24;
+        const QString line = QString::fromUtf8(input.readLine()).trimmed();
+        output.write(QStringLiteral("استقبل: %1\n").arg(line).toUtf8());
+        output.flush();
         return 0;
     }
     const int exitHelper = arguments.indexOf("--helper-exit");
