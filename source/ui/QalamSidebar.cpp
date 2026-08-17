@@ -62,7 +62,19 @@ void QalamSidebar::setupUi()
     connect(m_explorerView, &QalamExplorerView::fileDoubleClicked, this, &QalamSidebar::fileSelected);
     connect(m_explorerView, &QalamExplorerView::openEditorClicked, this, &QalamSidebar::fileSelected);
     connect(m_explorerView, &QalamExplorerView::openEditorCloseRequested, this, &QalamSidebar::openEditorCloseRequested);
+    connect(m_explorerView, &QalamExplorerView::closeOtherEditorsRequested,
+            this, &QalamSidebar::closeOtherEditorsRequested);
+    connect(m_explorerView, &QalamExplorerView::closeAllEditorsRequested,
+            this, &QalamSidebar::closeAllEditorsRequested);
     connect(m_explorerView, &QalamExplorerView::openFolderRequested, this, &QalamSidebar::openFolderRequested);
+    connect(m_explorerView, &QalamExplorerView::createFileRequested,
+            this, &QalamSidebar::createFileRequested);
+    connect(m_explorerView, &QalamExplorerView::createFolderRequested,
+            this, &QalamSidebar::createFolderRequested);
+    connect(m_explorerView, &QalamExplorerView::renameEntryRequested,
+            this, &QalamSidebar::renameEntryRequested);
+    connect(m_explorerView, &QalamExplorerView::deleteEntryRequested,
+            this, &QalamSidebar::deleteEntryRequested);
     connect(m_searchView, &QalamSearchView::searchRequested, this, &QalamSidebar::searchRequested);
     connect(m_searchView, &QalamSearchView::searchCancelled,
             this, &QalamSidebar::searchCancelled);

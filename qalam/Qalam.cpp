@@ -11,6 +11,7 @@
 #include "QalamPanelArea.h"
 #include "QalamBreadcrumb.h"
 #include "QalamExplorerView.h"
+#include "WorkspaceFileService.h"
 
 #include <QVBoxLayout>
 #include <QMessageBox>
@@ -30,6 +31,10 @@
 #include <QRegularExpression>
 #include <QKeyEvent>
 #include <QInputDialog>
+#include <QLineEdit>
+#include <QMenu>
+#include <QPushButton>
+#include <QTabBar>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLocale>
@@ -52,11 +57,23 @@ namespace {
 
 QString projectSearchPathKey(const QString &filePath)
 {
-    QString path = QDir::cleanPath(QFileInfo(filePath).absoluteFilePath());
+    QString path = QDir::fromNativeSeparators(
+        QDir::cleanPath(QFileInfo(filePath).absoluteFilePath()));
 #ifdef Q_OS_WIN
     path = path.toCaseFolded();
 #endif
     return path;
+}
+
+bool isSameOrChildProjectPath(
+    const QString &entryPath,
+    const QString &candidatePath)
+{
+    const QString entryKey = projectSearchPathKey(entryPath);
+    const QString candidateKey = projectSearchPathKey(candidatePath);
+    if (entryKey.isEmpty() or candidateKey.isEmpty()) return false;
+    return candidateKey == entryKey or
+        candidateKey.startsWith(entryKey + QLatin1Char('/'));
 }
 
 QString localizedProjectSearchNumber(qlonglong number)
@@ -80,6 +97,7 @@ Qalam::Qalam(const QString& filePath, QWidget *parent)
     tabWidget->setDocumentMode(true);
     tabWidget->setTabsClosable(true);
     tabWidget->setMovable(true);
+    tabWidget->tabBar()->setContextMenuPolicy(Qt::CustomContextMenu);
     menuBar = new QalamMenuBar(this);
     m_fileManager = new FileManager(tabWidget, this, this);
     m_buildManager = new BuildManager(this);
@@ -647,6 +665,8 @@ void Qalam::connectSignals()
 
     // --- Tab widget signals ---
     connect(tabWidget, &QTabWidget::tabCloseRequested, this, &Qalam::closeTab);
+    connect(tabWidget->tabBar(), &QTabBar::customContextMenuRequested,
+            this, &Qalam::showTabContextMenu);
     connect(tabWidget, &QTabWidget::currentChanged, this, &Qalam::updateWindowTitle);
     connect(tabWidget, &QTabWidget::currentChanged, this, &Qalam::onCurrentTabChanged);
 
@@ -700,6 +720,18 @@ void Qalam::connectSignals()
     connect(sidebar, &QalamSidebar::fileSelected, this, &Qalam::onSidebarFileSelected);
     connect(sidebar, &QalamSidebar::openFolderRequested, this, &Qalam::handleOpenFolderMenu);
     connect(sidebar, &QalamSidebar::openEditorCloseRequested, this, &Qalam::closeEditorByPath);
+    connect(sidebar, &QalamSidebar::closeOtherEditorsRequested,
+            this, &Qalam::closeOtherEditorsByPath);
+    connect(sidebar, &QalamSidebar::closeAllEditorsRequested,
+            this, &Qalam::closeAllTabs);
+    connect(sidebar, &QalamSidebar::createFileRequested,
+            this, &Qalam::createWorkspaceFile);
+    connect(sidebar, &QalamSidebar::createFolderRequested,
+            this, &Qalam::createWorkspaceFolder);
+    connect(sidebar, &QalamSidebar::renameEntryRequested,
+            this, &Qalam::renameWorkspaceEntry);
+    connect(sidebar, &QalamSidebar::deleteEntryRequested,
+            this, &Qalam::deleteWorkspaceEntry);
     connect(sidebar, &QalamSidebar::searchRequested, this, &Qalam::performProjectSearch);
     connect(sidebar, &QalamSidebar::searchCancelled,
             m_projectSearchService, &ProjectSearchService::cancel);
@@ -1228,9 +1260,14 @@ void Qalam::openFileFromUi(const QString &filePathOrEmpty)
 
 void Qalam::closeTab(int index)
 {
+    (void) closeTabAt(index, true);
+}
+
+bool Qalam::closeTabAt(int index, bool ensureReplacement)
+{
     QWidget *tab = tabWidget->widget(index);
 
-    if (!tab) return;
+    if (not tab) return true;
 
     if (auto *welcome = qobject_cast<QalamWelcomePage*>(tab)) {
         tabWidget->removeTab(index);
@@ -1241,17 +1278,16 @@ void Qalam::closeTab(int index)
             welcome->deleteLater();
         }
 
-        if (tabWidget->count() == 0) {
-            m_fileManager->newFile();
-        }
-        return;
+        if (ensureReplacement) ensureEditorSurface();
+        return true;
     }
 
     QalamEditor* editor = qobject_cast<QalamEditor*>(tab);
     if (!editor) {
         tabWidget->removeTab(index);
         tab->deleteLater();
-        return;
+        if (ensureReplacement) ensureEditorSurface();
+        return true;
     }
 
     if (editor->document()->isModified()) {
@@ -1261,31 +1297,92 @@ void Qalam::closeTab(int index)
 
         if (saveResult == FileManager::SaveAction::Cancel) {
             tabWidget->setCurrentIndex(previousIndex);
-            return;
+            return false;
         }
         if (saveResult == FileManager::SaveAction::Save and !m_fileManager->saveEditor(editor)) {
             tabWidget->setCurrentIndex(previousIndex);
+            return false;
+        }
+    }
+
+    removeEditorTabWithoutPrompt(editor);
+    syncOpenEditors();
+
+    if (ensureReplacement) ensureEditorSurface();
+    return true;
+}
+
+void Qalam::removeEditorTabWithoutPrompt(QalamEditor *editor)
+{
+    if (not editor) return;
+    const QString filePath = editor->currentFilePath();
+    if (m_languageClient and not filePath.isEmpty()) {
+        m_languageClient->closeDocument(filePath);
+    }
+    if (m_diagnosticsModel and not filePath.isEmpty()) {
+        const QString sourceId = "baa-lsp:" + QDir::cleanPath(filePath);
+        m_diagnosticsModel->replaceDiagnosticsFromSource(sourceId, {});
+    }
+
+    const int index = tabWidget->indexOf(editor);
+    if (index >= 0) tabWidget->removeTab(index);
+    editor->deleteLater();
+}
+
+void Qalam::ensureEditorSurface()
+{
+    if (hasAnyEditorTabs() or m_welcomePage) return;
+    if (shouldShowWelcome()) {
+        showWelcomeTab();
+    } else {
+        m_fileManager->newFile();
+    }
+}
+
+void Qalam::closeAllTabs()
+{
+    while (tabWidget->count() > 0) {
+        if (not closeTabAt(tabWidget->count() - 1, false)) return;
+    }
+    syncOpenEditors();
+    ensureEditorSurface();
+}
+
+void Qalam::closeOtherTabsExcept(int index)
+{
+    QWidget *keptTab = tabWidget->widget(index);
+    if (not keptTab) return;
+
+    for (int current = tabWidget->count() - 1; current >= 0; --current) {
+        if (tabWidget->widget(current) == keptTab) continue;
+        if (not closeTabAt(current, false)) {
+            tabWidget->setCurrentWidget(keptTab);
             return;
         }
     }
-
-    if (m_languageClient and !editor->currentFilePath().isEmpty()) {
-        m_languageClient->closeDocument(editor->currentFilePath());
-    }
-    if (m_diagnosticsModel and !editor->currentFilePath().isEmpty()) {
-        const QString sourceId = "baa-lsp:" + QDir::cleanPath(editor->currentFilePath());
-        m_diagnosticsModel->replaceDiagnosticsFromSource(sourceId, {});
-    }
-    tabWidget->removeTab(index);
-    editor->deleteLater();
     syncOpenEditors();
+    tabWidget->setCurrentWidget(keptTab);
+}
 
-    if (not hasAnyEditorTabs()) {
-        if (shouldShowWelcome()) {
-            showWelcomeTab();
-        } else {
-            m_fileManager->newFile();
-        }
+void Qalam::showTabContextMenu(const QPoint &position)
+{
+    QTabBar *tabBar = tabWidget->tabBar();
+    const int index = tabBar->tabAt(position);
+    if (index < 0) return;
+
+    QMenu menu(this);
+    menu.setLayoutDirection(Qt::RightToLeft);
+    QAction *closeAction = menu.addAction(QStringLiteral("إغلاق"));
+    QAction *closeOthersAction = menu.addAction(QStringLiteral("إغلاق البقية"));
+    QAction *closeAllAction = menu.addAction(QStringLiteral("إغلاق الكل"));
+
+    QAction *chosen = menu.exec(tabBar->mapToGlobal(position));
+    if (chosen == closeAction) {
+        closeTab(index);
+    } else if (chosen == closeOthersAction) {
+        closeOtherTabsExcept(index);
+    } else if (chosen == closeAllAction) {
+        closeAllTabs();
     }
 }
 
@@ -1357,6 +1454,226 @@ void Qalam::closeEditorByPath(const QString &filePath)
             return;
         }
     }
+}
+
+void Qalam::closeOtherEditorsByPath(const QString &filePath)
+{
+    const QString targetCanonical = QFileInfo(filePath).canonicalFilePath();
+    const QString targetClean = QDir::cleanPath(filePath);
+
+    for (int index = 0; index < tabWidget->count(); ++index) {
+        QalamEditor *editor = qobject_cast<QalamEditor*>(tabWidget->widget(index));
+        if (not editor) continue;
+
+        const QString editorPath = editor->currentFilePath();
+        const QString editorCanonical = QFileInfo(editorPath).canonicalFilePath();
+        const QString editorClean = QDir::cleanPath(editorPath);
+        const bool sameRealFile = not targetCanonical.isEmpty() and
+            editorCanonical == targetCanonical;
+        const bool sameUnsavedLabel = targetCanonical.isEmpty() and
+            editorPath.isEmpty() and tabWidget->tabText(index) == filePath;
+        const bool sameCleanPath = not targetClean.isEmpty() and
+            not editorClean.isEmpty() and editorClean == targetClean;
+
+        if (sameRealFile or sameCleanPath or sameUnsavedLabel) {
+            closeOtherTabsExcept(index);
+            return;
+        }
+    }
+}
+
+QVector<QalamEditor*> Qalam::editorsForWorkspaceEntry(
+    const QString &entryPath,
+    bool directory) const
+{
+    QVector<QalamEditor*> editors;
+    for (int index = 0; index < tabWidget->count(); ++index) {
+        QalamEditor *editor = qobject_cast<QalamEditor*>(tabWidget->widget(index));
+        if (not editor or editor->currentFilePath().isEmpty()) continue;
+
+        const bool affected = directory
+            ? isSameOrChildProjectPath(entryPath, editor->currentFilePath())
+            : projectSearchPathKey(entryPath) ==
+                projectSearchPathKey(editor->currentFilePath());
+        if (affected) editors.push_back(editor);
+    }
+    return editors;
+}
+
+void Qalam::refreshWorkspaceAfterFileOperation()
+{
+    if (m_projectSearchService) m_projectSearchService->invalidateCache();
+    if (m_workspaceIndexer) m_workspaceIndexer->refresh();
+}
+
+void Qalam::createWorkspaceFile(const QString &directoryPath)
+{
+    if (folderPath.isEmpty()) return;
+
+    bool accepted{};
+    const QString name = QInputDialog::getText(
+        this,
+        QStringLiteral("ملف باء جديد"),
+        QStringLiteral("اسم الملف:"),
+        QLineEdit::Normal,
+        QStringLiteral("ملف_جديد.baa"),
+        &accepted);
+    if (not accepted) return;
+
+    const WorkspaceFileResult result = WorkspaceFileService::createFile(
+        folderPath, directoryPath, name);
+    if (not result.success) {
+        QMessageBox::warning(this, QStringLiteral("تعذر إنشاء الملف"), result.error);
+        return;
+    }
+
+    refreshWorkspaceAfterFileOperation();
+    openFileFromUi(result.path);
+}
+
+void Qalam::createWorkspaceFolder(const QString &directoryPath)
+{
+    if (folderPath.isEmpty()) return;
+
+    bool accepted{};
+    const QString name = QInputDialog::getText(
+        this,
+        QStringLiteral("مجلد جديد"),
+        QStringLiteral("اسم المجلد:"),
+        QLineEdit::Normal,
+        QStringLiteral("مجلد_جديد"),
+        &accepted);
+    if (not accepted) return;
+
+    const WorkspaceFileResult result = WorkspaceFileService::createDirectory(
+        folderPath, directoryPath, name);
+    if (not result.success) {
+        QMessageBox::warning(this, QStringLiteral("تعذر إنشاء المجلد"), result.error);
+        return;
+    }
+
+    refreshWorkspaceAfterFileOperation();
+}
+
+void Qalam::renameWorkspaceEntry(const QString &entryPath)
+{
+    if (folderPath.isEmpty()) return;
+
+    const QFileInfo entryInfo(entryPath);
+    const QString oldPath = entryInfo.canonicalFilePath().isEmpty()
+        ? entryInfo.absoluteFilePath()
+        : entryInfo.canonicalFilePath();
+    const bool directory = entryInfo.isDir();
+    const QVector<QalamEditor*> affectedEditors =
+        editorsForWorkspaceEntry(oldPath, directory);
+
+    bool accepted{};
+    const QString newName = QInputDialog::getText(
+        this,
+        QStringLiteral("إعادة التسمية"),
+        QStringLiteral("الاسم الجديد:"),
+        QLineEdit::Normal,
+        entryInfo.fileName(),
+        &accepted);
+    if (not accepted or newName == entryInfo.fileName()) return;
+
+    const WorkspaceFileResult result = WorkspaceFileService::renameEntry(
+        folderPath, oldPath, newName);
+    if (not result.success) {
+        QMessageBox::warning(this, QStringLiteral("تعذرت إعادة التسمية"), result.error);
+        return;
+    }
+
+    if (not directory) {
+        const QString oldBackup = oldPath + Constants::BackupExtension;
+        const QString newBackup = result.path + Constants::BackupExtension;
+        if (QFile::exists(oldBackup) and not QFile::exists(newBackup)) {
+            (void) QFile::rename(oldBackup, newBackup);
+        }
+    }
+
+    for (QalamEditor *editor : affectedEditors) {
+        if (not editor) continue;
+        const QString oldEditorPath = editor->currentFilePath();
+        QString newEditorPath = result.path;
+        if (directory) {
+            const QString relativePath = QDir(oldPath).relativeFilePath(oldEditorPath);
+            newEditorPath = QDir(result.path).filePath(relativePath);
+        }
+        newEditorPath = QDir::cleanPath(newEditorPath);
+
+        if (m_languageClient) m_languageClient->closeDocument(oldEditorPath);
+        if (m_diagnosticsModel) {
+            const QString sourceId = "baa-lsp:" + QDir::cleanPath(oldEditorPath);
+            m_diagnosticsModel->replaceDiagnosticsFromSource(sourceId, {});
+        }
+
+        editor->setFilePath(newEditorPath);
+        const int tabIndex = tabWidget->indexOf(editor);
+        if (tabIndex >= 0) {
+            QString tabName = QFileInfo(newEditorPath).fileName();
+            if (editor->document()->isModified()) tabName += QStringLiteral("[*]");
+            tabWidget->setTabText(tabIndex, tabName);
+            tabWidget->setTabToolTip(tabIndex, newEditorPath);
+        }
+        scheduleEditorAnalysis(editor);
+    }
+
+    refreshWorkspaceAfterFileOperation();
+    syncOpenEditors();
+    updateWindowTitle();
+}
+
+void Qalam::deleteWorkspaceEntry(const QString &entryPath)
+{
+    if (folderPath.isEmpty()) return;
+
+    const QFileInfo entryInfo(entryPath);
+    const QString canonicalPath = entryInfo.canonicalFilePath().isEmpty()
+        ? entryInfo.absoluteFilePath()
+        : entryInfo.canonicalFilePath();
+    const bool directory = entryInfo.isDir();
+
+    QMessageBox confirmation(this);
+    confirmation.setWindowTitle(QStringLiteral("تأكيد الحذف"));
+    confirmation.setIcon(QMessageBox::Warning);
+    confirmation.setText(directory
+        ? QStringLiteral("سيُحذف المجلد ومحتواه نهائياً:\n%1").arg(entryInfo.fileName())
+        : QStringLiteral("سيُحذف الملف نهائياً:\n%1").arg(entryInfo.fileName()));
+    QPushButton *deleteButton = confirmation.addButton(
+        QStringLiteral("حذف"), QMessageBox::DestructiveRole);
+    QPushButton *cancelButton = confirmation.addButton(
+        QStringLiteral("إلغاء"), QMessageBox::RejectRole);
+    confirmation.setDefaultButton(cancelButton);
+    confirmation.exec();
+    if (confirmation.clickedButton() != deleteButton) return;
+
+    const QVector<QalamEditor*> affectedEditors =
+        editorsForWorkspaceEntry(canonicalPath, directory);
+    for (QalamEditor *editor : affectedEditors) {
+        if (not editor or not editor->document()->isModified()) continue;
+        const FileManager::SaveAction action = m_fileManager->needSave(editor);
+        if (action == FileManager::SaveAction::Cancel) return;
+        if (action == FileManager::SaveAction::Save and
+            not m_fileManager->saveEditor(editor)) return;
+    }
+
+    const WorkspaceFileResult result = WorkspaceFileService::removeEntry(
+        folderPath, canonicalPath);
+    if (not result.success) {
+        QMessageBox::warning(this, QStringLiteral("تعذر الحذف"), result.error);
+        return;
+    }
+
+    if (not directory) {
+        (void) QFile::remove(canonicalPath + Constants::BackupExtension);
+    }
+    for (QalamEditor *editor : affectedEditors) {
+        removeEditorTabWithoutPrompt(editor);
+    }
+    refreshWorkspaceAfterFileOperation();
+    syncOpenEditors();
+    ensureEditorSurface();
 }
 
 void Qalam::performProjectSearch(const QString &query, bool caseSensitive, bool wholeWord, bool regex)

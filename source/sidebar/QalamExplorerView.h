@@ -7,6 +7,7 @@
 #include <QLabel>
 #include <QPushButton>
 #include <QEvent>
+#include <QPoint>
 
 #include "BaaDocumentSymbol.h"
 
@@ -50,13 +51,21 @@ signals:
     void fileDoubleClicked(const QString &filePath);
     void openEditorClicked(const QString &filePath);
     void openEditorCloseRequested(const QString &filePath);
+    void closeOtherEditorsRequested(const QString &filePath);
+    void closeAllEditorsRequested();
     void openFolderRequested();  // Emitted when "Open Folder" button is clicked
+    void createFileRequested(const QString &directoryPath);
+    void createFolderRequested(const QString &directoryPath);
+    void renameEntryRequested(const QString &entryPath);
+    void deleteEntryRequested(const QString &entryPath);
     void outlineSymbolActivated(
         const QString &filePath, int line, int column);
 
 private:
     void setupUi();
     void applyStyles();
+    void showTreeContextMenu(const QPoint &position);
+    void showOpenEditorContextMenu(QWidget *item, const QPoint &position);
     QWidget* createSectionHeader(const QString &title, bool expanded = true);
     
     QString m_rootPath;

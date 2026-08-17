@@ -4,7 +4,31 @@
 #include "Constants.h"
 #include <QScrollArea>
 #include <QFileInfo>
+#include <QFileIconProvider>
+#include <QMenu>
 #include <QMouseEvent>
+#include <QStyle>
+
+namespace {
+
+class QalamFileIconProvider final : public QFileIconProvider {
+public:
+    QIcon icon(const QFileInfo &info) const override
+    {
+        if (info.isDir()) {
+            return QIcon(QStringLiteral(":/icons/resources/folder.svg"));
+        }
+
+        const QString suffix = info.suffix().toLower();
+        if (suffix == QStringLiteral("baa") or
+            suffix == QStringLiteral("baahd")) {
+            return QIcon(QStringLiteral(":/icons/resources/file-new.svg"));
+        }
+        return QFileIconProvider::icon(info);
+    }
+};
+
+}
 
 QalamExplorerView::QalamExplorerView(QWidget *parent)
     : QWidget(parent)
@@ -41,6 +65,7 @@ void QalamExplorerView::setupUi()
     
     // Tree view for folder contents
     m_fileSystemModel = new QFileSystemModel(this);
+    m_fileSystemModel->setIconProvider(new QalamFileIconProvider());
     m_fileSystemModel->setRootPath("");
     m_fileSystemModel->setFilter(QDir::AllDirs | QDir::Files | QDir::NoDotAndDotDot);
     
@@ -50,6 +75,7 @@ void QalamExplorerView::setupUi()
     m_treeView->setAnimated(true);
     m_treeView->setIndentation(12);
     m_treeView->setExpandsOnDoubleClick(true);
+    m_treeView->setContextMenuPolicy(Qt::CustomContextMenu);
     
     // Hide size, type, date columns
     m_treeView->hideColumn(1);
@@ -64,6 +90,8 @@ void QalamExplorerView::setupUi()
             emit fileDoubleClicked(filePath);
         }
     });
+    connect(m_treeView, &QTreeView::customContextMenuRequested,
+            this, &QalamExplorerView::showTreeContextMenu);
     
     m_mainLayout->addWidget(m_folderHeader);
     m_mainLayout->addWidget(m_treeView, 2);
@@ -207,12 +235,17 @@ void QalamExplorerView::addOpenEditor(const QString &filePath, bool modified)
     
     // Click to switch to file
     item->installEventFilter(this);
+    item->setContextMenuPolicy(Qt::CustomContextMenu);
 
     connect(closeBtn, &QPushButton::clicked, this, [this, item]() {
         const QString path = item->property("filePath").toString();
         if (!path.isEmpty()) {
             emit openEditorCloseRequested(path);
         }
+    });
+    connect(item, &QWidget::customContextMenuRequested, this,
+            [this, item](const QPoint &position) {
+        showOpenEditorContextMenu(item, position);
     });
 
     m_openEditorsLayout->addWidget(item);
@@ -268,6 +301,76 @@ void QalamExplorerView::setOutlineSymbols(
 void QalamExplorerView::clearOutlineSymbols()
 {
     if (m_outlineView) m_outlineView->clearSymbols();
+}
+
+void QalamExplorerView::showTreeContextMenu(const QPoint &position)
+{
+    if (m_rootPath.isEmpty()) return;
+
+    const QModelIndex index = m_treeView->indexAt(position);
+    if (index.isValid()) m_treeView->setCurrentIndex(index);
+
+    const QString selectedPath = index.isValid()
+        ? m_fileSystemModel->filePath(index)
+        : m_rootPath;
+    const QFileInfo selectedInfo(selectedPath);
+    const QString directoryPath = selectedInfo.isDir()
+        ? selectedInfo.absoluteFilePath()
+        : selectedInfo.absolutePath();
+
+    QMenu menu(this);
+    menu.setLayoutDirection(Qt::RightToLeft);
+    QAction *newFileAction = menu.addAction(
+        QIcon(QStringLiteral(":/icons/resources/file-new.svg")),
+        QStringLiteral("ملف باء جديد"));
+    QAction *newFolderAction = menu.addAction(
+        QIcon(QStringLiteral(":/icons/resources/folder.svg")),
+        QStringLiteral("مجلد جديد"));
+
+    QAction *renameAction{};
+    QAction *deleteAction{};
+    if (index.isValid()) {
+        menu.addSeparator();
+        renameAction = menu.addAction(QStringLiteral("إعادة التسمية"));
+        deleteAction = menu.addAction(
+            style()->standardIcon(QStyle::SP_TrashIcon),
+            QStringLiteral("حذف"));
+    }
+
+    QAction *chosen = menu.exec(m_treeView->viewport()->mapToGlobal(position));
+    if (chosen == newFileAction) {
+        emit createFileRequested(directoryPath);
+    } else if (chosen == newFolderAction) {
+        emit createFolderRequested(directoryPath);
+    } else if (chosen == renameAction) {
+        emit renameEntryRequested(selectedInfo.absoluteFilePath());
+    } else if (chosen == deleteAction) {
+        emit deleteEntryRequested(selectedInfo.absoluteFilePath());
+    }
+}
+
+void QalamExplorerView::showOpenEditorContextMenu(
+    QWidget *item,
+    const QPoint &position)
+{
+    if (not item) return;
+    const QString path = item->property("filePath").toString();
+    if (path.isEmpty()) return;
+
+    QMenu menu(this);
+    menu.setLayoutDirection(Qt::RightToLeft);
+    QAction *closeAction = menu.addAction(QStringLiteral("إغلاق"));
+    QAction *closeOthersAction = menu.addAction(QStringLiteral("إغلاق البقية"));
+    QAction *closeAllAction = menu.addAction(QStringLiteral("إغلاق الكل"));
+
+    QAction *chosen = menu.exec(item->mapToGlobal(position));
+    if (chosen == closeAction) {
+        emit openEditorCloseRequested(path);
+    } else if (chosen == closeOthersAction) {
+        emit closeOtherEditorsRequested(path);
+    } else if (chosen == closeAllAction) {
+        emit closeAllEditorsRequested();
+    }
 }
 
 bool QalamExplorerView::eventFilter(QObject *watched, QEvent *event)

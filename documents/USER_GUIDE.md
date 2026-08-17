@@ -76,9 +76,16 @@ The embedded console allows you to interact with the system and view compiler ou
 
 ### File Explorer
 The right sidebar shows your project files. You can double-click a file to open
-it or drag and drop files from your system. The **المخطط** section below the
-files shows the hierarchical symbols in the current Baa document. Its results
-follow the current unsaved document version.
+it or drag and drop files from your system. Right-click a file, folder, or empty
+area in the tree to create a Baa file, create a folder, rename the selected
+entry, or delete it after confirmation. Qalam rejects unsafe or non-portable
+names and never applies these operations outside the opened project folder.
+Renaming a file or folder keeps affected open tabs and language analysis on the
+new path. Right-click an open tab or an item under **المحررات المفتوحة** to
+close it, close the other tabs, or close all tabs.
+
+The **المخطط** section below the files shows the hierarchical symbols in the
+current Baa document. Its results follow the current unsaved document version.
 
 ### Project Symbols (`Ctrl+T`)
 Press `Ctrl+T` after the Baa language server is ready. Qalam loads the

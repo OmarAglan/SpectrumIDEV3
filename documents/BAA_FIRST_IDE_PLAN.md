@@ -262,6 +262,12 @@ Acceptance:
 - Surface autosave and recovery failures.
 - Complete keyboard navigation, accessibility labels, and high-contrast states.
 
+Current progress: project search and replacement are complete. The explorer now
+creates Baa files and folders, renames validated entries while keeping open
+documents and language analysis synchronized, and confirms safe in-workspace
+deletion. Tabs provide close, close-others, and close-all actions, and Baa files
+have a dedicated explorer icon.
+
 Acceptance:
 
 - A Baa project can be created and maintained without routine filesystem work

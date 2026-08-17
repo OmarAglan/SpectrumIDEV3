@@ -11,6 +11,7 @@
 
 #include "QalamActivityBar.h"
 #include <QPointer>
+#include <QPoint>
 #include <QStringList>
 #include <QVector>
 
@@ -57,6 +58,7 @@ private slots:
 
     void updateWindowTitle();
     void closeTab(int index);
+    void closeAllTabs();
     void toggleSidebar();
 
     void toggleConsole();
@@ -86,6 +88,11 @@ private slots:
     // VSCode-like component slots
     void onActivityViewChanged(QalamActivityBar::ViewType view);
     void onSidebarFileSelected(const QString &filePath);
+    void createWorkspaceFile(const QString &directoryPath);
+    void createWorkspaceFolder(const QString &directoryPath);
+    void renameWorkspaceEntry(const QString &entryPath);
+    void deleteWorkspaceEntry(const QString &entryPath);
+    void closeOtherEditorsByPath(const QString &filePath);
 
 private:
     QalamEditor *currentEditor();
@@ -107,6 +114,14 @@ private:
     bool applyProjectReplacement(const ProjectReplacementPlan &plan,
                                  QString *error = nullptr);
     void closeEditorByPath(const QString &filePath);
+    bool closeTabAt(int index, bool ensureReplacement);
+    void closeOtherTabsExcept(int index);
+    void showTabContextMenu(const QPoint &position);
+    void removeEditorTabWithoutPrompt(QalamEditor *editor);
+    void ensureEditorSurface();
+    QVector<QalamEditor*> editorsForWorkspaceEntry(
+        const QString &entryPath, bool directory) const;
+    void refreshWorkspaceAfterFileOperation();
     QStringList collectProjectFiles() const;
     bool runCommandById(const QString &commandId);
     void updateProblemsStatusBar();

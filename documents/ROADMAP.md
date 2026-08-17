@@ -232,12 +232,12 @@ One deferred item from Phase 2:
 
 ### 5.5 File Explorer Enhancements
 
-- [ ] 5.5.1 Add context menu to explorer: New File, New Folder, Rename, Delete
-- [ ] 5.5.2 Implement file/folder rename with validation
-- [ ] 5.5.3 Implement file/folder delete with confirmation dialog
-- [ ] 5.5.4 Add "Close All Tabs" action
-- [ ] 5.5.5 Add "Close Other Tabs" action
-- [ ] 5.5.6 Add file icons by extension in explorer tree
+- [x] 5.5.1 Add context menu to explorer: New File, New Folder, Rename, Delete
+- [x] 5.5.2 Implement file/folder rename with validation
+- [x] 5.5.3 Implement file/folder delete with confirmation dialog
+- [x] 5.5.4 Add "Close All Tabs" action
+- [x] 5.5.5 Add "Close Other Tabs" action
+- [x] 5.5.6 Add file icons by extension in explorer tree
 
 ### 5.6 Keyboard Shortcuts
 

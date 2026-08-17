@@ -39,6 +39,12 @@ signals:
                           bool caseSensitive, bool wholeWord, bool regex);
     void openFolderRequested();  // Forward from explorer view
     void openEditorCloseRequested(const QString &filePath);
+    void closeOtherEditorsRequested(const QString &filePath);
+    void closeAllEditorsRequested();
+    void createFileRequested(const QString &directoryPath);
+    void createFolderRequested(const QString &directoryPath);
+    void renameEntryRequested(const QString &entryPath);
+    void deleteEntryRequested(const QString &entryPath);
 
 private:
     void setupUi();
