@@ -71,7 +71,12 @@ int main(int argc, char *argv[])
     app.setQuitOnLastWindowClosed(true);
 
     Qalam *editor = new Qalam(filePath);
+    editor->setWindowTitle(QStringLiteral("قلم"));
     editor->show();
+#ifdef Q_OS_WIN
+    editor->raise();
+    editor->activateWindow();
+#endif
 
     return app.exec();
 }

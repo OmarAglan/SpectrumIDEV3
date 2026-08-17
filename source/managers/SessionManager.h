@@ -2,7 +2,9 @@
 
 #include "QalamEditor.h"
 #include "Constants.h"
+#include <QList>
 #include <QObject>
+#include <QRect>
 #include <QTabWidget>
 
 class QalamExplorerView;
@@ -30,6 +32,11 @@ public:
 
     /// Load session data from settings (caller decides how to apply it)
     SessionData restoreSession() const;
+
+    /// Reject tiny or unreachable persisted window rectangles before restore.
+    static bool isUsableWindowGeometry(
+        const QRect &windowGeometry,
+        const QList<QRect> &availableScreens);
 
     /// Save user preferences (font, theme) from the current editor state
     void savePreferences(QalamEditor *editor, int themeIndex);

@@ -31,7 +31,11 @@ QalamWindow::QalamWindow(QWidget *parent) : QMainWindow(parent) {
     connect(this, &QWidget::windowTitleChanged, m_titleBar, &QalamTitleBar::setTitle);
     
     // 2. Window Flags for Custom Frame
-    setWindowFlags(Qt::FramelessWindowHint | Qt::WindowSystemMenuHint | Qt::WindowMinimizeButtonHint | Qt::WindowMaximizeButtonHint);
+    setWindowFlags(Qt::Window
+                   | Qt::FramelessWindowHint
+                   | Qt::WindowSystemMenuHint
+                   | Qt::WindowMinimizeButtonHint
+                   | Qt::WindowMaximizeButtonHint);
 }
 
 void QalamWindow::setCustomMenuBar(QWidget *menu) {

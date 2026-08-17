@@ -45,6 +45,31 @@ SessionManager::SessionData SessionManager::restoreSession() const
     return data;
 }
 
+bool SessionManager::isUsableWindowGeometry(
+    const QRect &windowGeometry,
+    const QList<QRect> &availableScreens)
+{
+    constexpr int minimumWidth = 640;
+    constexpr int minimumHeight = 480;
+    constexpr int minimumVisibleWidth = 160;
+    constexpr int minimumVisibleHeight = 80;
+
+    if (windowGeometry.width() < minimumWidth
+        or windowGeometry.height() < minimumHeight) {
+        return false;
+    }
+
+    for (const QRect &screen : availableScreens) {
+        const QRect visible = windowGeometry.intersected(screen);
+        if (visible.width() >= minimumVisibleWidth
+            and visible.height() >= minimumVisibleHeight) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 void SessionManager::savePreferences(QalamEditor *editor, int themeIndex)
 {
     if (not editor) return;

@@ -65,9 +65,10 @@ Production packages build or consume pinned standalone Baa-LSP, Baa, and Nazm
 revisions, place them under `baa-lsp/` and `baa/` beside Qalam, and verify all
 four programs with external Qt and MinGW paths removed. The bundled compiler,
 Arabic assembler, runtime archive, and standard library make editor intelligence
-and object generation functional immediately. Final native linking still needs
-a supported host linker until the versioned Baa SDK/toolchain track lands;
-Takween remains separately discoverable.
+and native executable generation functional immediately. The portable Windows
+package includes one coherent relocatable GCC/LD toolchain and does not select
+an arbitrary linker from the host `PATH`; Takween remains separately
+discoverable.
 
 ### Linux
 

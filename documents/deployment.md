@@ -103,6 +103,12 @@ To verify a built or packaged executable with no Qt or MinGW directories on
   -Nazm .\dist\Qalam-win64\baa\نظم.exe
 ```
 
+The verifier removes external Qt and MinGW directories from `PATH`, starts the
+real Windows platform plugin, and requires a titled native Qalam window with a
+usable geometry. It then verifies Baa-LSP and the bundled Baa → Nazm → GCC/LD
+compile-link-run path. Qt's offscreen backend is not accepted as evidence that
+the desktop application can launch.
+
 ### Option B: manual PowerShell scripts
 
 Use this when Qt 6 with the MinGW kit is already installed:

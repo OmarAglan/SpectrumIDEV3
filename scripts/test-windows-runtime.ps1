@@ -53,10 +53,11 @@ if (!($gccRuntimeCandidates | Where-Object {
 }
 
 $previousPath = $env:Path
+$hadPlatform = Test-Path Env:QT_QPA_PLATFORM
 $previousPlatform = $env:QT_QPA_PLATFORM
 $windowsDirectory = if ($env:SystemRoot) { $env:SystemRoot } else { 'C:\Windows' }
 $env:Path = "$windowsDirectory\System32;$windowsDirectory"
-$env:QT_QPA_PLATFORM = 'offscreen'
+Remove-Item Env:QT_QPA_PLATFORM -ErrorAction SilentlyContinue
 $process = $null
 try {
     if ($LanguageServer) {
@@ -249,12 +250,59 @@ try {
         }
     }
 
+    if (-not ('QalamRuntimeWindowProbe' -as [type])) {
+        Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+
+public static class QalamRuntimeWindowProbe
+{
+    [StructLayout(LayoutKind.Sequential)]
+    public struct Rect
+    {
+        public int Left;
+        public int Top;
+        public int Right;
+        public int Bottom;
+    }
+
+    [DllImport("user32.dll")]
+    public static extern bool GetWindowRect(IntPtr window, out Rect rectangle);
+}
+'@
+    }
+
     $process = Start-Process -FilePath $resolvedExecutable `
         -WindowStyle Hidden `
         -PassThru
-    Start-Sleep -Seconds $StartupSeconds
+    $windowStartupSeconds = [Math]::Max($StartupSeconds, 5)
+    $startupDeadline = [DateTime]::UtcNow.AddSeconds($windowStartupSeconds)
+    do {
+        Start-Sleep -Milliseconds 100
+        $process.Refresh()
+    } while (!$process.HasExited -and
+             $process.MainWindowHandle -eq [IntPtr]::Zero -and
+             [DateTime]::UtcNow -lt $startupDeadline)
+
     if ($process.HasExited) {
         throw "Qalam exited during runtime startup with code $($process.ExitCode)."
+    }
+    if ($process.MainWindowHandle -eq [IntPtr]::Zero) {
+        throw 'Qalam started but created no native Windows application window.'
+    }
+    if ([string]::IsNullOrWhiteSpace($process.MainWindowTitle)) {
+        throw 'Qalam created a Windows application window without an accessible title.'
+    }
+
+    $windowRectangle = New-Object QalamRuntimeWindowProbe+Rect
+    if (-not [QalamRuntimeWindowProbe]::GetWindowRect(
+            $process.MainWindowHandle, [ref]$windowRectangle)) {
+        throw 'Qalam created a window whose geometry could not be inspected.'
+    }
+    $windowWidth = $windowRectangle.Right - $windowRectangle.Left
+    $windowHeight = $windowRectangle.Bottom - $windowRectangle.Top
+    if ($windowWidth -lt 640 -or $windowHeight -lt 480) {
+        throw "Qalam restored an unusable ${windowWidth}x${windowHeight} window."
     }
 } finally {
     if ($process -and !$process.HasExited) {
@@ -262,7 +310,8 @@ try {
         $process.WaitForExit()
     }
     $env:Path = $previousPath
-    $env:QT_QPA_PLATFORM = $previousPlatform
+    if ($hadPlatform) { $env:QT_QPA_PLATFORM = $previousPlatform }
+    else { Remove-Item Env:QT_QPA_PLATFORM -ErrorAction SilentlyContinue }
 }
 
 if ($LanguageServer -and $Compiler -and $Nazm) {

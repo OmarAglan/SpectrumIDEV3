@@ -107,11 +107,17 @@ Qalam::Qalam(const QString& filePath, QWidget *parent)
     QRect screenGeo = screen ? screen->availableGeometry() : QRect(0, 0, 1280, 800);
     const int margin = 100;
     const int widthFixedNum = 6;
-    const int width = qMax(900, screenGeo.size().width() - margin * widthFixedNum);
-    const int height = qMax(600, screenGeo.size().height() - margin);
+    const int width = qBound(640,
+                             screenGeo.size().width() - margin * widthFixedNum,
+                             screenGeo.size().width());
+    const int height = qBound(480,
+                              screenGeo.size().height() - margin,
+                              screenGeo.size().height());
     const int x = screenGeo.left() + qMax(0, (screenGeo.width() - width) / 2);
     const int y = screenGeo.top() + qMax(0, (screenGeo.height() - height) / 2);
+    this->setMinimumSize(640, 480);
     this->setGeometry(x, y, width, height);
+    const QRect defaultWindowGeometry = this->geometry();
     this->setCustomMenuBar(menuBar);
 
     // ===================================================================
@@ -145,7 +151,19 @@ Qalam::Qalam(const QString& filePath, QWidget *parent)
 
         // Restore window geometry
         if (not session.windowGeometry.isEmpty()) {
-            restoreGeometry(session.windowGeometry);
+            QList<QRect> availableScreens;
+            for (QScreen *availableScreen : QGuiApplication::screens()) {
+                if (availableScreen) {
+                    availableScreens.push_back(availableScreen->availableGeometry());
+                }
+            }
+
+            const bool restored = restoreGeometry(session.windowGeometry);
+            if (not restored
+                or not SessionManager::isUsableWindowGeometry(
+                    geometry(), availableScreens)) {
+                setGeometry(defaultWindowGeometry);
+            }
         }
 
         // Restore folder
