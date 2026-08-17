@@ -8,6 +8,8 @@ param(
 
     [string]$Nazm = '',
 
+    [string]$ToolchainRoot = '',
+
     [int]$StartupSeconds = 2
 )
 
@@ -85,6 +87,50 @@ try {
 
     if ($Compiler) {
         $resolvedCompiler = (Resolve-Path -LiteralPath $Compiler).Path
+        $resolvedToolchain = if ($ToolchainRoot) {
+            (Resolve-Path -LiteralPath $ToolchainRoot).Path
+        } else {
+            Join-Path (Split-Path -Parent $resolvedCompiler) 'gcc'
+        }
+        $bundledGcc = Join-Path $resolvedToolchain 'bin\gcc.exe'
+        if (!(Test-Path -LiteralPath $bundledGcc -PathType Leaf)) {
+            throw "Bundled GCC linker driver is missing: $bundledGcc"
+        }
+        $toolchainManifest = Join-Path $resolvedToolchain 'BAA-TOOLCHAIN-MANIFEST.txt'
+        if (!(Test-Path -LiteralPath $toolchainManifest -PathType Leaf)) {
+            throw "Bundled Baa toolchain manifest is missing: $toolchainManifest"
+        }
+        $manifestLines = [IO.File]::ReadAllLines($toolchainManifest)
+        if ($manifestLines -notcontains 'format=baa-portable-toolchain-v1' -or
+            $manifestLines -notcontains 'unicode_paths=direct' -or
+            $manifestLines -notcontains 'pei386_runtime_relocator=retain') {
+            throw 'Bundled Baa toolchain is not admitted for direct Unicode paths.'
+        }
+
+        $gccProbeInfo = [System.Diagnostics.ProcessStartInfo]::new()
+        $gccProbeInfo.FileName = $bundledGcc
+        $gccProbeInfo.Arguments = '-dumpmachine'
+        $gccProbeInfo.UseShellExecute = $false
+        $gccProbeInfo.CreateNoWindow = $true
+        $gccProbeInfo.RedirectStandardOutput = $true
+        $gccProbeInfo.RedirectStandardError = $true
+        $gccProbe = [System.Diagnostics.Process]::new()
+        $gccProbe.StartInfo = $gccProbeInfo
+        if (!$gccProbe.Start()) { throw 'Bundled GCC linker driver could not be started.' }
+        $gccOutput = $gccProbe.StandardOutput.ReadToEnd().Trim()
+        $gccError = $gccProbe.StandardError.ReadToEnd()
+        $gccProbe.WaitForExit()
+        if ($gccProbe.ExitCode -ne 0 -or $gccOutput -ne 'x86_64-w64-mingw32') {
+            throw "Bundled GCC is not a working x86_64 MinGW toolchain: $gccError"
+        }
+        $gccProbe.Dispose()
+
+        # GCC locates its relocated child programs by prefix, but those child
+        # programs still resolve their runtime DLLs through PATH on Windows.
+        # Prepend only this package's bin directory; the host toolchain remains
+        # absent from the isolated environment.
+        $env:Path = "$(Join-Path $resolvedToolchain 'bin');$env:Path"
+
         $compilerProbeInfo = [System.Diagnostics.ProcessStartInfo]::new()
         $compilerProbeInfo.FileName = $resolvedCompiler
         $compilerProbeInfo.Arguments = '--version'
@@ -147,14 +193,14 @@ try {
             $env:BAA_HOME = Split-Path -Parent $resolvedCompiler
             $env:BAA_NAZM = $resolvedNazm
             $sourcePath = Join-Path $smokeRoot ($smokeFileStem + '.baa')
-            $objectPath = Join-Path $smokeRoot ($smokeFileStem + '.o')
+            $programPath = Join-Path $smokeRoot ($smokeFileStem + '.exe')
             [IO.File]::WriteAllText(
                 $sourcePath,
                 "${integerKeyword} ${entryPoint}() {`n    ${returnKeyword} ${arabicZero}.`n}`n",
                 [Text.UTF8Encoding]::new($false))
             $compileInfo = [System.Diagnostics.ProcessStartInfo]::new()
             $compileInfo.FileName = $resolvedCompiler
-            $compileInfo.Arguments = "-c `"$sourcePath`" -o `"$objectPath`""
+            $compileInfo.Arguments = "`"$sourcePath`" -o `"$programPath`""
             $compileInfo.WorkingDirectory = $smokeRoot
             $compileInfo.UseShellExecute = $false
             $compileInfo.CreateNoWindow = $true
@@ -167,13 +213,31 @@ try {
             $compileError = $compile.StandardError.ReadToEnd()
             $compile.WaitForExit()
             if ($compile.ExitCode -ne 0) {
-                throw "Bundled Baa/Nazm object smoke failed with exit code $($compile.ExitCode):`n$compileOutput`n$compileError"
+                throw "Bundled Baa/Nazm/GCC link smoke failed with exit code $($compile.ExitCode):`n$compileOutput`n$compileError"
             }
-            if (!(Test-Path -LiteralPath $objectPath -PathType Leaf) -or
-                (Get-Item -LiteralPath $objectPath).Length -le 0) {
-                throw 'Bundled Baa/Nazm object smoke produced no object file.'
+            if (!(Test-Path -LiteralPath $programPath -PathType Leaf) -or
+                (Get-Item -LiteralPath $programPath).Length -le 0) {
+                throw 'Bundled Baa/Nazm/GCC link smoke produced no executable.'
             }
             $compile.Dispose()
+
+            $programInfo = [System.Diagnostics.ProcessStartInfo]::new()
+            $programInfo.FileName = $programPath
+            $programInfo.WorkingDirectory = $smokeRoot
+            $programInfo.UseShellExecute = $false
+            $programInfo.CreateNoWindow = $true
+            $programInfo.RedirectStandardOutput = $true
+            $programInfo.RedirectStandardError = $true
+            $program = [System.Diagnostics.Process]::new()
+            $program.StartInfo = $programInfo
+            if (!$program.Start()) { throw 'Linked Baa smoke program could not start.' }
+            $programOutput = $program.StandardOutput.ReadToEnd()
+            $programError = $program.StandardError.ReadToEnd()
+            $program.WaitForExit()
+            if ($program.ExitCode -ne 0) {
+                throw "Linked Baa smoke program failed with exit code $($program.ExitCode):`n$programOutput`n$programError"
+            }
+            $program.Dispose()
         } finally {
             if ($hadBaaHome) { $env:BAA_HOME = $previousBaaHome }
             else { Remove-Item Env:BAA_HOME -ErrorAction SilentlyContinue }
@@ -202,7 +266,7 @@ try {
 }
 
 if ($LanguageServer -and $Compiler -and $Nazm) {
-    Write-Host 'Qalam, Baa-LSP, Baa, and Nazm passed the isolated runtime and object-generation checks.' -ForegroundColor Green
+    Write-Host 'Qalam, Baa-LSP, Baa, Nazm, and bundled GCC passed isolated compile-link-run checks.' -ForegroundColor Green
 } elseif ($LanguageServer) {
     Write-Host 'Qalam and its bundled language server passed the isolated runtime check.' -ForegroundColor Green
 } else {

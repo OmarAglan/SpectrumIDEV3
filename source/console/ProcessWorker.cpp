@@ -30,6 +30,16 @@ bool bundledBaaEnvironment(const QString &program,
 
     *environment = QProcessEnvironment::systemEnvironment();
     const QString compilerHome = programInfo.absolutePath();
+    const QString toolchainBin =
+        QDir(compilerHome).filePath(QStringLiteral("gcc/bin"));
+    if (QFileInfo(toolchainBin).isDir()) {
+        const QString path = environment->value(QStringLiteral("PATH"));
+        environment->insert(
+            QStringLiteral("PATH"),
+            path.isEmpty()
+                ? toolchainBin
+                : toolchainBin + QDir::listSeparator() + path);
+    }
     if (not environment->contains(QStringLiteral("BAA_HOME")) and
         QFileInfo(QDir(compilerHome).filePath(QStringLiteral("stdlib"))).isDir()) {
         environment->insert(QStringLiteral("BAA_HOME"), compilerHome);

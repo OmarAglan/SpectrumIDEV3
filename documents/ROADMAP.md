@@ -329,17 +329,21 @@ One deferred item from Phase 2:
 - [x] 7.2.1a Verify the combined Windows Qalam + Baa-LSP + Baa + Nazm package
   with Qt and MinGW paths removed; require all tooling probes, Qalam startup,
   and Baa-to-Nazm object generation from an Arabic path
+- [x] 7.2.1b Package the complete relocatable MinGW-w64 tree at Baa's explicit
+  `baa/gcc/` discovery path, record its target/version/hash, direct-Unicode
+  admission and licenses, and require an isolated Arabic-path compile-link-run
+  gate with no host GCC/MSYS2
 
 **Cross-platform packaging receipt (2026-08-11):** Windows and Linux combined
 artifacts passed and were uploaded by
 [run 31506739091](https://github.com/OmarAglan/Qalam-IDE/actions/runs/31506739091).
 The current workflow pins Baa-LSP commit
 `162ef31afd6decf1fdce23f3352d948ca2240122` and Baa commit
-`d5ee0c0df7288669f378be24990623f7f0d0f0b0`, with Nazm commit
+`991c51195fef58dcbf3aab8b83ebd6659a6630b2`, with Nazm commit
 `f7fcf8f6d2bf629daf708b3b6028e22c74683ce6`. The earlier combined-artifact
 baseline passed in
 [run 31509433467](https://github.com/OmarAglan/Qalam-IDE/actions/runs/31509433467);
-the compiler/Nazm-bundled inlay-hints candidate requires a new green CI receipt.
+the portable-linker candidate requires a new green CI receipt.
 - [ ] 7.2.2 Add `clang-format --dry-run --Werror` check step
 - [ ] 7.2.3 Add `clang-tidy` static analysis step
 - [ ] 7.2.4 Add build warnings as errors (`-Werror`) for CI builds

@@ -65,6 +65,8 @@ void TestProcessWorker::suppliesBundledBaaHome()
     QTemporaryDir temporary;
     QVERIFY(temporary.isValid());
     QVERIFY(QDir().mkpath(temporary.filePath(QStringLiteral("stdlib"))));
+    const QString toolchainBin = temporary.filePath(QStringLiteral("gcc/bin"));
+    QVERIFY(QDir().mkpath(toolchainBin));
 
 #if defined(Q_OS_WIN)
     const QString compilerPath = temporary.filePath(QStringLiteral("baa.exe"));
@@ -72,7 +74,7 @@ void TestProcessWorker::suppliesBundledBaaHome()
     const QString helperProgram = qEnvironmentVariable("ComSpec");
     const QStringList helperArguments = {
         QStringLiteral("/d"), QStringLiteral("/s"), QStringLiteral("/c"),
-        QStringLiteral("echo %BAA_HOME%& if \"%BAA_NAZM%\"==\"%1\" (echo MATCH) else (echo MISMATCH)")
+        QStringLiteral("echo %BAA_HOME%& echo %PATH%& if \"%BAA_NAZM%\"==\"%1\" (echo MATCH) else (echo MISMATCH)")
             .arg(nazmPath)
     };
 #else
@@ -81,7 +83,7 @@ void TestProcessWorker::suppliesBundledBaaHome()
     const QString helperProgram = QStringLiteral("/bin/sh");
     const QStringList helperArguments = {
         QStringLiteral("-c"),
-        QStringLiteral("printf '%s\\n%s\\n' \"$BAA_HOME\" \"$BAA_NAZM\"")
+        QStringLiteral("printf '%s\\n%s\\n%s\\n' \"$BAA_HOME\" \"$PATH\" \"$BAA_NAZM\"")
     };
 #endif
     QVERIFY(QFileInfo(helperProgram).isExecutable());
@@ -131,13 +133,16 @@ void TestProcessWorker::suppliesBundledBaaHome()
     }
     const QStringList environmentLines =
         combinedOutput.trimmed().split(QLatin1Char('\n'));
-    QCOMPARE(environmentLines.size(), 2);
+    QCOMPARE(environmentLines.size(), 3);
     QCOMPARE(QDir::cleanPath(environmentLines.at(0).trimmed()),
              QDir::cleanPath(temporary.path()));
+    const QString firstPathEntry =
+        environmentLines.at(1).trimmed().section(QDir::listSeparator(), 0, 0);
+    QCOMPARE(QDir::cleanPath(firstPathEntry), QDir::cleanPath(toolchainBin));
 #if defined(Q_OS_WIN)
-    QCOMPARE(environmentLines.at(1).trimmed(), QStringLiteral("MATCH"));
+    QCOMPARE(environmentLines.at(2).trimmed(), QStringLiteral("MATCH"));
 #else
-    QCOMPARE(QDir::cleanPath(environmentLines.at(1).trimmed()),
+    QCOMPARE(QDir::cleanPath(environmentLines.at(2).trimmed()),
              QDir::cleanPath(nazmPath));
 #endif
 }

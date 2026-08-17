@@ -8,6 +8,7 @@ param(
     [string]$BaaSourceDir = '',
     [string]$NazmExecutable = $env:QALAM_NAZM_PATH,
     [string]$NazmSourceDir = '',
+    [string]$GccRoot = $env:QALAM_GCC_ROOT,
     [switch]$SkipLanguageServer,
     [switch]$SkipCompiler,
     [switch]$SkipBuild
@@ -19,7 +20,10 @@ $nazmArabicExecutableName =
 Set-Location (Split-Path -Parent $PSScriptRoot)
 
 if (!$SkipBuild) {
-    & (Join-Path $PSScriptRoot 'build-windows.ps1') -Configuration Release -QtRoot $QtRoot
+    & (Join-Path $PSScriptRoot 'build-windows.ps1') `
+        -Configuration Release `
+        -QtRoot $QtRoot `
+        -BuildDir $BuildDir
 }
 
 $exe = Join-Path $BuildDir 'qalam/Qalam.exe'
@@ -110,6 +114,7 @@ development package.
 
 $packagedCompiler = $null
 $packagedNazm = $null
+$packagedToolchain = $null
 if (!$SkipCompiler) {
     $compilerCandidates = [System.Collections.Generic.List[string]]::new()
     if ($BaaCompilerExecutable) { $compilerCandidates.Add($BaaCompilerExecutable) }
@@ -200,6 +205,55 @@ Build the sibling Nazm repository or pass -NazmExecutable/-NazmSourceDir.
     }
     $packagedNazm = Join-Path $compilerDirectory $nazmArabicExecutableName
     Copy-Item -LiteralPath $resolvedNazm -Destination $packagedNazm -Force
+
+    $gccCandidates = [System.Collections.Generic.List[string]]::new()
+    if ($GccRoot) { $gccCandidates.Add($GccRoot) }
+    $gccCandidates.Add((Split-Path -Parent $compilerRuntimeDir))
+    $resolvedGccRoot = $gccCandidates |
+        Where-Object {
+            $_ -and
+            (Test-Path -LiteralPath (Join-Path $_ 'bin\gcc.exe') -PathType Leaf) -and
+            (Test-Path -LiteralPath (Join-Path $_ 'lib') -PathType Container) -and
+            (Test-Path -LiteralPath (Join-Path $_ 'libexec') -PathType Container) -and
+            (Test-Path -LiteralPath (Join-Path $_ 'x86_64-w64-mingw32') -PathType Container) -and
+            (Test-Path -LiteralPath (Join-Path $_ 'licenses') -PathType Container)
+        } |
+        ForEach-Object { (Resolve-Path -LiteralPath $_).Path } |
+        Select-Object -First 1
+    if (!$resolvedGccRoot) {
+        throw @'
+A complete relocatable MinGW-w64 GCC root was not found, so the Qalam package
+would still depend on an arbitrary linker from PATH. Pass -GccRoot or set
+QALAM_GCC_ROOT to a directory containing bin, lib, libexec, licenses, and the
+x86_64-w64-mingw32 target tree.
+'@
+    }
+
+    $sourceGcc = Join-Path $resolvedGccRoot 'bin\gcc.exe'
+    $gccTarget = (& $sourceGcc -dumpmachine | Out-String).Trim()
+    $gccVersion = (& $sourceGcc -dumpfullversion | Out-String).Trim()
+    if ($LASTEXITCODE -ne 0 -or $gccTarget -ne 'x86_64-w64-mingw32' -or !$gccVersion) {
+        throw "Unsupported portable GCC toolchain at $resolvedGccRoot."
+    }
+
+    $packagedToolchain = Join-Path $compilerDirectory 'gcc'
+    New-Item -ItemType Directory -Path $packagedToolchain -Force | Out-Null
+    Get-ChildItem -LiteralPath $resolvedGccRoot -Force |
+        Copy-Item -Destination $packagedToolchain -Recurse -Force
+
+    $gccHash = (Get-FileHash -LiteralPath $sourceGcc -Algorithm SHA256).Hash
+    [IO.File]::WriteAllLines(
+        (Join-Path $packagedToolchain 'BAA-TOOLCHAIN-MANIFEST.txt'),
+        @(
+            'format=baa-portable-toolchain-v1',
+            "target=$gccTarget",
+            "gcc_version=$gccVersion",
+            "gcc_sha256=$gccHash",
+            'unicode_paths=direct',
+            'pei386_runtime_relocator=retain',
+            'purpose=Baa hosted linking until the native Nazm linker is admitted'
+        ),
+        [Text.UTF8Encoding]::new($false))
 }
 
 $runtimeTestArguments = @{
@@ -212,6 +266,7 @@ if ($packagedLanguageServer) {
 if ($packagedCompiler) {
     $runtimeTestArguments.Compiler = $packagedCompiler
     $runtimeTestArguments.Nazm = $packagedNazm
+    $runtimeTestArguments.ToolchainRoot = $packagedToolchain
 }
 & (Join-Path $PSScriptRoot 'test-windows-runtime.ps1') @runtimeTestArguments
 
@@ -226,4 +281,5 @@ if ($packagedLanguageServer) {
 if ($packagedCompiler) {
     Write-Host "  Baa: $packagedCompiler"
     Write-Host "  Nazm: $packagedNazm"
+    Write-Host "  GCC: $packagedToolchain"
 }

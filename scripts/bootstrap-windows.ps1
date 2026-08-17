@@ -489,6 +489,7 @@ server. Clone it beside Qalam, pass -BaaLspSourceDir/-BaaLspExecutable, or use
         -BaaSourceDir $BaaSourceDir `
         -NazmExecutable $NazmExecutable `
         -NazmSourceDir $NazmSourceDir `
+        -GccRoot (Split-Path -Parent $mingwBin) `
         -SkipLanguageServer:$SkipLanguageServer `
         -SkipCompiler:$SkipCompiler `
         -SkipBuild

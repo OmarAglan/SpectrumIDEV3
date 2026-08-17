@@ -57,8 +57,10 @@ The bootstrap script does the full local setup:
 8. Builds Baa and its runtime from a sibling checkout (or consumes an explicit
    compiler), then copies the matching stdlib.
 9. Builds the pinned Nazm assembler and installs its Arabic executable beside Baa.
-10. Runs the packaging and isolated-runtime/object-generation checks to create a
-    portable ZIP.
+10. Copies the complete relocatable MinGW-w64 kit under `baa/gcc/`, including
+    its licenses, so Baa never selects an arbitrary linker from `PATH`.
+11. Runs isolated compile-link-run checks with external Qt, MinGW, and MSYS2
+    paths removed, then creates the portable ZIP.
 
 Outputs:
 
@@ -82,12 +84,13 @@ Useful options:
 ```
 
 The packaging script runs `windeployqt.exe` for Qt libraries and plugins, then
-copies the exact MinGW runtime recorded in the build's `CMakeCache.txt`.
-It never selects compiler DLLs from the caller's `PATH`. A production package
-requires Baa-LSP at `baa-lsp/baa-lsp.exe` and the matching Baa compiler, Nazm
-assembler, `libbaa_runtime.a`, and stdlib under `baa/`, which Qalam discovers
-automatically. `-SkipLanguageServer` and `-SkipCompiler` exist only for
-intentional development packages.
+copies the exact MinGW runtime recorded in the build's `CMakeCache.txt`. It also
+copies that build's complete relocatable GCC/MinGW-w64 root under `baa/gcc/`.
+It never selects compiler DLLs or a linker from the caller's `PATH`. A
+production package requires Baa-LSP at `baa-lsp/baa-lsp.exe` and the matching
+Baa compiler, Nazm assembler, `libbaa_runtime.a`, stdlib, and linker toolchain
+under `baa/`, which Qalam and Baa discover automatically. `-SkipLanguageServer`
+and `-SkipCompiler` exist only for intentional development packages.
 
 To verify a built or packaged executable with no Qt or MinGW directories on
 `PATH`:
@@ -113,7 +116,8 @@ $env:QALAM_QT_DIR = "C:\Qt\6.10.2\mingw_64"
   -BaaLspExecutable "..\Baa-LSP\build\windows-release\baa-lsp.exe" `
   -BaaCompilerExecutable "..\Baa\build\windows-release\baa.exe" `
   -BaaSourceDir "..\Baa" `
-  -NazmExecutable "..\Nazm\build\windows-release\نظم.exe"
+  -NazmExecutable "..\Nazm\build\windows-release\نظم.exe" `
+  -GccRoot "C:\Qt\Tools\mingw1310_64"
 ```
 
 ### Option C: CMake presets
@@ -171,7 +175,20 @@ Qalam-win64/
     نظم.exe
     libbaa_runtime.a
     stdlib/
+    gcc/
+      bin/
+      lib/
+      libexec/
+      licenses/
+      x86_64-w64-mingw32/
 ```
+
+`baa/gcc/BAA-TOOLCHAIN-MANIFEST.txt` records the target, GCC version, SHA-256
+identity, and admitted direct-Unicode path mode of the packaged linker driver.
+The portable acceptance gate removes all external toolchain paths, compiles a
+source from an Arabic-named temporary directory, links it with this tree, and
+executes the result. A package that merely produces an object file is not
+considered portable.
 
 ---
 
@@ -276,9 +293,10 @@ Qalam + Baa-LSP + Baa + Nazm artifacts. Windows uploads a runtime-complete ZIP;
 Linux uploads a `.tar.gz` whose Qt libraries are provided by the target distribution.
 The workflow pins Baa-LSP commit
 `162ef31afd6decf1fdce23f3352d948ca2240122` and Baa commit
-`d5ee0c0df7288669f378be24990623f7f0d0f0b0`, plus Nazm commit
+`991c51195fef58dcbf3aab8b83ebd6659a6630b2`, plus Nazm commit
 `f7fcf8f6d2bf629daf708b3b6028e22c74683ce6`, including compiler-owned
-parameter hints and an Arabic-only assembler path in the portable payload.
+parameter hints, an Arabic-only assembler path, and the admitted portable
+Windows linker toolchain in the payload.
 
 The admitted receipt is
 [run 31509433467](https://github.com/OmarAglan/Qalam-IDE/actions/runs/31509433467),

@@ -222,9 +222,16 @@ load-time protection remains automatic.
 - CMake 3.21+
 
 GitHub Actions keeps the Windows portable artifact on Qt 6.10.2 with its matching
-MinGW kit. The Linux compatibility job intentionally builds against Ubuntu's Qt 6
-development packages and runs the same test suite offscreen, exercising the stated
-Qt 6.x source-compatibility floor without depending on Qt download mirror metadata.
+MinGW kit. The same relocatable kit is copied into the artifact under
+`baa/gcc/`, where Baa's compiler driver discovers it before considering
+`PATH`. Its versioned Baa toolchain manifest admits the measured direct-Unicode
+path mode, avoiding dependence on optional Windows 8.3 aliases for Arabic
+package locations. The Windows package gate removes external toolchain paths
+and requires an Arabic-path compile, link, and successful execution, so object
+generation alone cannot certify portability. The Linux compatibility job intentionally
+builds against Ubuntu's Qt 6 development packages and runs the same test suite
+offscreen, exercising the stated Qt 6.x source-compatibility floor without
+depending on Qt download mirror metadata.
 
 ### Build Commands
 
