@@ -20,7 +20,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: OmarAglan/Baa
-          ref: 991c51195fef58dcbf3aab8b83ebd6659a6630b2
+          ref: ccf37c534f88a83598536c483f7c8afbbdd6f073
           path: ecosystem/Baa
       - uses: actions/checkout@v4
         with:
@@ -51,7 +51,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: OmarAglan/Baa
-          ref: 991c51195fef58dcbf3aab8b83ebd6659a6630b2
+          ref: ccf37c534f88a83598536c483f7c8afbbdd6f073
           path: ecosystem/Baa
       - uses: actions/checkout@v4
         with:
