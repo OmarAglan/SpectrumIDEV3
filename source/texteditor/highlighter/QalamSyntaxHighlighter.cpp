@@ -1,5 +1,7 @@
 #include "QalamSyntaxHighlighter.h"
 
+#include <QRegularExpression>
+
 namespace {
 TokenType formatTypeForSemanticToken(const QString &type)
 {
@@ -54,7 +56,29 @@ void QalamSyntaxHighlighter::clearSemanticTokens()
     rehighlight();
 }
 
-void QalamSyntaxHighlighter::highlightBlock(const QString& text) {
+void QalamSyntaxHighlighter::setLanguageMode(QalamLanguageMode mode)
+{
+    if (m_languageMode == mode) return;
+    m_languageMode = mode;
+    semanticTokensByLine.clear();
+    rehighlight();
+}
+
+void QalamSyntaxHighlighter::highlightBlock(const QString& text)
+{
+    if (m_languageMode == QalamLanguageMode::Nazm) {
+        highlightNazmBlock(text);
+        return;
+    }
+    if (m_languageMode == QalamLanguageMode::PlainText) {
+        setCurrentBlockState(StateMasks::Normal);
+        return;
+    }
+    highlightBaaBlock(text);
+}
+
+void QalamSyntaxHighlighter::highlightBaaBlock(const QString &text)
+{
     int startState = previousBlockState();
     if (startState == -1) startState = StateMasks::Normal;
 
@@ -83,4 +107,75 @@ void QalamSyntaxHighlighter::highlightBlock(const QString& text) {
     }
 
     setCurrentBlockState(lexer->getFinalState());
+}
+
+void QalamSyntaxHighlighter::highlightNazmBlock(const QString &text)
+{
+    setCurrentBlockState(StateMasks::Normal);
+    auto applyMatches = [this, &text](const QRegularExpression &pattern,
+                                     TokenType type,
+                                     int capture = 0) {
+        const auto format = currentThemeFormats.constFind(type);
+        if (format == currentThemeFormats.cend()) return;
+        QRegularExpressionMatchIterator matches = pattern.globalMatch(text);
+        while (matches.hasNext()) {
+            const QRegularExpressionMatch match = matches.next();
+            if (match.capturedStart(capture) >= 0) {
+                setFormat(match.capturedStart(capture),
+                          match.capturedLength(capture),
+                          format.value());
+            }
+        }
+    };
+
+    static const QRegularExpression directive(
+        QStringLiteral(R"((?:^|\s)(\.[\p{L}\p{N}_]+))"));
+    static const QRegularExpression number(
+        QStringLiteral(R"((?<![\p{L}_])[+-]?(?:٠[xX][٠-٩A-Fa-f]+|٠[bB][٠-١]+|0[xX][0-9A-Fa-f]+|0[bB][01]+|[٠-٩]+|[0-9]+))"));
+    static const QRegularExpression registerName(
+        QStringLiteral(R"(((?:سجل|مؤشر|فهرس)_[\p{L}\p{N}_]+))"));
+    static const QRegularExpression label(
+        QStringLiteral(R"(^\s*([\p{L}_][\p{L}\p{N}_]*)(?=\s*:))"));
+    static const QRegularExpression instruction(
+        QStringLiteral(R"(^\s*([\p{L}_][\p{L}\p{N}_]*)(?=\s|$))"));
+    static const QRegularExpression stringLiteral(
+        QStringLiteral(R"("(?:\\.|[^"\\])*")"));
+    static const QRegularExpression operators(QStringLiteral(R"([\[\]+\-,:،])"));
+
+    applyMatches(directive, TokenType::Preprocessor, 1);
+    applyMatches(number, TokenType::Number);
+    applyMatches(registerName, TokenType::Identifier, 1);
+    applyMatches(label, TokenType::Function, 1);
+    if (not text.trimmed().startsWith(QLatin1Char('.'))) {
+        applyMatches(instruction, TokenType::Keyword, 1);
+    }
+    applyMatches(operators, TokenType::Operator);
+    applyMatches(stringLiteral, TokenType::String);
+
+    bool inString = false;
+    bool escaped = false;
+    int commentStart = -1;
+    for (int index = 0; index < text.size(); ++index) {
+        const QChar character = text.at(index);
+        if (escaped) {
+            escaped = false;
+            continue;
+        }
+        if (inString and character == QLatin1Char('\\')) {
+            escaped = true;
+            continue;
+        }
+        if (character == QLatin1Char('"')) {
+            inString = not inString;
+            continue;
+        }
+        if (not inString and character == QLatin1Char(';')) {
+            commentStart = index;
+            break;
+        }
+    }
+    const auto commentFormat = currentThemeFormats.constFind(TokenType::Comment);
+    if (commentStart >= 0 and commentFormat != currentThemeFormats.cend()) {
+        setFormat(commentStart, text.size() - commentStart, commentFormat.value());
+    }
 }

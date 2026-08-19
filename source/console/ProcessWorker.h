@@ -3,6 +3,7 @@
 #include <QObject>
 #include <QStringList>
 #include <QProcess>
+#include <QProcessEnvironment>
 #include <QTimer>
 #include <QMutex>
 
@@ -17,7 +18,8 @@ public:
                            const QString &followUpProgram = QString(),
                            const QStringList &followUpArgs = {},
                            const QString &followUpWorkingDir = QString(),
-                           const QString &followUpHeading = QString());
+                           const QString &followUpHeading = QString(),
+                           const QProcessEnvironment &environment = {});
 
 signals:
     void outputReady(const QString &text);
@@ -44,6 +46,7 @@ private:
     QStringList followUpArgs{};
     QString followUpWorkingDir{};
     QString followUpHeading{};
+    QProcessEnvironment processEnvironment{};
     QProcess *process{};
     QString outputBuffer{};
     QString errorBuffer{};

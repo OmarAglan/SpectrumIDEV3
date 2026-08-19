@@ -102,6 +102,7 @@ Qalam::Qalam(const QString& filePath, QWidget *parent)
     m_fileManager = new FileManager(tabWidget, this, this);
     m_buildManager = new BuildManager(this);
     m_languageClient = new BaaLanguageClient(this);
+    m_languageClient->setCompilerProgram(BuildManager::resolveCompilerProgram());
     m_languageClient->setTakweenProgram(BuildManager::resolveTakweenProgram());
     m_sessionManager = new SessionManager(tabWidget, this);
     m_commandRegistry = new CommandRegistry(this);
@@ -974,6 +975,17 @@ void Qalam::openSettings() {
             if (editor) editor->updateHighlighterTheme(theme);
         }
     }, Qt::UniqueConnection);
+    connect(setting, &QalamSettings::toolPathsChanged, this, [this]() {
+        if (not m_languageClient) return;
+        m_languageClient->stop();
+        m_languageClient->setCompilerProgram(BuildManager::resolveCompilerProgram());
+        m_languageClient->setTakweenProgram(BuildManager::resolveTakweenProgram());
+        scheduleEditorAnalysis(currentEditor());
+        if (m_layoutManager and m_layoutManager->statusBar()) {
+            m_layoutManager->statusBar()->showMessage(
+                QStringLiteral("حُدّثت مسارات أدوات منظومة باء"), 3500);
+        }
+    }, Qt::UniqueConnection);
  
     setting->show();
 }
@@ -1079,6 +1091,13 @@ void Qalam::runBaa() {
         if (filePath.isEmpty() or editor->document()->isModified()) return;
     }
 
+    if (not BaaLanguageClient::isBaaSourcePath(filePath) and
+        not BuildManager::isNazmSourcePath(filePath)) {
+        QMessageBox::information(this, QStringLiteral("تشغيل"),
+                                 QStringLiteral("يمكن تشغيل ملفات باء أو نظم فقط."));
+        return;
+    }
+
     if (not BuildManager::findTakweenProjectRoot(filePath).isEmpty()) {
         runTakweenProjectCommand("run");
         return;
@@ -1105,6 +1124,24 @@ void Qalam::runBaa() {
 
 void Qalam::buildTakweenProject()
 {
+    QalamEditor *editor = currentEditor();
+    if (not editor) return;
+    QString filePath = editor->currentFilePath();
+    if (filePath.isEmpty() or editor->document()->isModified()) {
+        m_fileManager->saveFile();
+        filePath = editor->currentFilePath();
+        if (filePath.isEmpty() or editor->document()->isModified()) return;
+    }
+    if (BuildManager::findTakweenProjectRoot(filePath).isEmpty() and
+        BuildManager::isNazmSourcePath(filePath)) {
+        auto *panelArea = m_layoutManager->panelArea();
+        if (not panelArea) return;
+        panelArea->setCurrentTab(QalamPanelArea::Tab::Terminal);
+        panelArea->show();
+        panelArea->setCollapsed(false);
+        m_buildManager->buildNazm(filePath, panelArea->terminal());
+        return;
+    }
     runTakweenProjectCommand("build");
 }
 

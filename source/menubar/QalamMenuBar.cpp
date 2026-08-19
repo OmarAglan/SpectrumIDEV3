@@ -25,7 +25,7 @@ QalamMenuBar::QalamMenuBar(QWidget* parent) : QMenuBar(parent) {
     SettingsAction = new QAction("الإعدادات", parent);
     exitAction = new QAction("خروج", parent);
 
-    buildAction = new QAction("بناء مشروع تكوين", parent);
+    buildAction = new QAction("بناء المشروع أو ملف نظم", parent);
     runAction = new QAction("تشغيل", parent);
     testAction = new QAction("اختبار مشروع تكوين", parent);
     cleanAction = new QAction("تنظيف مشروع تكوين", parent);

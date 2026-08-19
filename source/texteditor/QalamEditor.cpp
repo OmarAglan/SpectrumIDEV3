@@ -155,6 +155,17 @@ QString QalamEditor::currentFilePath() const {
 void QalamEditor::setFilePath(const QString &path) {
     filePath = path;
     setProperty("filePath", path);
+    if (highlighter) {
+        if (path.endsWith(QStringLiteral(".نظم"), Qt::CaseInsensitive)) {
+            highlighter->setLanguageMode(QalamLanguageMode::Nazm);
+        } else if (path.endsWith(QStringLiteral(".baa"), Qt::CaseInsensitive) or
+                   path.endsWith(QStringLiteral(".baahd"), Qt::CaseInsensitive) or
+                   path.isEmpty()) {
+            highlighter->setLanguageMode(QalamLanguageMode::Baa);
+        } else {
+            highlighter->setLanguageMode(QalamLanguageMode::PlainText);
+        }
+    }
     if (m_autoSave) {
         m_autoSave->filePath = path;
     }

@@ -1,5 +1,10 @@
 #include "QalamSettings.h"
 #include "../../qalam/Constants.h"
+#include "ToolchainDiscovery.h"
+
+#include <QFileDialog>
+#include <QFileInfo>
+#include <QGridLayout>
 
 QalamSettings::QalamSettings(QWidget* parent) : QWidget(parent) {
     setWindowTitle("الإعدادات");
@@ -14,7 +19,7 @@ QalamSettings::QalamSettings(QWidget* parent) : QWidget(parent) {
     stackedWidget = new QStackedWidget();
 
     createCategory("المحرر", "إعدادات مظهر المحرر");
-    // createCategory("متقدم", "الإعداد المتقدمة");
+    createCategory("الأدوات", "مسارات أدوات منظومة باء وحالة اكتشافها");
 
 
     optionsLayout->setAlignment(Qt::AlignTop);
@@ -40,7 +45,9 @@ void QalamSettings::closeEvent(QCloseEvent* event) {
     settings.setValue(Constants::SettingsKeyFontSize, fontSpin->value());
     settings.setValue(Constants::SettingsKeyFontType, fontCombo->currentText());
     settings.setValue(Constants::SettingsKeyTheme, themeCombo->currentIndex());
+    saveToolPaths();
     settings.sync();
+    emit toolPathsChanged();
 
     // emit windowClosed();
     // event->accept();
@@ -86,13 +93,149 @@ void QalamSettings::createCategory(const QString& name, const QString& descripti
     // Add category-specific content
     if (name == "المحرر") {
         createAppearancePage(pageLayout);
-    } else if (name == "متقدم") {
-        // createFontsPage(pageLayout);
+    } else if (name == "الأدوات") {
+        createToolsPage(pageLayout);
     }
 
     // Add page to stacked widget
     stackedWidget->addWidget(page);
     categories.append(btn);
+}
+
+void QalamSettings::createToolsPage(QVBoxLayout *layout)
+{
+    auto *group = new QGroupBox(QStringLiteral("أدوات البناء"));
+    group->setStyleSheet(
+        "QGroupBox { border: 1px solid gray; border-radius: 6px; margin-top: 2.0ex;}"
+        " QGroupBox::title { subcontrol-origin: margin; padding: 0 2px; left: 10px; }");
+    auto *grid = new QGridLayout(group);
+    grid->setColumnStretch(1, 1);
+
+    QSettings settings(Constants::OrgName, Constants::AppName);
+    auto addToolRow = [this, grid, &settings](
+        int row,
+        const QString &label,
+        QalamToolKind kind,
+        QLineEdit **editor,
+        QLabel **status) {
+        auto *pathEdit = new QLineEdit;
+        pathEdit->setMinimumHeight(36);
+        pathEdit->setClearButtonEnabled(true);
+        pathEdit->setLayoutDirection(Qt::LeftToRight);
+        pathEdit->setText(settings.value(ToolchainDiscovery::settingsKey(kind)).toString());
+        pathEdit->setPlaceholderText(QStringLiteral("اكتشاف تلقائي من متغير البيئة ثم PATH"));
+
+        auto *browse = new QPushButton(QStringLiteral("اختيار…"));
+        browse->setMinimumHeight(36);
+        connect(browse, &QPushButton::clicked, this,
+                [this, kind, pathEdit]() { chooseToolPath(kind, pathEdit); });
+        connect(pathEdit, &QLineEdit::textChanged, this,
+                [this]() { refreshToolHealth(); });
+
+        auto *statusLabel = new QLabel;
+        statusLabel->setWordWrap(true);
+        statusLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
+
+        grid->addWidget(new QLabel(label), row * 2, 0);
+        grid->addWidget(pathEdit, row * 2, 1);
+        grid->addWidget(browse, row * 2, 2);
+        grid->addWidget(statusLabel, row * 2 + 1, 1, 1, 2);
+        *editor = pathEdit;
+        *status = statusLabel;
+    };
+
+    addToolRow(0, QStringLiteral("مصرّف باء:"), QalamToolKind::Baa,
+               &baaPathEdit, &baaStatusLabel);
+    addToolRow(1, QStringLiteral("نظام تكوين:"), QalamToolKind::Takween,
+               &takweenPathEdit, &takweenStatusLabel);
+    addToolRow(2, QStringLiteral("مجمّع نظم:"), QalamToolKind::Nazm,
+               &nazmPathEdit, &nazmStatusLabel);
+
+    auto *hint = new QLabel(QStringLiteral(
+        "اترك الحقل فارغاً للاكتشاف التلقائي. الترتيب: متغير QALAM_*_PATH، "
+        "ثم PATH، ثم حزمة محمولة قديمة. يحفظ قلم المسار المختار فقط ولا ينسخ الأدوات."));
+    hint->setWordWrap(true);
+    hint->setStyleSheet(QStringLiteral("color: #aaaaaa;"));
+
+    auto *refresh = new QPushButton(QStringLiteral("إعادة فحص الأدوات"));
+    refresh->setMinimumHeight(36);
+    connect(refresh, &QPushButton::clicked, this, &QalamSettings::refreshToolHealth);
+
+    layout->addWidget(group);
+    layout->addWidget(hint);
+    layout->addWidget(refresh, 0, Qt::AlignRight);
+    refreshToolHealth();
+}
+
+void QalamSettings::chooseToolPath(QalamToolKind kind, QLineEdit *editor)
+{
+    if (not editor) return;
+    QString initial = editor->text().trimmed();
+    if (not initial.isEmpty()) initial = QFileInfo(initial).absolutePath();
+    const QString chosen = QFileDialog::getOpenFileName(
+        this,
+        QStringLiteral("اختيار %1").arg(QalamToolResolution{kind}.toolLabel()),
+        initial,
+#if defined(Q_OS_WIN)
+        QStringLiteral("ملف تنفيذي (*.exe);;كل الملفات (*)")
+#else
+        QStringLiteral("كل الملفات (*)")
+#endif
+    );
+    if (not chosen.isEmpty()) editor->setText(QDir::toNativeSeparators(chosen));
+}
+
+void QalamSettings::saveToolPaths()
+{
+    if (not baaPathEdit or not takweenPathEdit or not nazmPathEdit) return;
+    QSettings settings(Constants::OrgName, Constants::AppName);
+    settings.setValue(Constants::SettingsKeyCompilerPath, baaPathEdit->text().trimmed());
+    settings.setValue(Constants::SettingsKeyTakweenPath, takweenPathEdit->text().trimmed());
+    settings.setValue(Constants::SettingsKeyNazmPath, nazmPathEdit->text().trimmed());
+    settings.sync();
+}
+
+void QalamSettings::refreshToolHealth()
+{
+    if (not baaPathEdit or not takweenPathEdit or not nazmPathEdit) return;
+
+    QSettings settings(Constants::OrgName, Constants::AppName);
+    const QList<QPair<QString, QString>> previous = {
+        {Constants::SettingsKeyCompilerPath,
+         settings.value(Constants::SettingsKeyCompilerPath).toString()},
+        {Constants::SettingsKeyTakweenPath,
+         settings.value(Constants::SettingsKeyTakweenPath).toString()},
+        {Constants::SettingsKeyNazmPath,
+         settings.value(Constants::SettingsKeyNazmPath).toString()}
+    };
+    settings.setValue(Constants::SettingsKeyCompilerPath, baaPathEdit->text().trimmed());
+    settings.setValue(Constants::SettingsKeyTakweenPath, takweenPathEdit->text().trimmed());
+    settings.setValue(Constants::SettingsKeyNazmPath, nazmPathEdit->text().trimmed());
+    settings.sync();
+
+    const QList<QalamToolResolution> resolutions = ToolchainDiscovery::resolveAll();
+    const QList<QLabel *> labels = {baaStatusLabel, takweenStatusLabel, nazmStatusLabel};
+    for (qsizetype index = 0; index < resolutions.size(); ++index) {
+        const QalamToolResolution &resolution = resolutions.at(index);
+        QLabel *label = labels.at(index);
+        if (resolution.isAvailable()) {
+            label->setText(QStringLiteral("✓ جاهز من %1: %2")
+                               .arg(resolution.sourceLabel(),
+                                    QDir::toNativeSeparators(resolution.program)));
+            label->setStyleSheet(QStringLiteral("color: #73c991;"));
+        } else {
+            const QString requested = resolution.requestedProgram.isEmpty()
+                ? QStringLiteral("لم يُعثر على ملف تنفيذي")
+                : QDir::toNativeSeparators(resolution.requestedProgram);
+            label->setText(QStringLiteral("✗ غير جاهز: %1").arg(requested));
+            label->setStyleSheet(QStringLiteral("color: #f14c4c;"));
+        }
+    }
+
+    for (const auto &entry : previous) {
+        settings.setValue(entry.first, entry.second);
+    }
+    settings.sync();
 }
 
 void QalamSettings::createAppearancePage(QVBoxLayout* layout) {

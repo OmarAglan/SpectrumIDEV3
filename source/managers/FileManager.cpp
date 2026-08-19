@@ -159,7 +159,7 @@ void FileManager::openFile(QString filePath)
 {
     if (filePath.isEmpty()) {
         filePath = QFileDialog::getOpenFileName(m_parentWindow, "فتح ملف", "",
-                                                 "ملف باء (*.baa *.baahd);;Text Files (*.txt);;All Files (*)");
+                                                 "مصادر باء ونظم (*.baa *.baahd *.نظم);;ملف باء (*.baa *.baahd);;ملف نظم (*.نظم);;Text Files (*.txt);;All Files (*)");
     }
 
     if (filePath.isEmpty()) return;
@@ -317,7 +317,7 @@ bool FileManager::saveEditorAs(QalamEditor *editor)
     QString currentPath = oldPath;
     QString currentName = currentPath.isEmpty() ? "ملف جديد.baa" : QFileInfo(currentPath).fileName();
     QString fileName = QFileDialog::getSaveFileName(m_parentWindow, "حفظ الملف", currentName,
-                                                     "ملف باء (*.baa);;مكتبة باء (*.baahd);;Text Files (*.txt);;All Files (*)");
+                                                     "ملف باء (*.baa);;مكتبة باء (*.baahd);;ملف نظم (*.نظم);;Text Files (*.txt);;All Files (*)");
 
     if (fileName.isEmpty()) return false;
 

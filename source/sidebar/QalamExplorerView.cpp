@@ -21,7 +21,8 @@ public:
 
         const QString suffix = info.suffix().toLower();
         if (suffix == QStringLiteral("baa") or
-            suffix == QStringLiteral("baahd")) {
+            suffix == QStringLiteral("baahd") or
+            suffix == QStringLiteral("نظم")) {
             return QIcon(QStringLiteral(":/icons/resources/file-new.svg"));
         }
         return QFileIconProvider::icon(info);

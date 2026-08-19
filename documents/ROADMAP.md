@@ -75,6 +75,12 @@ One deferred item from Phase 2:
   are not parsed to determine the failure class
 - **Takween project workflow** -- the nearest `مشروع.تكوين` is discovered; explicit
   build/test/clean actions and F5 run route through validated Takween commands when installed
+- **Shared tool discovery and health** -- settings, `QALAM_*_PATH`, system
+  `PATH`, and legacy portable fallbacks resolve Baa, Takween, and Nazm through
+  one tested service used by builds and Baa-LSP
+- **Nazm authoring workflow** -- `.نظم` files are indexed and locally
+  highlighted; standalone build produces a visible object and F5 links/runs
+  through Baa without a GAS fallback
 - **Qt Test foundation** -- focused tests cover diagnostics, workspace indexing, commands, and build-tool argument/project discovery
 
 ### Remaining Issues by Severity
@@ -115,7 +121,7 @@ One deferred item from Phase 2:
 | Ecosystem Build UX | Structured Baa checks, authoritative Takween target selection, JSONL progress, and explicit cancellation exist; full descendant-process ownership and end-to-end GUI fixtures remain |
 | ANSI Colors | `QalamConsole::appendOutput()` has ANSI parsing but is dead code; active path `flushPending()` does NOT render colors |
 | Auto-save Error | `QalamAutoSave.cpp:35` -- `file.open()` failure is silently ignored |
-| Settings | Only editor appearance (font size/family/theme); no compiler path UI, no keybinding config, no auto-save interval config; "Advanced" category commented out |
+| Settings | Tool paths and health are complete; keybinding and auto-save interval configuration remain |
 | File Explorer | No rename/delete files, no new file/folder from context menu, no close-all tabs |
 | Keyboard Shortcuts | `Ctrl+N` (new file) and `Ctrl+O` (open file) mentioned in USER_GUIDE.md but not wired as shortcuts |
 | Welcome Page | "Clone repo" button is a stub (shows "under development" message) |
@@ -251,7 +257,7 @@ One deferred item from Phase 2:
 
 ### 5.7 Settings Expansion
 
-- [ ] 5.7.1 Add compiler path configuration UI in settings
+- [x] 5.7.1 Add Baa/Takween/Nazm path configuration UI, deterministic discovery, and health state
 - [ ] 5.7.2 Add auto-save interval configuration
 - [ ] 5.7.3 Add keybinding customization panel
 - [ ] 5.7.4 Show system fonts alongside bundled fonts

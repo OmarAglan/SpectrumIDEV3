@@ -12,6 +12,8 @@ namespace Constants {
     const QString SettingsKeyFontType = "editorFontType";
     const QString SettingsKeyTheme = "editorCodeTheme";
     const QString SettingsKeyCompilerPath = "compilerPath";
+    const QString SettingsKeyTakweenPath = "takweenPath";
+    const QString SettingsKeyNazmPath = "nazmPath";
     const QString SettingsKeyLanguageServerPath = "baaLspPath";
     const QString SettingsKeySidebarWidth = "sidebarWidth";
     const QString SettingsKeyPanelHeight = "panelHeight";

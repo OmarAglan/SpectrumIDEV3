@@ -36,6 +36,9 @@ Unsaved documents are analyzed in memory, results are tied to the exact document
 - Telemetry-free, strictly validated Baa-LSP events rendered as bounded Arabic
   plain text in the Output panel.
 - Takween targets and structured build, run, test, clean, and cancellation workflows.
+- First-class Arabic Nazm editing: `.نظم` highlighting, indexing, direct object
+  assembly, and link-and-run through the installed Baa toolchain.
+- One tool settings page with explicit health for Baa, Takween, and Nazm.
 - File explorer, command palette, problems panel, embedded console, themes, autosave, and crash recovery.
 - Deterministic Windows runtime deployment with no recurring manual DLL or `PATH` repair.
 
@@ -61,14 +64,12 @@ When Qt and MinGW are already installed:
 ```
 
 The Windows scripts select one matching Qt/MinGW toolchain and deploy its runtime beside the built executables. A normal build and test run should not require copying DLLs or editing the terminal environment manually.
-Production packages build or consume pinned standalone Baa-LSP, Baa, and Nazm
-revisions, place them under `baa-lsp/` and `baa/` beside Qalam, and verify all
-four programs with external Qt and MinGW paths removed. The bundled compiler,
-Arabic assembler, runtime archive, and standard library make editor intelligence
-and native executable generation functional immediately. The portable Windows
-package includes one coherent relocatable GCC/LD toolchain and does not select
-an arbitrary linker from the host `PATH`; Takween remains separately
-discoverable.
+The standalone Qalam installer carries the Qt runtime and its internal Baa-LSP
+server only. Baa, Takween, and Nazm remain independently installed tools. Qalam
+resolves each tool from its saved setting, then `QALAM_*_PATH`, then `PATH`,
+with the old beside-the-application layout retained only as a compatibility
+fallback for existing portable archives. This keeps the IDE installer small
+and gives every ecosystem component one owner and one upgrade path.
 
 ### Linux
 

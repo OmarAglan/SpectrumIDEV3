@@ -1,6 +1,7 @@
 #include "BaaLanguageClient.h"
 
 #include "Constants.h"
+#include "ToolchainDiscovery.h"
 
 #include <QCoreApplication>
 #include <QDir>
@@ -738,24 +739,21 @@ void BaaLanguageClient::ensureStarted()
         arguments.append({QStringLiteral("--takween-path"), m_takweenProgram});
     }
     process->setArguments(arguments);
-    if (not compiler.isEmpty()) {
-        QProcessEnvironment environment = QProcessEnvironment::systemEnvironment();
-        if (not environment.contains(QStringLiteral("BAA_HOME"))) {
-            environment.insert(
-                QStringLiteral("BAA_HOME"),
-                QFileInfo(compiler).absolutePath());
-        }
-        if (not environment.contains(QStringLiteral("BAA_NAZM"))) {
-            const QString compilerHome = QFileInfo(compiler).absolutePath();
+    {
+        QProcessEnvironment environment = ToolchainDiscovery::processEnvironment();
+        if (not compiler.isEmpty()) {
+            if (not environment.contains(QStringLiteral("BAA_NAZM"))) {
+                const QString compilerHome = QFileInfo(compiler).absolutePath();
 #if defined(Q_OS_WIN)
-            const QString nazm =
-                QDir(compilerHome).filePath(QStringLiteral("نظم.exe"));
+                const QString nazm =
+                    QDir(compilerHome).filePath(QStringLiteral("نظم.exe"));
 #else
-            const QString nazm =
-                QDir(compilerHome).filePath(QStringLiteral("نظم"));
+                const QString nazm =
+                    QDir(compilerHome).filePath(QStringLiteral("نظم"));
 #endif
-            if (QFileInfo(nazm).isExecutable()) {
-                environment.insert(QStringLiteral("BAA_NAZM"), nazm);
+                if (QFileInfo(nazm).isExecutable()) {
+                    environment.insert(QStringLiteral("BAA_NAZM"), nazm);
+                }
             }
         }
         process->setProcessEnvironment(environment);
@@ -793,11 +791,6 @@ void BaaLanguageClient::ensureStarted()
 QString BaaLanguageClient::resolveServerProgram() const
 {
     QString configured = m_serverProgram;
-    if (configured.isEmpty()) configured = qEnvironmentVariable("BAA_LSP").trimmed();
-    if (configured.isEmpty()) {
-        QSettings settings(Constants::OrgName, Constants::AppName);
-        configured = settings.value(Constants::SettingsKeyLanguageServerPath).toString().trimmed();
-    }
     if (not configured.isEmpty()) {
         const QString found = QStandardPaths::findExecutable(configured);
         return found.isEmpty() ? configured : found;
@@ -808,55 +801,38 @@ QString BaaLanguageClient::resolveServerProgram() const
 #if defined(Q_OS_WIN)
         QDir(appDirectory).filePath(QStringLiteral("baa-lsp/baa-lsp.exe")),
         QDir(appDirectory).filePath(QStringLiteral("baa-lsp.exe")),
-        QStandardPaths::findExecutable(QStringLiteral("baa-lsp.exe")),
 #else
         QDir(appDirectory).filePath(QStringLiteral("baa-lsp/baa-lsp")),
         QDir(appDirectory).filePath(QStringLiteral("baa-lsp")),
 #endif
-        QStandardPaths::findExecutable(QStringLiteral("baa-lsp"))
     };
     for (const QString &candidate : candidates) {
         if (not candidate.isEmpty() and QFileInfo(candidate).isExecutable()) return candidate;
     }
+
+    configured = qEnvironmentVariable("BAA_LSP").trimmed();
+    if (configured.isEmpty()) {
+        QSettings settings(Constants::OrgName, Constants::AppName);
+        configured = settings.value(Constants::SettingsKeyLanguageServerPath).toString().trimmed();
+    }
+    if (not configured.isEmpty()) {
+        const QString found = QStandardPaths::findExecutable(configured);
+        return found.isEmpty() ? configured : found;
+    }
+
+#if defined(Q_OS_WIN)
+    const QString pathServer = QStandardPaths::findExecutable(QStringLiteral("baa-lsp.exe"));
+#else
+    const QString pathServer = QStandardPaths::findExecutable(QStringLiteral("baa-lsp"));
+#endif
+    if (not pathServer.isEmpty()) return pathServer;
     return QString();
 }
 
 QString BaaLanguageClient::resolveCompilerProgram() const
 {
     if (not m_compilerProgram.isEmpty()) return m_compilerProgram;
-    QSettings settings(Constants::OrgName, Constants::AppName);
-    const QString configured =
-        settings.value(Constants::SettingsKeyCompilerPath).toString().trimmed();
-    if (not configured.isEmpty()) {
-        const QString found = QStandardPaths::findExecutable(configured);
-        return found.isEmpty() ? configured : found;
-    }
-
-    const QString environment = qEnvironmentVariable("BAA").trimmed();
-    if (not environment.isEmpty()) {
-        const QString found = QStandardPaths::findExecutable(environment);
-        return found.isEmpty() ? environment : found;
-    }
-
-    const QString appDirectory = QCoreApplication::applicationDirPath();
-    const QStringList candidates = {
-#if defined(Q_OS_WIN)
-        QDir(appDirectory).filePath(QStringLiteral("baa/baa.exe")),
-        QDir(appDirectory).filePath(QStringLiteral("baa-lsp/baa/baa.exe")),
-        QDir(appDirectory).filePath(QStringLiteral("baa.exe")),
-        QStandardPaths::findExecutable(QStringLiteral("baa.exe")),
-#else
-        QDir(appDirectory).filePath(QStringLiteral("baa/baa")),
-        QDir(appDirectory).filePath(QStringLiteral("baa-lsp/baa/baa")),
-        QDir(appDirectory).filePath(QStringLiteral("baa")),
-#endif
-        QStandardPaths::findExecutable(QStringLiteral("baa"))
-    };
-    for (const QString &candidate : candidates) {
-        if (not candidate.isEmpty() and QFileInfo(candidate).isExecutable())
-            return candidate;
-    }
-    return QString();
+    return ToolchainDiscovery::resolve(QalamToolKind::Baa).program;
 }
 
 void BaaLanguageClient::setState(State state)

@@ -12,6 +12,7 @@ class TestSyntaxHighlighter : public QObject
 
 private slots:
     void overlaysCompilerTokensAndRestoresLocalHighlighting();
+    void highlightsArabicNazmSource();
 };
 
 namespace {
@@ -27,6 +28,44 @@ QColor foregroundAt(const QTextDocument &document, int position)
     }
     return {};
 }
+}
+
+void TestSyntaxHighlighter::highlightsArabicNazmSource()
+{
+    QTextDocument document;
+    QalamSyntaxHighlighter highlighter(&document);
+    highlighter.setTheme(std::make_shared<VSCodeDarkTheme>());
+    highlighter.setLanguageMode(QalamLanguageMode::Nazm);
+    const QString source = QStringLiteral(
+        ".نص\nالرئيسية:\n    انقل سجل_المركم، ٤٢ ; تعليق\n");
+    document.setPlainText(source);
+    highlighter.rehighlight();
+
+    const QTextBlock directive = document.findBlockByNumber(0);
+    const QTextBlock label = document.findBlockByNumber(1);
+    const QTextBlock instruction = document.findBlockByNumber(2);
+    QVERIFY(directive.isValid());
+    QVERIFY(label.isValid());
+    QVERIFY(instruction.isValid());
+
+    auto colorInBlock = [](const QTextBlock &block, int position) {
+        if (not block.layout()) return QColor();
+        for (const QTextLayout::FormatRange &range : block.layout()->formats()) {
+            if (position >= range.start and position < range.start + range.length)
+                return range.format.foreground().color();
+        }
+        return QColor();
+    };
+    QCOMPARE(colorInBlock(directive, 0), QColor(197, 134, 192));
+    QCOMPARE(colorInBlock(label, 0), QColor(220, 220, 170));
+    QCOMPARE(colorInBlock(instruction, instruction.text().indexOf(QStringLiteral("انقل"))),
+             QColor(197, 134, 192));
+    QCOMPARE(colorInBlock(instruction, instruction.text().indexOf(QStringLiteral("سجل_المركم"))),
+             QColor(156, 220, 254));
+    QCOMPARE(colorInBlock(instruction, instruction.text().indexOf(QStringLiteral("٤٢"))),
+             QColor(181, 206, 168));
+    QCOMPARE(colorInBlock(instruction, instruction.text().indexOf(QLatin1Char(';'))),
+             QColor(106, 153, 85));
 }
 
 void TestSyntaxHighlighter::overlaysCompilerTokensAndRestoresLocalHighlighting()

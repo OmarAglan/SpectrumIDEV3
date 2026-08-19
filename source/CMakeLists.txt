@@ -29,6 +29,8 @@ add_library(qalam_core STATIC
     language/LspMessageFramer.h
     language/TakweenProtocol.cpp
     language/TakweenProtocol.h
+    tooling/ToolchainDiscovery.cpp
+    tooling/ToolchainDiscovery.h
     # Workspace services
     workspace/WorkspaceIndexer.cpp
     workspace/WorkspaceIndexer.h
@@ -91,6 +93,7 @@ target_include_directories(qalam_core PUBLIC
     texteditor/autocomplete
     core
     language
+    tooling
     workspace
     debug
     components

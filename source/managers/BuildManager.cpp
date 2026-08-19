@@ -1,6 +1,7 @@
 #include "BuildManager.h"
 #include "QalamConsole.h"
 #include "Constants.h"
+#include "ToolchainDiscovery.h"
 
 #include <QSettings>
 #include <QCoreApplication>
@@ -61,68 +62,35 @@ bool BuildManager::isRunning() const
     return m_buildThread and m_buildThread->isRunning();
 }
 
-QString BuildManager::resolveCompilerPath() const
+QString BuildManager::resolveCompilerProgram()
 {
-    QSettings settings(Constants::OrgName, Constants::AppName);
-    const QString configuredProgram = settings.value(Constants::SettingsKeyCompilerPath).toString().trimmed();
-
-    if (!configuredProgram.isEmpty()) {
-        return configuredProgram;
-    }
-
-    const QString appDir = QCoreApplication::applicationDirPath();
-    const QStringList candidates = {
-#if defined(Q_OS_WIN)
-        QDir(appDir).filePath("baa/baa.exe"),
-        QDir(appDir).filePath("baa.exe"),
-        QStandardPaths::findExecutable("baa.exe"),
-        QStandardPaths::findExecutable("baa")
-#else
-        QDir(appDir).filePath("baa/baa"),
-        QDir(appDir).filePath("baa"),
-        QStandardPaths::findExecutable("baa")
-#endif
-    };
-
-    for (const QString &candidate : candidates) {
-        if (!candidate.isEmpty() and QFileInfo(candidate).isExecutable()) {
-            return candidate;
-        }
-    }
-
-#if defined(Q_OS_WIN)
-    return QDir(appDir).filePath("baa/baa.exe");
-#else
-    return QDir(appDir).filePath("baa/baa");
-#endif
+    return ToolchainDiscovery::resolve(QalamToolKind::Baa).program;
 }
 
 QString BuildManager::resolveTakweenProgram()
 {
-    const QString appDir = QCoreApplication::applicationDirPath();
-    const QStringList candidates = {
-#if defined(Q_OS_WIN)
-        QDir(appDir).filePath("takween/تكوين.exe"),
-        QDir(appDir).filePath("takween/takween.exe"),
-        QDir(appDir).filePath("تكوين.exe"),
-        QDir(appDir).filePath("takween.exe"),
-        QStandardPaths::findExecutable("تكوين.exe"),
-        QStandardPaths::findExecutable("takween.exe"),
-        QStandardPaths::findExecutable("takween")
-#else
-        QDir(appDir).filePath("takween/تكوين"),
-        QDir(appDir).filePath("takween/takween"),
-        QStandardPaths::findExecutable("تكوين"),
-        QStandardPaths::findExecutable("takween")
-#endif
-    };
+    return ToolchainDiscovery::resolve(QalamToolKind::Takween).program;
+}
 
-    for (const QString &candidate : candidates) {
-        if (!candidate.isEmpty() and QFileInfo(candidate).isExecutable()) {
-            return candidate;
-        }
-    }
-    return QString();
+QString BuildManager::resolveNazmProgram()
+{
+    return ToolchainDiscovery::resolve(QalamToolKind::Nazm).program;
+}
+
+bool BuildManager::isNazmSourcePath(const QString &filePath)
+{
+    return filePath.endsWith(QStringLiteral(".نظم"), Qt::CaseInsensitive);
+}
+
+QString BuildManager::nazmObjectPath(const QString &filePath)
+{
+    QFileInfo source(filePath);
+#if defined(Q_OS_WIN)
+    const QString suffix = QStringLiteral(".obj");
+#else
+    const QString suffix = QStringLiteral(".o");
+#endif
+    return source.dir().filePath(source.completeBaseName() + suffix);
 }
 
 QStringList BuildManager::takweenCommandArguments(const QString &command,
@@ -317,7 +285,7 @@ void BuildManager::runBaa(const QString &filePath, QalamConsole *console)
 {
     if (!console) return;
 
-    QString program = resolveCompilerPath();
+    QString program = resolveCompilerProgram();
     QStringList args = { filePath };
     QString workingDir = QFileInfo(filePath).absolutePath();
     bool usingTakween = false;
@@ -344,6 +312,10 @@ void BuildManager::runBaa(const QString &filePath, QalamConsole *console)
             return;
         }
         QFile::remove(followUpProgram);
+        const QString nazm = resolveNazmProgram();
+        if (not nazm.isEmpty()) {
+            args << (QStringLiteral("--nazm-path=") + nazm);
+        }
         args << QStringLiteral("-o") << followUpProgram;
     }
 
@@ -352,13 +324,38 @@ void BuildManager::runBaa(const QString &filePath, QalamConsole *console)
                  workingDir,
                  filePath,
                  QStringLiteral("run"),
-                 usingTakween ? "🚀 تشغيل مشروع تكوين...\n" : "🚀 بدء تشغيل ملف باء...\n",
+                 usingTakween
+                     ? QStringLiteral("🚀 تشغيل مشروع تكوين...\n")
+                     : (isNazmSourcePath(filePath)
+                            ? QStringLiteral("🚀 ربط وتشغيل ملف نظم...\n")
+                            : QStringLiteral("🚀 بدء تشغيل ملف باء...\n")),
                  console,
                  usingTakween,
                  followUpProgram,
                  {},
                  workingDir,
                  usingTakween ? QString() : QStringLiteral("\n▶ مخرجات البرنامج:\n"));
+}
+
+void BuildManager::buildNazm(const QString &filePath, QalamConsole *console)
+{
+    if (not console or not isNazmSourcePath(filePath)) return;
+    const QString output = nazmObjectPath(filePath);
+    QFile::remove(output);
+#if defined(Q_OS_WIN)
+    const QString format = QStringLiteral("كوف");
+#else
+    const QString format = QStringLiteral("إلف64");
+#endif
+    startProcess(resolveNazmProgram(),
+                 {filePath, QStringLiteral("--خرج"), output,
+                  QStringLiteral("--صيغة"), format},
+                 QFileInfo(filePath).absolutePath(),
+                 filePath,
+                 QStringLiteral("assemble"),
+                 QStringLiteral("🛠️ تجميع ملف نظم إلى %1...\n")
+                     .arg(QFileInfo(output).fileName()),
+                 console);
 }
 
 bool BuildManager::runTakweenCommand(const QString &filePath,
@@ -410,9 +407,9 @@ void BuildManager::startProcess(const QString &requestedProgram,
 
     if (!QFileInfo(program).isExecutable()) {
         console->clear();
-        console->appendPlainTextThreadSafe("❌ خطأ: لم يتم العثور على مترجم باء!\n");
+        console->appendPlainTextThreadSafe("❌ خطأ: لم يتم العثور على أداة البناء المطلوبة!\n");
         console->appendPlainTextThreadSafe("المسار المتوقع: " + program + "\n");
-        console->appendPlainTextThreadSafe("يمكنك وضع المترجم بجانب التطبيق داخل baa/ أو ضبط مساره من الإعدادات.\n");
+        console->appendPlainTextThreadSafe("ثبّت الأداة في PATH أو اضبط مسارها من الإعدادات.\n");
 
 #if defined(Q_OS_LINUX) || defined(Q_OS_MACOS)
         console->appendPlainTextThreadSafe("تأكد من أن ملف baa لديه صلاحية التنفيذ (chmod +x).\n");
@@ -455,7 +452,8 @@ void BuildManager::startProcess(const QString &requestedProgram,
         followUpProgram,
         followUpArguments,
         followUpWorkingDirectory,
-        followUpHeading);
+        followUpHeading,
+        ToolchainDiscovery::processEnvironment());
     m_buildThread = new QThread(this);
 
     m_worker->moveToThread(m_buildThread);

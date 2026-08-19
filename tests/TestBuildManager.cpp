@@ -16,6 +16,7 @@ private slots:
     void buildsOperationAwareExitDiagnostics();
     void findsNearestTakweenProjectRoot();
     void returnsEmptyRootOutsideTakweenProject();
+    void recognizesNazmSourcesAndObjects();
 };
 
 void TestBuildManager::buildsValidatedTakweenArguments()
@@ -94,6 +95,19 @@ void TestBuildManager::returnsEmptyRootOutsideTakweenProject()
     QTemporaryDir temp;
     QVERIFY(temp.isValid());
     QVERIFY(BuildManager::findTakweenProjectRoot(QDir(temp.path()).filePath("main.baa")).isEmpty());
+}
+
+void TestBuildManager::recognizesNazmSourcesAndObjects()
+{
+    QVERIFY(BuildManager::isNazmSourcePath(QStringLiteral("مصدر/بداية.نظم")));
+    QVERIFY(not BuildManager::isNazmSourcePath(QStringLiteral("مصدر/بداية.baa")));
+#if defined(Q_OS_WIN)
+    QVERIFY(BuildManager::nazmObjectPath(QStringLiteral("C:/مشروع/بداية.نظم"))
+                .endsWith(QStringLiteral("بداية.obj")));
+#else
+    QVERIFY(BuildManager::nazmObjectPath(QStringLiteral("/tmp/مشروع/بداية.نظم"))
+                .endsWith(QStringLiteral("بداية.o")));
+#endif
 }
 
 QTEST_MAIN(TestBuildManager)

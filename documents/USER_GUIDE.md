@@ -11,12 +11,28 @@ Welcome to **Qalam IDE**, the professional environment for Arabic-syntax program
 
 ### Running your code
 1. Open your `.baa` file.
-2. Ensure you have the Baa compiler installed (default path: `baa/baa.exe` relative to the IDE).
+2. Ensure Baa and Nazm are installed and visible in `PATH`, or select them on
+   the **الأدوات** page in Settings.
 3. Use **تشغيل** (Run) from the build menu to compile and execute your program.
    For a standalone `.baa` file, Qalam builds into its application cache, then
    launches the new executable with the source folder as its working directory.
    Program stdout and stderr appear after **مخرجات البرنامج** in the
    **الطرفية** tab, and the input field remains connected to the running program.
+
+### Writing and running Nazm
+
+Qalam treats `.نظم` as the canonical Arabic assembly language of the ecosystem:
+
+1. Open or save a UTF-8 file with the `.نظم` extension.
+2. Use `Ctrl+Shift+B` to invoke Nazm directly and create an adjacent `.obj` on
+   Windows or `.o` on Linux. The Terminal names the artifact before assembly.
+3. Use `F5` to ask Baa to assemble, link, and run the file with its owned linker
+   pipeline. Qalam never translates the Arabic source to GAS and never silently
+   falls back to another assembler.
+
+Nazm files receive local highlighting for Arabic directives, instructions,
+registers, labels, numbers, strings, and comments. Baa-LSP remains Baa-only;
+Qalam does not send `.نظم` documents to it.
 
 ## Interface Overview
 
@@ -115,6 +131,21 @@ Access via: **File** → **Settings** → **Editor** → **Theme**.
 Adjust the editor font size and family in Settings:
 - Font Size: 12–36pt
 - Font Family: Select from bundled fonts or system fonts (when enabled)
+
+### Build tools
+
+Open **File → Settings → الأدوات** to inspect or override the executable for
+Baa, Takween, and Nazm. Leave a field empty for automatic discovery. Qalam uses
+the same deterministic order everywhere:
+
+1. a saved path in Settings;
+2. `QALAM_BAA_PATH`, `QALAM_TAKWEEN_PATH`, or `QALAM_NAZM_PATH`;
+3. the corresponding command in system `PATH`;
+4. the old portable beside-Qalam layout as a compatibility fallback.
+
+The page reports the selected source and exact executable path. An invalid
+explicit setting remains visible as an error instead of silently selecting a
+different installation.
 
 ---
 
@@ -241,11 +272,10 @@ After expanding, press **Tab** to jump between placeholders (e.g., function name
 ## Troubleshooting
 
 ### "Compiler not found" error
-- Ensure the Baa compiler is installed.
-- The IDE looks in this order:
-  1. Path specified in Settings
-  2. `baa/baa.exe` relative to the IDE
-  3. System PATH
+- Install the standalone Baa, Nazm, and (for projects) Takween packages.
+- Open **Settings → الأدوات**, clear stale overrides, and choose
+  **إعادة فحص الأدوات**.
+- Open a new terminal after installation so it receives the updated `PATH`.
 
 ### Auto-save files
 Backup files use the `.~` suffix (e.g., `program.baa.~`). These are automatically cleaned up when you save or close the file.

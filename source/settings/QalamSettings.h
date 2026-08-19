@@ -16,6 +16,9 @@
 #include <QSpinBox>
 #include <QFontDatabase>
 #include <QFormLayout>
+#include <QLineEdit>
+
+enum class QalamToolKind;
 
 class QalamSettings : public QWidget {
     Q_OBJECT
@@ -33,12 +36,17 @@ signals:
     void fontSizeChanged(int size);
     void fontTypeChanged(QString font);
     void highlighterThemeChanged(int themeIdx);
+    void toolPathsChanged();
 
 
 private:
     void switchPage();
     void createCategory(const QString&, const QString&);
     void createAppearancePage(QVBoxLayout*);
+    void createToolsPage(QVBoxLayout*);
+    void chooseToolPath(QalamToolKind kind, QLineEdit *editor);
+    void refreshToolHealth();
+    void saveToolPaths();
 
     QVBoxLayout* optionsLayout{};
     QStackedWidget* stackedWidget{};
@@ -47,5 +55,11 @@ private:
     QSpinBox* fontSpin{};
     QComboBox* fontCombo{};
     QComboBox* themeCombo{};
+    QLineEdit* baaPathEdit{};
+    QLineEdit* takweenPathEdit{};
+    QLineEdit* nazmPathEdit{};
+    QLabel* baaStatusLabel{};
+    QLabel* takweenStatusLabel{};
+    QLabel* nazmStatusLabel{};
 
 };

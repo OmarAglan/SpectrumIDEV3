@@ -20,15 +20,14 @@ QString decodeProcessBytes(const QByteArray &data)
 #endif
 }
 
-bool bundledBaaEnvironment(const QString &program,
+void prepareBaaEnvironment(const QString &program,
                            QProcessEnvironment *environment)
 {
     const QFileInfo programInfo(program);
     if (programInfo.completeBaseName().compare(QStringLiteral("baa"), Qt::CaseInsensitive) != 0) {
-        return false;
+        return;
     }
 
-    *environment = QProcessEnvironment::systemEnvironment();
     const QString compilerHome = programInfo.absolutePath();
     const QString toolchainBin =
         QDir(compilerHome).filePath(QStringLiteral("gcc/bin"));
@@ -54,7 +53,6 @@ bool bundledBaaEnvironment(const QString &program,
             environment->insert(QStringLiteral("BAA_NAZM"), nazm);
         }
     }
-    return true;
 }
 }
 
@@ -65,7 +63,8 @@ ProcessWorker::ProcessWorker(const QString &program,
                              const QString &followUpProgram,
                              const QStringList &followUpArgs,
                              const QString &followUpWorkingDir,
-                             const QString &followUpHeading)
+                             const QString &followUpHeading,
+                             const QProcessEnvironment &environment)
     : program(program),
       args(args),
       workingDir(workingDir),
@@ -74,6 +73,7 @@ ProcessWorker::ProcessWorker(const QString &program,
       followUpArgs(followUpArgs),
       followUpWorkingDir(followUpWorkingDir),
       followUpHeading(followUpHeading),
+      processEnvironment(environment),
       process(nullptr),
       flushTimer(nullptr)
 {
@@ -181,8 +181,10 @@ void ProcessWorker::startProcessPhase(const QString &phaseProgram,
     process->setArguments(phaseArgs);
     process->setWorkingDirectory(phaseWorkingDir);
 
-    QProcessEnvironment environment = QProcessEnvironment::systemEnvironment();
-    bundledBaaEnvironment(phaseProgram, &environment);
+    QProcessEnvironment environment = processEnvironment.isEmpty()
+        ? QProcessEnvironment::systemEnvironment()
+        : processEnvironment;
+    prepareBaaEnvironment(phaseProgram, &environment);
     process->setProcessEnvironment(environment);
     process->start();
 }

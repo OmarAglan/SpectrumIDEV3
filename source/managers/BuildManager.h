@@ -32,6 +32,9 @@ public:
     /// Run a Baa source file. Outputs go to the given console.
     void runBaa(const QString &filePath, QalamConsole *console);
 
+    /// Assemble one standalone .نظم source to an adjacent object file.
+    void buildNazm(const QString &filePath, QalamConsole *console);
+
     /// Run a supported Takween project command for the project owning filePath.
     bool runTakweenCommand(const QString &filePath,
                            const QString &command,
@@ -66,6 +69,15 @@ public:
     /// Resolve the Takween executable shared by builds and Baa-LSP project discovery.
     static QString resolveTakweenProgram();
 
+    /// Resolve the Baa compiler through Qalam's shared tool contract.
+    static QString resolveCompilerProgram();
+
+    /// Resolve the Nazm assembler through Qalam's shared tool contract.
+    static QString resolveNazmProgram();
+
+    static bool isNazmSourcePath(const QString &filePath);
+    static QString nazmObjectPath(const QString &filePath);
+
     /// Stop the currently running build process, if any.
     void stop();
 
@@ -89,9 +101,6 @@ signals:
     void toolingProtocolError(const QString &message);
 
 private:
-    /// Resolve the compiler path from settings or default locations
-    QString resolveCompilerPath() const;
-
     /// Clean up existing thread/worker safely
     void cleanupBuild();
     void startProcess(const QString &program,

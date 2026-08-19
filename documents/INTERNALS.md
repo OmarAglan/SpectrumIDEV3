@@ -132,6 +132,15 @@ The heart of Qalam is `QalamEditor`, a custom `QPlainTextEdit` subclass.
   The model preserves codes, categories, primary/end spans, and hints.
 - **Tool completion contract:** `BuildManager` emits project operations with the raw
   process exit code and classifies `compiler-cli-v1` codes `0` through `5`.
+- **`ToolchainDiscovery`:** Resolves Baa, Takween, and Nazm once by the shared
+  order Settings → `QALAM_*_PATH` → system `PATH` → legacy portable fallback.
+  It also builds the exact child-process environment used by Takween, Baa, and
+  Baa-LSP, including the selected `BAA_NAZM`, without exposing Baa's private
+  linker directory globally.
+- **Nazm editor/build path:** `.نظم` documents use a local Arabic assembly
+  highlighter and never enter Baa-LSP. `BuildManager` invokes Nazm with argv for
+  adjacent object generation, while F5 invokes Baa on the direct `.نظم` root so
+  Baa owns startup objects and final linking.
   Qalam uses structured diagnostics first and creates a code-based fallback only
   when the structured model is empty. `run` and `test` remain operation-aware
   because a successfully built program may return its own nonzero code.
