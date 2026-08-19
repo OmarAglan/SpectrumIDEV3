@@ -48,16 +48,21 @@ function Wait-InstallerState {
     throw "Timed out waiting for $Description."
 }
 
+function Invoke-QalamInstaller {
+    param([string[]]$Arguments)
+    $install = Start-Process -FilePath $InstallerPath -ArgumentList $Arguments `
+        -WindowStyle Hidden -Wait -PassThru
+    if ($install.ExitCode -ne 0) {
+        throw "Qalam installer failed with exit code $($install.ExitCode). Log: $setupLog"
+    }
+}
+
 try {
     $arguments = @(
         '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-',
         '/CURRENTUSER', "/DIR=`"$installRoot`"", "/LOG=`"$setupLog`""
     )
-    $install = Start-Process -FilePath $InstallerPath -ArgumentList $arguments `
-        -WindowStyle Hidden -Wait -PassThru
-    if ($install.ExitCode -ne 0) {
-        throw "Qalam installer failed with exit code $($install.ExitCode). Log: $setupLog"
-    }
+    Invoke-QalamInstaller $arguments
     $installed = $true
 
     $qalam = Join-Path $installRoot 'Qalam.exe'
@@ -69,6 +74,7 @@ try {
         (Test-Path -LiteralPath $uninstaller -PathType Leaf) -and
         (Test-Path -LiteralPath $markerKey)
     }
+    Invoke-QalamInstaller $arguments
     foreach ($required in @(
         $qalam, $lsp,
         (Join-Path $installRoot 'Qt6Core.dll'),
