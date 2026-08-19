@@ -71,6 +71,11 @@ with the old beside-the-application layout retained only as a compatibility
 fallback for existing portable archives. This keeps the IDE installer small
 and gives every ecosystem component one owner and one upgrade path.
 
+```powershell
+.\scripts\build_installer.ps1 `
+  -BaaLspExecutable ..\Baa-LSP\build\windows-release\baa-lsp.exe
+```
+
 ### Linux
 
 ```sh
@@ -98,6 +103,7 @@ Qt Creator users can open the root `CMakeLists.txt` and select a Qt 6 kit. CMake
 - [Baa-LSP integration](documents/BAA_LSP_INTEGRATION_AR.md)
 - [Takween integration](documents/TAKWEEN_INTEGRATION.md)
 - [Internal architecture](documents/INTERNALS.md)
+- [Windows installer](documents/INSTALLER.md)
 - [Deployment and packaging](documents/deployment.md)
 - [Branding assets](documents/BRANDING.md)
 - [Roadmap](documents/ROADMAP.md)

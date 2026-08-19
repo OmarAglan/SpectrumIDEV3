@@ -11,7 +11,8 @@ param(
     [string]$GccRoot = $env:QALAM_GCC_ROOT,
     [switch]$SkipLanguageServer,
     [switch]$SkipCompiler,
-    [switch]$SkipBuild
+    [switch]$SkipBuild,
+    [switch]$SkipArchive
 )
 
 $ErrorActionPreference = 'Stop'
@@ -270,11 +271,14 @@ if ($packagedCompiler) {
 }
 & (Join-Path $PSScriptRoot 'test-windows-runtime.ps1') @runtimeTestArguments
 
-if (Test-Path $ZipPath) { Remove-Item $ZipPath -Force }
-Compress-Archive -Path (Join-Path $PackageDir '*') -DestinationPath $ZipPath
+if (!$SkipArchive) {
+    if (Test-Path $ZipPath) { Remove-Item $ZipPath -Force }
+    Compress-Archive -Path (Join-Path $PackageDir '*') -DestinationPath $ZipPath
+}
 
 Write-Host "Packaged Qalam successfully:" -ForegroundColor Green
-Write-Host "  $ZipPath"
+if (!$SkipArchive) { Write-Host "  $ZipPath" }
+else { Write-Host "  $PackageDir" }
 if ($packagedLanguageServer) {
     Write-Host "  Baa-LSP: $packagedLanguageServer"
 }

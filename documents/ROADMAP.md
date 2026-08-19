@@ -322,9 +322,8 @@ One deferred item from Phase 2:
 
 ### 7.1 Build Automation
 
-- [x] 7.1.1 Add GitHub Actions workflow for Windows and Linux build/package
-  artifacts that place Baa-LSP and the matching Baa/Nazm/compiler-runtime/stdlib
-  payload at Qalam's automatic discovery paths
+- [x] 7.1.1 Add GitHub Actions workflow for a standalone Windows installer and
+  a Linux developer integration archive
 - [x] 7.1.2 Add CMakePresets for Linux (GCC 13+)
 - [ ] 7.1.3 Add CMakePresets for macOS (Clang 16+)
 - [ ] 7.1.4 Cache Qt installation in CI for faster builds
@@ -339,6 +338,9 @@ One deferred item from Phase 2:
   `baa/gcc/` discovery path, record its target/version/hash, direct-Unicode
   admission and licenses, and require an isolated Arabic-path compile-link-run
   gate with no host GCC/MSYS2
+- [ ] 7.2.1c Admit the standalone Windows installer in CI: Qalam + Qt + internal
+  Baa-LSP only, silent install, native-window/LSP probes, unchanged `PATH`, and
+  complete uninstall cleanup
 
 **Cross-platform packaging receipt (2026-08-11):** Windows and Linux combined
 artifacts passed and were uploaded by
@@ -357,7 +359,7 @@ the portable-linker candidate requires a new green CI receipt.
 ### 7.3 Release Automation
 
 - [ ] 7.3.1 Add release workflow: build Release preset -> package with `windeployqt`
-- [ ] 7.3.2 Create installer (NSIS or WiX)
+- [x] 7.3.2 Create the Inno Setup standalone Windows installer and SHA-256 sidecar
 - [ ] 7.3.3 Auto-generate changelog from git commits
 - [ ] 7.3.4 Publish to GitHub Releases with artifacts
 

@@ -1,0 +1,137 @@
+param(
+    [string]$Version = '3.3.0',
+    [string]$InstallerPath = '',
+    [int]$StartupSeconds = 2
+)
+
+$ErrorActionPreference = 'Stop'
+$root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+if ([string]::IsNullOrWhiteSpace($InstallerPath)) {
+    $InstallerPath = Join-Path $root "dist\installer\qalam-setup-$Version-x64.exe"
+}
+$InstallerPath = (Resolve-Path -LiteralPath $InstallerPath).Path
+$checksumPath = "$InstallerPath.sha256"
+if (!(Test-Path -LiteralPath $checksumPath -PathType Leaf)) {
+    throw "Installer checksum is missing: $checksumPath"
+}
+$checksumLine = [IO.File]::ReadAllText(
+    $checksumPath, [Text.Encoding]::ASCII).Trim()
+if ($checksumLine -notmatch '^([0-9A-Fa-f]{64}) \*(.+)$') {
+    throw 'Qalam installer checksum file has an invalid format.'
+}
+if ($Matches[2] -cne [IO.Path]::GetFileName($InstallerPath)) {
+    throw 'Qalam installer checksum names the wrong file.'
+}
+$expectedHash = $Matches[1]
+$actualHash = (Get-FileHash -LiteralPath $InstallerPath -Algorithm SHA256).Hash
+if ($expectedHash -ne $actualHash) { throw 'Qalam installer checksum mismatch.' }
+
+$userPathBefore = [Environment]::GetEnvironmentVariable('Path', 'User')
+$machinePathBefore = [Environment]::GetEnvironmentVariable('Path', 'Machine')
+$installRoot = Join-Path ([IO.Path]::GetTempPath()) (
+    'Qalam installer - ' + [Guid]::NewGuid().ToString('N'))
+$setupLog = Join-Path ([IO.Path]::GetTempPath()) (
+    'qalam-setup-' + [Guid]::NewGuid().ToString('N') + '.log')
+$uninstallLog = Join-Path ([IO.Path]::GetTempPath()) (
+    'qalam-uninstall-' + [Guid]::NewGuid().ToString('N') + '.log')
+$markerKey = 'HKCU:\Software\BaaEcosystem\Qalam'
+$nazmArabicExecutableName =
+    (-join [char[]](0x0646, 0x0638, 0x0645)) + '.exe'
+$installed = $false
+
+function Wait-InstallerState {
+    param([string]$Description, [scriptblock]$Condition)
+    for ($attempt = 0; $attempt -lt 300; $attempt++) {
+        if (& $Condition) { return }
+        Start-Sleep -Milliseconds 200
+    }
+    throw "Timed out waiting for $Description."
+}
+
+try {
+    $arguments = @(
+        '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-',
+        '/CURRENTUSER', "/DIR=`"$installRoot`"", "/LOG=`"$setupLog`""
+    )
+    $install = Start-Process -FilePath $InstallerPath -ArgumentList $arguments `
+        -WindowStyle Hidden -Wait -PassThru
+    if ($install.ExitCode -ne 0) {
+        throw "Qalam installer failed with exit code $($install.ExitCode). Log: $setupLog"
+    }
+    $installed = $true
+
+    $qalam = Join-Path $installRoot 'Qalam.exe'
+    $lsp = Join-Path $installRoot 'baa-lsp\baa-lsp.exe'
+    $uninstaller = Join-Path $installRoot 'unins000.exe'
+    Wait-InstallerState 'Qalam installation' {
+        (Test-Path -LiteralPath $qalam -PathType Leaf) -and
+        (Test-Path -LiteralPath $lsp -PathType Leaf) -and
+        (Test-Path -LiteralPath $uninstaller -PathType Leaf) -and
+        (Test-Path -LiteralPath $markerKey)
+    }
+    foreach ($required in @(
+        $qalam, $lsp,
+        (Join-Path $installRoot 'Qt6Core.dll'),
+        (Join-Path $installRoot 'Qt6Gui.dll'),
+        (Join-Path $installRoot 'Qt6Widgets.dll'),
+        (Join-Path $installRoot 'platforms\qwindows.dll')
+    )) {
+        if (!(Test-Path -LiteralPath $required -PathType Leaf)) {
+            throw "Installed Qalam file is missing: $required"
+        }
+    }
+
+    $forbiddenNames = @(
+        'baa.exe', 'takween.exe', 'nazm.exe', $nazmArabicExecutableName,
+        'gcc.exe', 'ld.exe'
+    )
+    $forbidden = Get-ChildItem -LiteralPath $installRoot -Recurse -File |
+        Where-Object { $forbiddenNames -contains $_.Name.ToLowerInvariant() }
+    if ($forbidden) {
+        throw "Qalam installed an externally owned tool: $($forbidden.FullName -join ', ')"
+    }
+
+    if ([Environment]::GetEnvironmentVariable('Path', 'User') -ne $userPathBefore -or
+        [Environment]::GetEnvironmentVariable('Path', 'Machine') -ne $machinePathBefore) {
+        throw 'Qalam installer modified PATH.'
+    }
+
+    & (Join-Path $PSScriptRoot 'test-windows-runtime.ps1') `
+        -Executable $qalam `
+        -LanguageServer $lsp `
+        -StartupSeconds $StartupSeconds
+
+    if (!(Test-Path -LiteralPath $uninstaller -PathType Leaf)) {
+        throw 'Qalam uninstaller is missing.'
+    }
+    $uninstall = Start-Process -FilePath $uninstaller -ArgumentList @(
+        '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART',
+        "/LOG=`"$uninstallLog`""
+    ) -WindowStyle Hidden -Wait -PassThru
+    if ($uninstall.ExitCode -ne 0) {
+        throw "Qalam uninstaller failed with exit code $($uninstall.ExitCode)."
+    }
+    Wait-InstallerState 'Qalam uninstall cleanup' {
+        !(Test-Path -LiteralPath $installRoot) -and
+        !(Test-Path -LiteralPath $markerKey)
+    }
+    if ([Environment]::GetEnvironmentVariable('Path', 'User') -ne $userPathBefore -or
+        [Environment]::GetEnvironmentVariable('Path', 'Machine') -ne $machinePathBefore) {
+        throw 'Qalam uninstall changed PATH.'
+    }
+}
+finally {
+    if ($installed -and (Test-Path -LiteralPath $installRoot)) {
+        $cleanupUninstaller = Join-Path $installRoot 'unins000.exe'
+        if (Test-Path -LiteralPath $cleanupUninstaller -PathType Leaf) {
+            Start-Process -FilePath $cleanupUninstaller -ArgumentList @(
+                '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART'
+            ) -WindowStyle Hidden -Wait | Out-Null
+        }
+    }
+}
+
+if (Test-Path -LiteralPath $markerKey) {
+    throw 'Qalam uninstaller left its ownership marker.'
+}
+Write-Output 'Qalam installer contract passed.'

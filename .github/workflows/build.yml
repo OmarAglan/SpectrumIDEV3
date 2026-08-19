@@ -8,7 +8,7 @@ on:
 
 jobs:
   windows:
-    name: Windows portable build
+    name: Windows standalone installer
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -17,26 +17,28 @@ jobs:
           repository: OmarAglan/Baa-LSP
           ref: 162ef31afd6decf1fdce23f3352d948ca2240122
           path: ecosystem/Baa-LSP
-      - uses: actions/checkout@v4
-        with:
-          repository: OmarAglan/Baa
-          ref: ccf37c534f88a83598536c483f7c8afbbdd6f073
-          path: ecosystem/Baa
-      - uses: actions/checkout@v4
-        with:
-          repository: OmarAglan/Nazm
-          ref: f7fcf8f6d2bf629daf708b3b6028e22c74683ce6
-          path: ecosystem/Nazm
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Bootstrap, build, and package
+      - name: Install Inno Setup
         shell: pwsh
-        run: .\scripts\bootstrap-windows.ps1 -SkipWinget -BuildTests -BaaLspSourceDir ecosystem/Baa-LSP -BaaSourceDir ecosystem/Baa -NazmSourceDir ecosystem/Nazm
+        run: choco install innosetup --no-progress -y
+      - name: Bootstrap, build, test, and package standalone Qalam
+        shell: pwsh
+        run: .\scripts\bootstrap-windows.ps1 -SkipWinget -BuildTests -SkipCompiler -BaaLspSourceDir ecosystem/Baa-LSP
+      - name: Build standalone installer
+        shell: pwsh
+        run: .\scripts\build_installer.ps1 -Version 3.3.0 -BuildDir build/windows-release -BaaLspExecutable ecosystem/Baa-LSP/build/windows-release/baa-lsp.exe -SkipBuild
+      - name: Verify install, launch, and uninstall
+        shell: pwsh
+        run: .\scripts\test_installer.ps1 -Version 3.3.0
       - uses: actions/upload-artifact@v4
         with:
-          name: Qalam-win64
-          path: dist/Qalam-win64.zip
+          name: qalam-setup-3.3.0-x64
+          path: |
+            dist/Qalam-win64.zip
+            dist/installer/qalam-setup-3.3.0-x64.exe
+            dist/installer/qalam-setup-3.3.0-x64.exe.sha256
 
   linux:
     name: Linux build
@@ -79,7 +81,7 @@ jobs:
           cmake -S ecosystem/Nazm -B ecosystem/Nazm/build \
             -DCMAKE_BUILD_TYPE=Release -DNAZM_BUILD_TESTS=OFF
           cmake --build ecosystem/Nazm/build --parallel --target nazm
-      - name: Package Qalam with Baa-LSP, Baa, and Nazm
+      - name: Package Qalam developer archive with Baa-LSP, Baa, and Nazm
         run: |
           cmake --install build/linux-release --prefix dist/Qalam-linux-x86_64
           mkdir -p dist/Qalam-linux-x86_64/baa-lsp

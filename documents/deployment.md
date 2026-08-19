@@ -36,7 +36,37 @@ This document explains how to build and package Qalam IDE on Windows, Linux, and
 
 ## Windows: Build and Package
 
-### Option A: one-command bootstrap (recommended)
+### Release installer (recommended)
+
+The standalone Windows release contains only the Qalam application, its exact
+Qt/MinGW runtime, and the internal Baa-LSP executable. It deliberately does not
+contain Baa, Takween, Nazm, GCC, or LD, and it never changes `PATH`.
+
+With Qalam and Baa-LSP already built:
+
+```powershell
+.\scripts\build_installer.ps1 `
+  -BuildDir build\windows-release `
+  -BaaLspExecutable ..\Baa-LSP\build\windows-release\baa-lsp.exe
+```
+
+Outputs:
+
+- `dist/installer/qalam-setup-3.3.0-x64.exe`
+- `dist/installer/qalam-setup-3.3.0-x64.exe.sha256`
+
+The default installation is per-machine under `Program Files\Qalam`.
+`/CURRENTUSER` selects an unelevated per-user installation. Validate the actual
+installer, native Qt window, internal language server, unchanged `PATH`, and
+uninstall cleanup with:
+
+```powershell
+.\scripts\test_installer.ps1
+```
+
+See [INSTALLER.md](INSTALLER.md) for the release contract.
+
+### Developer bootstrap and portable archive
 
 From the repository root:
 
@@ -44,7 +74,9 @@ From the repository root:
 .\scripts\bootstrap-windows.ps1
 ```
 
-The bootstrap script does the full local setup:
+The bootstrap script prepares a development checkout and can produce a portable
+archive. The archive path remains for compatibility and integration testing; it
+is not the independently owned release installer.
 
 1. Checks for Python and CMake.
 2. Uses `winget` to install missing base tools when possible.
@@ -54,10 +86,10 @@ The bootstrap script does the full local setup:
    already present on `PATH` is not accepted as the kit compiler.
 6. Builds Qalam.
 7. Builds Baa-LSP from a sibling checkout (or consumes an explicit executable).
-8. Builds Baa and its runtime from a sibling checkout (or consumes an explicit
-   compiler), then copies the matching stdlib.
-9. Builds the pinned Nazm assembler and installs its Arabic executable beside Baa.
-10. Copies the complete relocatable MinGW-w64 kit under `baa/gcc/`, including
+8. Unless `-SkipCompiler` is supplied, builds Baa and its runtime from a sibling
+   checkout (or consumes an explicit compiler), then copies the matching stdlib.
+9. Unless `-SkipCompiler` is supplied, builds the pinned Nazm assembler.
+10. For a combined developer archive, copies the complete relocatable MinGW-w64 kit under `baa/gcc/`, including
     its licenses, so Baa never selects an arbitrary linker from `PATH`.
 11. Runs isolated compile-link-run checks with external Qt, MinGW, and MSYS2
     paths removed, then creates the portable ZIP.
@@ -83,14 +115,12 @@ Useful options:
 .\scripts\bootstrap-windows.ps1 -NazmSourceDir "..\Nazm"
 ```
 
-The packaging script runs `windeployqt.exe` for Qt libraries and plugins, then
-copies the exact MinGW runtime recorded in the build's `CMakeCache.txt`. It also
-copies that build's complete relocatable GCC/MinGW-w64 root under `baa/gcc/`.
-It never selects compiler DLLs or a linker from the caller's `PATH`. A
-production package requires Baa-LSP at `baa-lsp/baa-lsp.exe` and the matching
-Baa compiler, Nazm assembler, `libbaa_runtime.a`, stdlib, and linker toolchain
-under `baa/`, which Qalam and Baa discover automatically. `-SkipLanguageServer`
-and `-SkipCompiler` exist only for intentional development packages.
+`package-windows.ps1` runs `windeployqt.exe` and copies the exact MinGW runtime
+recorded in `CMakeCache.txt`. By default it can still construct the historical
+combined developer archive. `build_installer.ps1` always passes
+`-SkipCompiler`, rejects externally owned tool executables in its payload, and
+therefore enforces the standalone release boundary. `-SkipLanguageServer` is
+valid only for an intentional UI-only development package.
 
 To verify a built or packaged executable with no Qt or MinGW directories on
 `PATH`:
@@ -156,22 +186,20 @@ intermediate build:
 .\scripts\build-windows.ps1 -Configuration Release -SkipDeployAfterBuild
 ```
 
-### Baa compiler location on Windows
+### Tool discovery on Windows
 
-The IDE now resolves the Baa compiler in this order:
+Qalam resolves Baa, Takween, and Nazm independently in this order:
 
-1. The configured compiler path from settings.
-2. The `BAA` environment variable.
-3. `baa/baa.exe` next to `Qalam.exe`.
-4. `baa-lsp/baa/baa.exe` in a development layout.
-5. `baa.exe` next to `Qalam.exe`.
-6. `baa.exe` or `baa` from `PATH`.
+1. The explicit executable saved under **Settings → الأدوات**.
+2. `QALAM_BAA_PATH`, `QALAM_TAKWEEN_PATH`, or `QALAM_NAZM_PATH`.
+3. The installed command on `PATH`.
+4. A legacy beside-Qalam portable layout.
 
-When the selected compiler has a sibling Arabic `نظم` executable, Qalam supplies
-its exact path through `BAA_NAZM`; no ASCII launcher name or global `PATH` entry
-is required. An explicit existing `BAA_NAZM` remains authoritative.
+The standalone installers for Baa, Takween, and Nazm own their commands and
+`PATH` entries. Qalam consumes those installations but does not copy, upgrade,
+or uninstall them. The internal Baa-LSP remains private to Qalam.
 
-For portable releases, place the compiler here:
+For legacy portable developer archives, place the compiler here:
 
 ```text
 Qalam-win64/
@@ -294,33 +322,26 @@ mingw32-make -j
 ## Continuous Integration
 
 The repository includes `.github/workflows/build.yml` for Windows and Linux.
-Both jobs build the pinned Baa-LSP, Baa, and Nazm revisions and publish combined
-Qalam + Baa-LSP + Baa + Nazm artifacts. Windows uploads a runtime-complete ZIP;
-Linux uploads a `.tar.gz` whose Qt libraries are provided by the target distribution.
-The workflow pins Baa-LSP commit
-`162ef31afd6decf1fdce23f3352d948ca2240122` and Baa commit
-`991c51195fef58dcbf3aab8b83ebd6659a6630b2`, plus Nazm commit
-`f7fcf8f6d2bf629daf708b3b6028e22c74683ce6`, including compiler-owned
-parameter hints, an Arabic-only assembler path, and the admitted portable
-Windows linker toolchain in the payload.
-
-The admitted receipt is
-[run 31509433467](https://github.com/OmarAglan/Qalam-IDE/actions/runs/31509433467),
-which uploaded `Qalam-win64` and `Qalam-linux-x86_64` after both jobs passed.
+The Windows job builds the pinned internal Baa-LSP, creates the standalone
+Qalam installer, verifies its checksum, performs a silent per-user lifecycle,
+launches a real native Qalam window, checks Baa-LSP, proves `PATH` is unchanged,
+and uploads the installer plus its checksum. It does not check out or package
+Baa, Takween, or Nazm. The Linux archive remains a developer integration
+artifact until a native Linux installer contract is defined.
 
 ---
 
 ## Known Issues / Next Work
 
-1. **Compiler settings UI:** The key already exists (`compilerPath`), but the settings window still needs a proper compiler path picker.
-2. **Windows terminal:** The embedded terminal starts `cmd.exe` using UTF-8 code page setup, but a future terminal layer should support PowerShell and better ANSI color rendering.
-3. **CI:** Windows and Linux GitHub Actions builds are included; macOS CI packaging can be added later.
-4. **Packaging installer:** Current Windows packaging creates a portable ZIP. A proper installer can be added later with Qt Installer Framework or another installer system.
-5. **Baa SDK distribution:** Qalam now bundles the pinned reference compiler,
-   Nazm assembler, runtime archive, and stdlib needed for IDE use and local
-   object generation. Final native linking still requires a supported host
-   linker. Takween, a linker/toolchain payload, multi-version selection, target
-   files, and transactional installation belong to the versioned SDK track.
+1. **Windows terminal:** The embedded terminal starts `cmd.exe` using UTF-8 code
+   page setup; a future terminal layer should support PowerShell and improve
+   process-session behavior.
+2. **CI:** Windows and Linux builds are present; macOS release packaging remains
+   future work.
+3. **Portable archive:** The combined developer archive is retained for
+   compatibility and cross-project integration tests. New Windows users should
+   install the independently versioned ecosystem tools or the offline Developer
+   Kit bootstrapper.
 
 ---
 
