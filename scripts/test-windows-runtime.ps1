@@ -60,10 +60,18 @@ if (!($gccRuntimeCandidates | Where-Object {
 }
 
 $previousPath = $env:Path
+$previousTemp = $env:TEMP
+$previousTmp = $env:TMP
+$hostTempRoot = [IO.Path]::GetFullPath([IO.Path]::GetTempPath())
+$runtimeTempRoot = Join-Path $hostTempRoot (
+    'Qalam runtime lock - ' + [Guid]::NewGuid().ToString('N'))
+[IO.Directory]::CreateDirectory($runtimeTempRoot) | Out-Null
 $hadPlatform = Test-Path Env:QT_QPA_PLATFORM
 $previousPlatform = $env:QT_QPA_PLATFORM
 $windowsDirectory = if ($env:SystemRoot) { $env:SystemRoot } else { 'C:\Windows' }
 $env:Path = "$windowsDirectory\System32;$windowsDirectory"
+$env:TEMP = $runtimeTempRoot
+$env:TMP = $runtimeTempRoot
 Remove-Item Env:QT_QPA_PLATFORM -ErrorAction SilentlyContinue
 $process = $null
 try {
@@ -317,8 +325,18 @@ public static class QalamRuntimeWindowProbe
         $process.WaitForExit()
     }
     $env:Path = $previousPath
+    $env:TEMP = $previousTemp
+    $env:TMP = $previousTmp
     if ($hadPlatform) { $env:QT_QPA_PLATFORM = $previousPlatform }
     else { Remove-Item Env:QT_QPA_PLATFORM -ErrorAction SilentlyContinue }
+    if (Test-Path -LiteralPath $runtimeTempRoot) {
+        $resolvedRuntimeTemp = [IO.Path]::GetFullPath($runtimeTempRoot)
+        if (!$resolvedRuntimeTemp.StartsWith(
+                $hostTempRoot, [StringComparison]::OrdinalIgnoreCase)) {
+            throw "Refusing to remove runtime files outside Temp: $resolvedRuntimeTemp"
+        }
+        Remove-Item -LiteralPath $resolvedRuntimeTemp -Recurse -Force
+    }
 }
 
 if ($LanguageServer -and $Compiler -and $Nazm) {
