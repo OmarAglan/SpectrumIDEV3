@@ -518,6 +518,11 @@ void TestBaaLanguageClient::synchronizesDocumentsAndRejectsStaleDiagnostics()
 
 void TestBaaLanguageClient::rejectsNonBaaDocuments()
 {
+    QVERIFY(BaaLanguageClient::isBaaSourcePath(QStringLiteral("رئيسية.باء")));
+    QVERIFY(BaaLanguageClient::isBaaSourcePath(QStringLiteral("واجهة.رأسباء")));
+    QVERIFY(BaaLanguageClient::isBaaSourcePath(QStringLiteral("legacy.baa")));
+    QVERIFY(BaaLanguageClient::isBaaSourcePath(QStringLiteral("legacy.baahd")));
+    QVERIFY(not BaaLanguageClient::isBaaSourcePath(QStringLiteral("notes.txt")));
     BaaLanguageClient client;
     QCOMPARE(client.synchronizeDocument("notes.txt", "text", 1), 0);
     QCOMPARE(client.state(), BaaLanguageClient::State::Stopped);

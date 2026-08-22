@@ -1607,7 +1607,7 @@ void Qalam::createWorkspaceFile(const QString &directoryPath)
         QStringLiteral("ملف باء جديد"),
         QStringLiteral("اسم الملف:"),
         QLineEdit::Normal,
-        QStringLiteral("ملف_جديد.baa"),
+        QStringLiteral("ملف_جديد.باء"),
         &accepted);
     if (not accepted) return;
 

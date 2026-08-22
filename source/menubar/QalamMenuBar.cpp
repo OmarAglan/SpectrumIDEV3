@@ -2,7 +2,7 @@
 #include <QMenu>
 
 QalamMenuBar::QalamMenuBar(QWidget* parent) : QMenuBar(parent) {
-    setLayoutDirection(Qt::LeftToRight);
+    setLayoutDirection(Qt::RightToLeft);
 
     QMenu* fileMenu = addMenu("ملف");
     QMenu* editMenu = addMenu("تحرير");
@@ -10,6 +10,11 @@ QalamMenuBar::QalamMenuBar(QWidget* parent) : QMenuBar(parent) {
     QMenu* runMenu = addMenu("تشغيل");
     QMenu* terminalMenu = addMenu("الطرفية");
     QMenu* helpMenu = addMenu("مساعدة");
+
+    for (QMenu *menu : {fileMenu, editMenu, viewMenu, runMenu,
+                        terminalMenu, helpMenu}) {
+        menu->setLayoutDirection(Qt::RightToLeft);
+    }
 
     fileMenu->setMinimumWidth(220);
     editMenu->setMinimumWidth(220);

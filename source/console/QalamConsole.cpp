@@ -173,7 +173,9 @@ void QalamConsole::setConsoleRTL()
     setLayoutDirection(Qt::RightToLeft);
 
     QTextOption opt = m_output->document()->defaultTextOption();
-    opt.setTextDirection(Qt::RightToLeft);
+    // Let each paragraph choose its own bidi direction. Arabic diagnostics
+    // stay RTL, while Windows paths and shell prompts remain readable LTR.
+    opt.setTextDirection(Qt::LayoutDirectionAuto);
     opt.setAlignment(Qt::AlignRight);
     m_output->document()->setDefaultTextOption(opt);
 }

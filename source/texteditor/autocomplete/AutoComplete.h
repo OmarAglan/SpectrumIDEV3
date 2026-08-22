@@ -9,7 +9,9 @@ enum CompletionType {
     Variable,
     Type,
     Value,
-    Preprocessor
+    Preprocessor,
+    File,
+    Folder
 };
 
 struct CompletionItem {

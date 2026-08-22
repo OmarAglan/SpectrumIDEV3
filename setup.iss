@@ -45,6 +45,9 @@ SetupLogging=yes
 UsePreviousAppDir=yes
 UsePreviousLanguage=yes
 UsePreviousTasks=yes
+CloseApplications=yes
+RestartApplications=no
+ChangesAssociations=yes
 UninstallDisplayIcon={app}\{#MyAppExeName}
 UninstallDisplayName={#MyAppName} {#MyAppVersion}
 
@@ -60,6 +63,39 @@ Source: "{#QalamPayloadDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesu
 Source: "README.md"; DestDir: "{app}\docs"; Flags: ignoreversion
 Source: "documents\USER_GUIDE.md"; DestDir: "{app}\docs"; Flags: ignoreversion
 Source: "documents\deployment.md"; DestDir: "{app}\docs"; Flags: ignoreversion
+
+[InstallDelete]
+Type: files; Name: "{app}\Qalam.exe"
+Type: files; Name: "{app}\Qt6*.dll"
+Type: files; Name: "{app}\lib*.dll"
+Type: files; Name: "{app}\D3Dcompiler_47.dll"
+Type: files; Name: "{app}\opengl32sw.dll"
+Type: filesandordirs; Name: "{app}\platforms"
+Type: filesandordirs; Name: "{app}\generic"
+Type: filesandordirs; Name: "{app}\iconengines"
+Type: filesandordirs; Name: "{app}\imageformats"
+Type: filesandordirs; Name: "{app}\networkinformation"
+Type: filesandordirs; Name: "{app}\styles"
+Type: filesandordirs; Name: "{app}\tls"
+Type: filesandordirs; Name: "{app}\translations"
+Type: filesandordirs; Name: "{app}\baa-lsp"
+Type: filesandordirs; Name: "{app}\docs"
+
+[Registry]
+Root: HKA; Subkey: "Software\Classes\.باء\OpenWithProgids"; ValueType: string; ValueName: "Qalam.BaaSource"; ValueData: ""; Flags: uninsdeletevalue
+Root: HKA; Subkey: "Software\Classes\.رأسباء\OpenWithProgids"; ValueType: string; ValueName: "Qalam.BaaHeader"; ValueData: ""; Flags: uninsdeletevalue
+Root: HKA; Subkey: "Software\Classes\.baa\OpenWithProgids"; ValueType: string; ValueName: "Qalam.BaaSource"; ValueData: ""; Flags: uninsdeletevalue
+Root: HKA; Subkey: "Software\Classes\.baahd\OpenWithProgids"; ValueType: string; ValueName: "Qalam.BaaHeader"; ValueData: ""; Flags: uninsdeletevalue
+Root: HKA; Subkey: "Software\Classes\.نظم\OpenWithProgids"; ValueType: string; ValueName: "Qalam.NazmSource"; ValueData: ""; Flags: uninsdeletevalue
+Root: HKA; Subkey: "Software\Classes\Qalam.BaaSource"; ValueType: string; ValueData: "ملف مصدر باء"; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Classes\Qalam.BaaSource\DefaultIcon"; ValueType: string; ValueData: "{app}\{#MyAppExeName},0"
+Root: HKA; Subkey: "Software\Classes\Qalam.BaaSource\shell\open\command"; ValueType: string; ValueData: """{app}\{#MyAppExeName}"" ""%1"""
+Root: HKA; Subkey: "Software\Classes\Qalam.BaaHeader"; ValueType: string; ValueData: "ملف رأس باء"; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Classes\Qalam.BaaHeader\DefaultIcon"; ValueType: string; ValueData: "{app}\{#MyAppExeName},0"
+Root: HKA; Subkey: "Software\Classes\Qalam.BaaHeader\shell\open\command"; ValueType: string; ValueData: """{app}\{#MyAppExeName}"" ""%1"""
+Root: HKA; Subkey: "Software\Classes\Qalam.NazmSource"; ValueType: string; ValueData: "ملف مصدر نظم"; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Classes\Qalam.NazmSource\DefaultIcon"; ValueType: string; ValueData: "{app}\{#MyAppExeName},0"
+Root: HKA; Subkey: "Software\Classes\Qalam.NazmSource\shell\open\command"; ValueType: string; ValueData: """{app}\{#MyAppExeName}"" ""%1"""
 
 [Icons]
 Name: "{autoprograms}\قلم\قلم"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"

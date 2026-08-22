@@ -13,11 +13,33 @@ class TestEditorSemanticRequests : public QObject
 
 private slots:
     void requestsSignaturesFromArabicEditingTriggers();
+    void requestsCompletionInsideIncludePaths();
     void keepsPairsAndSelectionsInLogicalDocumentOrder();
     void expandsAndShrinksCompilerOwnedSelections();
     void keepsLiteralBracesOutOfLocalFolding();
     void rendersInlayHintsWithoutChangingSourceText();
 };
+
+void TestEditorSemanticRequests::requestsCompletionInsideIncludePaths()
+{
+    QalamEditor editor;
+    editor.setFilePath(QStringLiteral("رئيسي.باء"));
+    editor.setPlainText(QStringLiteral("#تضمين "));
+    QTextCursor cursor = editor.textCursor();
+    cursor.movePosition(QTextCursor::End);
+    editor.setTextCursor(cursor);
+    QSignalSpy requests(&editor, &QalamEditor::completionRequested);
+
+    QTest::keyClick(&editor, Qt::Key_QuoteDbl);
+    QVERIFY(not requests.isEmpty());
+    const int afterQuote = requests.size();
+    editor.insertPlainText(QStringLiteral("واجهات"));
+    QTest::keyClick(&editor, Qt::Key_Slash);
+    QVERIFY(requests.size() > afterQuote);
+    QCOMPARE(requests.constLast().at(1).toInt(), 0);
+    QCOMPARE(requests.constLast().at(2).toInt(),
+             editor.textCursor().positionInBlock());
+}
 
 void TestEditorSemanticRequests::requestsSignaturesFromArabicEditingTriggers()
 {

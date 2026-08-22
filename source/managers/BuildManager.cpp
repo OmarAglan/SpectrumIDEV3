@@ -117,8 +117,7 @@ BuildManager::ToolActionState BuildManager::toolActionState(
         return {false, QStringLiteral("افتح ملف باء أو نظم محفوظًا أولًا.")};
     }
 
-    const bool baaSource = filePath.endsWith(
-        QStringLiteral(".baa"), Qt::CaseInsensitive);
+    const bool baaSource = Constants::isBaaImplementationPath(filePath);
     const bool nazmSource = isNazmSourcePath(filePath);
     if (not baaSource and not nazmSource) {
         return {false, QStringLiteral("الأمر متاح لملفات باء أو نظم فقط.")};

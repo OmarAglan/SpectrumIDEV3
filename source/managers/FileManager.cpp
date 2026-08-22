@@ -158,8 +158,11 @@ void FileManager::newFile()
 void FileManager::openFile(QString filePath)
 {
     if (filePath.isEmpty()) {
-        filePath = QFileDialog::getOpenFileName(m_parentWindow, "فتح ملف", "",
-                                                 "مصادر باء ونظم (*.baa *.baahd *.نظم);;ملف باء (*.baa *.baahd);;ملف نظم (*.نظم);;Text Files (*.txt);;All Files (*)");
+        filePath = QFileDialog::getOpenFileName(
+            m_parentWindow, "فتح ملف", "",
+            "مصادر باء ونظم (*.باء *.رأسباء *.نظم *.baa *.baahd);;"
+            "ملفات باء (*.باء *.رأسباء *.baa *.baahd);;"
+            "ملف نظم (*.نظم);;ملفات نصية (*.txt);;كل الملفات (*)");
     }
 
     if (filePath.isEmpty()) return;
@@ -315,9 +318,13 @@ bool FileManager::saveEditorAs(QalamEditor *editor)
     QString content = editor->toPlainText();
     const QString oldPath = editor->currentFilePath();
     QString currentPath = oldPath;
-    QString currentName = currentPath.isEmpty() ? "ملف جديد.baa" : QFileInfo(currentPath).fileName();
-    QString fileName = QFileDialog::getSaveFileName(m_parentWindow, "حفظ الملف", currentName,
-                                                     "ملف باء (*.baa);;مكتبة باء (*.baahd);;ملف نظم (*.نظم);;Text Files (*.txt);;All Files (*)");
+    QString currentName = currentPath.isEmpty()
+        ? QStringLiteral("ملف جديد.باء") : QFileInfo(currentPath).fileName();
+    QString fileName = QFileDialog::getSaveFileName(
+        m_parentWindow, "حفظ الملف", currentName,
+        "ملف مصدر باء (*.باء);;ملف رأس باء (*.رأسباء);;"
+        "ملف نظم (*.نظم);;امتدادات باء القديمة (*.baa *.baahd);;"
+        "ملفات نصية (*.txt);;كل الملفات (*)");
 
     if (fileName.isEmpty()) return false;
 

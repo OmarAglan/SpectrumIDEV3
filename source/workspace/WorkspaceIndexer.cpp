@@ -68,6 +68,7 @@ bool hasIndexedExtension(const QString &filePath)
     const QFileInfo info(filePath);
     const QString suffix = info.suffix().toLower();
     const QStringList allowed = {
+        QStringLiteral("باء"), QStringLiteral("رأسباء"),
         QStringLiteral("baa"), QStringLiteral("baahd"), QStringLiteral("نظم"),
         QStringLiteral("txt"), QStringLiteral("md"),
         QStringLiteral("json"), QStringLiteral("cmake"),

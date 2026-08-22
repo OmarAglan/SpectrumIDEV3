@@ -14,6 +14,7 @@
 #include <QHash>
 #include <QToolTip>
 #include <QTextDocument>
+#include <QRegularExpression>
 #include "Constants.h"
 #include "highlighter/ThemeManager.h"
 #include "highlighter/QalamSyntaxDefinition.h"
@@ -48,6 +49,8 @@ CompletionType completionTypeForItem(const BaaCompletionItem &item)
     case 25: return CompletionType::Type;
     case 14: return CompletionType::Keyword;
     case 15: return CompletionType::Snippet;
+    case 17: return CompletionType::File;
+    case 19: return CompletionType::Folder;
     default: return CompletionType::Value;
     }
 }
@@ -158,8 +161,7 @@ void QalamEditor::setFilePath(const QString &path) {
     if (highlighter) {
         if (path.endsWith(QStringLiteral(".نظم"), Qt::CaseInsensitive)) {
             highlighter->setLanguageMode(QalamLanguageMode::Nazm);
-        } else if (path.endsWith(QStringLiteral(".baa"), Qt::CaseInsensitive) or
-                   path.endsWith(QStringLiteral(".baahd"), Qt::CaseInsensitive) or
+        } else if (Constants::isBaaDocumentPath(path) or
                    path.isEmpty()) {
             highlighter->setLanguageMode(QalamLanguageMode::Baa);
         } else {
@@ -783,10 +785,8 @@ void QalamEditor::updateFoldRegions() {
     m_selectionRequestLine = -1;
     m_selectionRequestCharacter = -1;
 
-    const QString suffix = QFileInfo(currentFilePath()).suffix().toLower();
     if (not currentFilePath().isEmpty() and
-        suffix != QStringLiteral("baa") and
-        suffix != QStringLiteral("baahd")) {
+        not Constants::isBaaDocumentPath(currentFilePath())) {
         replaceFoldRegions({});
         return;
     }
@@ -942,8 +942,8 @@ void QalamEditor::toggleFold(int blockNumber) {
 void QalamEditor::dragEnterEvent(QDragEnterEvent* event) {
     if (event->mimeData()->hasUrls()) {
         for (const QUrl& url : event->mimeData()->urls()) {
-            if (url.fileName().endsWith(".baa", Qt::CaseInsensitive) or
-                url.fileName().endsWith(".baahd", Qt::CaseInsensitive) or
+            if (Constants::isBaaDocumentPath(url.fileName()) or
+                url.fileName().endsWith(".نظم", Qt::CaseInsensitive) or
                 url.fileName().endsWith(".txt", Qt::CaseInsensitive)) {
                 event->acceptProposedAction();
                 return;
@@ -965,8 +965,8 @@ void QalamEditor::dragMoveEvent(QDragMoveEvent* event) {
 void QalamEditor::dropEvent(QDropEvent* event) {
     if (event->mimeData()->hasUrls()) {
         for (const QUrl& url : event->mimeData()->urls()) {
-            if (url.fileName().endsWith(".baa", Qt::CaseInsensitive) or
-                url.fileName().endsWith(".baahd", Qt::CaseInsensitive) or
+            if (Constants::isBaaDocumentPath(url.fileName()) or
+                url.fileName().endsWith(".نظم", Qt::CaseInsensitive) or
                 url.fileName().endsWith(".txt", Qt::CaseInsensitive)) {
 
                 QString filePath = url.toLocalFile();
@@ -1248,7 +1248,7 @@ void QalamEditor::setCompleter(QCompleter *completer) {
 
     // set dimensions
     popup->setMinimumWidth(320);
-    popup->setMinimumHeight(150);
+    popup->setMinimumHeight(190);
 
 
     // To this lambda that captures the type:
@@ -1293,6 +1293,16 @@ void QalamEditor::keyPressEvent(QKeyEvent *e) {
     if (m_bracketHandler.handleAutoPairing(e)) {
         if (e->text().contains('(')) requestSignatureHelp();
         if (e->text().contains(')')) QToolTip::hideText();
+        if (e->text().contains('"')) {
+            const QTextCursor cursor = textCursor();
+            const QString linePrefix = cursor.block().text().left(
+                cursor.positionInBlock());
+            static const QRegularExpression includePathPattern(
+                QStringLiteral("^\\s*#تضمين\\s+\"[^\"]*$"));
+            if (includePathPattern.match(linePrefix).hasMatch()) {
+                performCompletion(true);
+            }
+        }
         e->accept();
         return;
     }
@@ -1379,7 +1389,14 @@ void QalamEditor::keyPressEvent(QKeyEvent *e) {
             hasSignatureTrigger = true;
     }
     if (hasSignatureTrigger) requestSignatureHelp();
-    if (hasArabicTrigger) performCompletion();
+    const QTextCursor completionCursor = textCursor();
+    const QString linePrefix = completionCursor.block().text().left(
+        completionCursor.positionInBlock());
+    static const QRegularExpression includePathPattern(
+        QStringLiteral("^\\s*#تضمين\\s+\"[^\"]*$"));
+    const bool includePathContext = includePathPattern.match(linePrefix).hasMatch();
+    if (includePathContext) performCompletion(true);
+    else if (hasArabicTrigger) performCompletion();
     else if (c and c->popup()) c->popup()->hide();
 }
 

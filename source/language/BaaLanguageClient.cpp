@@ -688,8 +688,7 @@ BaaLanguageClient::State BaaLanguageClient::state() const
 
 bool BaaLanguageClient::isBaaSourcePath(const QString &filePath)
 {
-    const QString suffix = QFileInfo(filePath).suffix().toLower();
-    return suffix == QStringLiteral("baa") or suffix == QStringLiteral("baahd");
+    return Constants::isBaaDocumentPath(filePath);
 }
 
 void BaaLanguageClient::flushDocumentChanges()

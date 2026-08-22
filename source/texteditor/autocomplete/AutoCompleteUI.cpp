@@ -2,6 +2,7 @@
 
 #include <QScrollBar>
 #include <QPainter>
+#include <QResizeEvent>
 
 
 // --- CompletionModel ---
@@ -40,7 +41,7 @@ QVariant CompletionModel::data(const QModelIndex &index, int role) const {
 
 // --- QalamCompletionPopup Implementation ---
 
-QalamCompletionPopup::QalamCompletionPopup(QWidget *parent) : QListView(parent), footerHeight(52) {
+QalamCompletionPopup::QalamCompletionPopup(QWidget *parent) : QListView(parent), footerHeight(72) {
     // 1. Visual Properties for the Container
     setWindowFlags(Qt::Popup | Qt::FramelessWindowHint | Qt::NoDropShadowWindowHint);
     // setAttribute(Qt::WA_TranslucentBackground);
@@ -63,6 +64,7 @@ QalamCompletionPopup::QalamCompletionPopup(QWidget *parent) : QListView(parent),
 
     // 2. The Info Panel (Label)
     infoLabel = new QLabel(this);
+    infoLabel->setObjectName(QStringLiteral("completionInfoLabel"));
     infoLabel->setStyleSheet(
         "QLabel { "
         "   background-color: #2c313a; "
@@ -76,7 +78,8 @@ QalamCompletionPopup::QalamCompletionPopup(QWidget *parent) : QListView(parent),
         );
     infoLabel->setAlignment(Qt::AlignTop | Qt::AlignRight);
     infoLabel->setWordWrap(true);
-    infoLabel->setLayoutDirection(Qt::RightToLeft); // Set RTL for label
+    infoLabel->setTextFormat(Qt::RichText);
+    infoLabel->setLayoutDirection(Qt::RightToLeft);
 
     // Reserve space at bottom so list items don't overlap the footer
     setViewportMargins(0, 0, 0, footerHeight);
@@ -84,14 +87,36 @@ QalamCompletionPopup::QalamCompletionPopup(QWidget *parent) : QListView(parent),
 
 void QalamCompletionPopup::resizeEvent(QResizeEvent *event) {
     QListView::resizeEvent(event);
-    // Force the label to stay at the bottom of the visible area
+    updateFooterLayout();
+}
+
+void QalamCompletionPopup::updateFooterLayout() {
     QRect cr = contentsRect();
+    if (cr.width() <= 0) return;
+
+    // Rich text and Arabic fonts need more room than the old fixed 52-pixel
+    // footer. Measure the current description at the popup width so both its
+    // heading and body remain visible, while keeping enough space for results.
+    infoLabel->setFixedWidth(cr.width());
+    const int measuredHeight = infoLabel->heightForWidth(cr.width());
+    const int requiredHeight = qBound(72, measuredHeight, 120);
+    if (requiredHeight != footerHeight) {
+        footerHeight = requiredHeight;
+        setViewportMargins(0, 0, 0, footerHeight);
+        cr = contentsRect();
+    }
+
     infoLabel->setGeometry(cr.left(), cr.bottom() - footerHeight + 1, cr.width(), footerHeight);
+    setProperty("qalam.completionFooterHeight", footerHeight);
 }
 
 void QalamCompletionPopup::currentChanged(const QModelIndex &current, const QModelIndex &previous) {
     QListView::currentChanged(current, previous);
-    if (!current.isValid()) { infoLabel->clear(); return; }
+    if (!current.isValid()) {
+        infoLabel->clear();
+        updateFooterLayout();
+        return;
+    }
 
     QString desc = current.data(Qt::UserRole + 1).toString();
     CompletionType type = static_cast<CompletionType>(current.data(Qt::UserRole + 2).toInt());
@@ -105,6 +130,8 @@ void QalamCompletionPopup::currentChanged(const QModelIndex &current, const QMod
     case Type: typeStr = "نوع"; colorStr = "#56b6c2"; break;
     case Value: typeStr = "قيمة"; colorStr = "#abb2bf"; break;
     case Preprocessor: typeStr = "معالجة قبلية"; colorStr = "#d19a66"; break;
+    case File: typeStr = "ملف باء"; colorStr = "#61afef"; break;
+    case Folder: typeStr = "مجلد"; colorStr = "#e5c07b"; break;
     }
 
     QString html = QString("<div dir='rtl'>"
@@ -114,6 +141,7 @@ void QalamCompletionPopup::currentChanged(const QModelIndex &current, const QMod
                            "</div>")
                        .arg(colorStr, typeStr, desc.toHtmlEscaped().replace("\n", "<br>"));
     infoLabel->setText(html);
+    updateFooterLayout();
 }
 
 // --- Modern Delegate Implementation ---
@@ -135,16 +163,16 @@ void QalamModernCompletionDelegate::paint(QPainter *painter, const QStyleOptionV
     // Colors
     QColor bgColor = (option.state & QStyle::State_Selected) ? QColor(62, 68, 81) : QColor(30, 32, 46); // Matches popup bg
     QColor iconColor;
-    QString iconText;
-
     switch (type) {
-    case Keyword: iconColor = QColor(198, 120, 221); iconText = "ك"; break;
-    case Snippet: iconColor = QColor(224, 108, 117); iconText = "ق"; break;
-    case Function: iconColor = QColor(130, 212, 72); iconText = "د"; break;
-    case Variable: iconColor = QColor(97, 175, 239); iconText = "م"; break;
-    case Type: iconColor = QColor(86, 182, 194); iconText = "ن"; break;
-    case Value: iconColor = QColor(171, 178, 191); iconText = "ق"; break;
-    case Preprocessor: iconColor = QColor(209, 154, 102); iconText = "مق"; break;
+    case Keyword: iconColor = QColor(198, 120, 221); break;
+    case Snippet: iconColor = QColor(224, 108, 117); break;
+    case Function: iconColor = QColor(130, 212, 72); break;
+    case Variable: iconColor = QColor(97, 175, 239); break;
+    case Type: iconColor = QColor(86, 182, 194); break;
+    case Value: iconColor = QColor(171, 178, 191); break;
+    case Preprocessor: iconColor = QColor(209, 154, 102); break;
+    case File: iconColor = QColor(97, 175, 239); break;
+    case Folder: iconColor = QColor(229, 192, 123); break;
     }
 
     // Draw Background
@@ -154,13 +182,76 @@ void QalamModernCompletionDelegate::paint(QPainter *painter, const QStyleOptionV
 
     // Draw Icon (Right Side)
     // ---------------------
-    int iconWidth = 35;
-    QRect iconRect(option.rect.right() - iconWidth, option.rect.top(), iconWidth, option.rect.height());
-
-    // Icon text
-    painter->setPen(iconColor);
-    painter->setFont(QFont("Tajawal", 9, QFont::Bold));
-    painter->drawText(iconRect, Qt::AlignCenter, iconText);
+    const int iconWidth = 34;
+    const QRectF iconRect(option.rect.right() - 25,
+                          option.rect.center().y() - 7, 14, 14);
+    painter->setPen(QPen(iconColor, 1.6, Qt::SolidLine,
+                         Qt::RoundCap, Qt::RoundJoin));
+    painter->setBrush(Qt::NoBrush);
+    switch (type) {
+    case Keyword: {
+        const QPointF center = iconRect.center();
+        QPolygonF diamond;
+        diamond << QPointF(center.x(), iconRect.top())
+                << QPointF(iconRect.right(), center.y())
+                << QPointF(center.x(), iconRect.bottom())
+                << QPointF(iconRect.left(), center.y());
+        painter->drawPolygon(diamond);
+        break;
+    }
+    case Snippet:
+        painter->drawLine(iconRect.topLeft(), iconRect.bottomLeft());
+        painter->drawLine(iconRect.topLeft(),
+                          iconRect.topLeft() + QPointF(4, 0));
+        painter->drawLine(iconRect.bottomLeft(),
+                          iconRect.bottomLeft() + QPointF(4, 0));
+        painter->drawLine(iconRect.topRight(), iconRect.bottomRight());
+        painter->drawLine(iconRect.topRight(),
+                          iconRect.topRight() - QPointF(4, 0));
+        painter->drawLine(iconRect.bottomRight(),
+                          iconRect.bottomRight() - QPointF(4, 0));
+        break;
+    case Function:
+        painter->drawEllipse(iconRect.adjusted(1, 1, -1, -1));
+        painter->drawLine(iconRect.left() + 4, iconRect.center().y(),
+                          iconRect.right() - 4, iconRect.center().y());
+        break;
+    case Variable:
+        painter->drawRoundedRect(iconRect.adjusted(1, 1, -1, -1), 2, 2);
+        break;
+    case Type: {
+        const QPointF center = iconRect.center();
+        QPolygonF hexagon;
+        hexagon << QPointF(center.x(), iconRect.top())
+                << QPointF(iconRect.right(), iconRect.top() + 4)
+                << QPointF(iconRect.right(), iconRect.bottom() - 4)
+                << QPointF(center.x(), iconRect.bottom())
+                << QPointF(iconRect.left(), iconRect.bottom() - 4)
+                << QPointF(iconRect.left(), iconRect.top() + 4);
+        painter->drawPolygon(hexagon);
+        break;
+    }
+    case Value:
+        painter->drawEllipse(iconRect.adjusted(3, 3, -3, -3));
+        break;
+    case Preprocessor: {
+        QPolygonF triangle;
+        triangle << QPointF(iconRect.center().x(), iconRect.top())
+                 << iconRect.bottomRight() << iconRect.bottomLeft();
+        painter->drawPolygon(triangle);
+        break;
+    }
+    case File:
+        painter->drawRect(iconRect.adjusted(2, 1, -2, -1));
+        painter->drawLine(iconRect.left() + 4, iconRect.top() + 5,
+                          iconRect.right() - 4, iconRect.top() + 5);
+        break;
+    case Folder:
+        painter->drawRoundedRect(iconRect.adjusted(0, 3, 0, -1), 1.5, 1.5);
+        painter->drawLine(iconRect.left() + 1, iconRect.top() + 3,
+                          iconRect.center().x(), iconRect.top() + 3);
+        break;
+    }
 
     // Draw Label (Main Text)
     // ----------------------
@@ -177,7 +268,7 @@ void QalamModernCompletionDelegate::paint(QPainter *painter, const QStyleOptionV
     painter->setFont(mainFont);
 
     // Draw text vertically centered
-    painter->drawText(textRect, Qt::AlignVCenter, label);
+    painter->drawText(textRect, Qt::AlignVCenter | Qt::AlignRight, label);
 
     // Selection Highlight Bar (Left Edge)
     if (option.state & QStyle::State_Selected) {

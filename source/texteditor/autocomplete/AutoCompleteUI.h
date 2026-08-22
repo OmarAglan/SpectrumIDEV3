@@ -36,6 +36,8 @@ protected:
     void currentChanged(const QModelIndex &current, const QModelIndex &previous) override;
 
 private:
+    void updateFooterLayout();
+
     QLabel *infoLabel{};
     int footerHeight{};
 };

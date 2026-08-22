@@ -1,4 +1,5 @@
 #include "BuildManager.h"
+#include "QalamMenuBar.h"
 
 #include <QtTest/QtTest>
 #include <QDir>
@@ -19,7 +20,18 @@ private slots:
     void recognizesNazmSourcesAndObjects();
     void buildsCanonicalNazmArguments();
     void explainsUnavailableToolActions();
+    void keepsMenuBarRightToLeft();
 };
+
+void TestBuildManager::keepsMenuBarRightToLeft()
+{
+    QalamMenuBar menu;
+    QCOMPARE(menu.layoutDirection(), Qt::RightToLeft);
+    for (QAction *action : menu.actions()) {
+        QVERIFY(action->menu());
+        QCOMPARE(action->menu()->layoutDirection(), Qt::RightToLeft);
+    }
+}
 
 void TestBuildManager::buildsValidatedTakweenArguments()
 {
@@ -146,6 +158,12 @@ void TestBuildManager::explainsUnavailableToolActions()
         standalone, QStringLiteral("run"), false, true, true);
     QVERIFY(not state.enabled);
     QVERIFY(state.explanation.contains(QStringLiteral("باء")));
+
+    const QString canonicalBaa = QDir(temp.path()).filePath(
+        QStringLiteral("رئيسية.باء"));
+    state = BuildManager::toolActionState(
+        canonicalBaa, QStringLiteral("run"), true, true, true);
+    QVERIFY(state.enabled);
 
     QDir root(temp.path());
     QVERIFY(root.mkpath(QStringLiteral("مشروع/مصدر")));

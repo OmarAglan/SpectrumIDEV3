@@ -26,7 +26,7 @@ A Baa program is a collection of **Global Variables** and **Functions**.
 
 | Aspect | Description |
 |--------|-------------|
-| **File Format** | UTF-8 encoded, `.baa` extension |
+| **File Format** | UTF-8 encoded; `.باء` source and `.رأسباء` header extensions (`.baa`/`.baahd` remain compatible) |
 | **Entry Point** | `الرئيسية` (Main) function |
 | **Statements** | End with period (`.`) |
 | **Comments** | Single-line with `//` |
@@ -49,13 +49,13 @@ The preprocessor handles directives before the code is compiled. All directives 
 
 Include other files (headers) into the current file. This works like C's `#include`.
 
-**Syntax:** `#تضمين "file.baahd"`
+**Syntax:** `#تضمين "ملف.رأسباء"`
 
 **Example:**
 
 ```baa
-#تضمين "math.baahd"
-// This includes the header file "math.baahd"
+#تضمين "رياضيات.رأسباء"
+// This includes the header file "رياضيات.رأسباء"
 ```
 
 ### 2.2. Definitions (`#تعريف`)

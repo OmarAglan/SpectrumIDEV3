@@ -20,7 +20,9 @@ public:
         }
 
         const QString suffix = info.suffix().toLower();
-        if (suffix == QStringLiteral("baa") or
+        if (suffix == QStringLiteral("باء") or
+            suffix == QStringLiteral("رأسباء") or
+            suffix == QStringLiteral("baa") or
             suffix == QStringLiteral("baahd") or
             suffix == QStringLiteral("نظم")) {
             return QIcon(QStringLiteral(":/icons/resources/file-new.svg"));

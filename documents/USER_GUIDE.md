@@ -7,14 +7,15 @@ Welcome to **Qalam IDE**, the professional environment for Arabic-syntax program
 ### Creating your first Baa file
 1. Click **ملف جديد** (New File) on the Welcome Screen or in the menu.
 2. Write your code using Baa syntax (see [Language Spec](LANGUAGE.md)).
-3. Save the file with a `.baa` extension using `Ctrl+S`.
+3. Save the file with the canonical `.باء` extension using `Ctrl+S`.
+   Existing `.baa` projects remain supported during the compatibility period.
 
 ### Running your code
-1. Open your `.baa` file.
+1. Open your `.باء` file (or a compatible existing `.baa` file).
 2. Ensure Baa and Nazm are installed and visible in `PATH`, or select them on
    the **الأدوات** page in Settings.
 3. Use **تشغيل** (Run) from the build menu to compile and execute your program.
-   For a standalone `.baa` file, Qalam builds into its application cache, then
+   For a standalone `.باء` file, Qalam builds into its application cache, then
    launches the new executable with the source folder as its working directory.
    Program stdout and stderr appear after **مخرجات البرنامج** in the
    **الطرفية** tab, and the input field remains connected to the running program.
@@ -45,8 +46,9 @@ The editor supports:
   appear through Baa-LSP while typing Arabic letters. Inner declarations
   correctly shadow outer ones, while future and sibling-block declarations do
   not appear.
-- **Live Baa diagnostics:** Saved and unsaved `.baa`/`.baahd` contents are checked
-  after a short pause. Only results matching the current document revision are shown.
+- **Live Baa diagnostics:** Saved and unsaved `.باء`/`.رأسباء` contents are
+  checked after a short pause; `.baa`/`.baahd` remain compatible. Only results
+  matching the current document revision are shown.
 - **Arabic parameter hints:** Baa-owned parameter names appear beside call
   arguments as muted overlays. They are not inserted into the file, are excluded
   when the argument already explains itself, and disappear if their document
@@ -286,7 +288,7 @@ After expanding, press **Tab** to jump between placeholders (e.g., function name
 - Open a new terminal after installation so it receives the updated `PATH`.
 
 ### Auto-save files
-Backup files use the `.~` suffix (e.g., `program.baa.~`). These are automatically cleaned up when you save or close the file.
+Backup files use the `.~` suffix (e.g., `برنامج.باء.~`). These are automatically cleaned up when you save or close the file.
 
 ### File won't open
 - Check that the file is UTF-8 encoded.

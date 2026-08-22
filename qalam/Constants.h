@@ -26,9 +26,24 @@ namespace Constants {
     const QString SessionKeyWindowGeometry = "session/windowGeometry";
 
     // File Extensions
-    const QString ProjectExtension = ".baa";
-    const QString HeaderExtension = ".baahd";
+    const QString ProjectExtension = ".باء";
+    const QString HeaderExtension = ".رأسباء";
+    const QString LegacyProjectExtension = ".baa";
+    const QString LegacyHeaderExtension = ".baahd";
     const QString BackupExtension = ".~";
+
+    inline bool isBaaImplementationPath(const QString &path)
+    {
+        return path.endsWith(ProjectExtension, Qt::CaseInsensitive) or
+               path.endsWith(LegacyProjectExtension, Qt::CaseInsensitive);
+    }
+
+    inline bool isBaaDocumentPath(const QString &path)
+    {
+        return isBaaImplementationPath(path) or
+               path.endsWith(HeaderExtension, Qt::CaseInsensitive) or
+               path.endsWith(LegacyHeaderExtension, Qt::CaseInsensitive);
+    }
 
     // UI Strings (Arabic)
     const QString NewFileLabel = "غير معنون";

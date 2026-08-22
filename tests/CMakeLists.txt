@@ -73,6 +73,7 @@ target_sources(test_search_view PRIVATE ../qalam/resources.qrc)
 
 add_qalam_test(test_lsp_message_framer TestLspMessageFramer.cpp)
 add_qalam_test(test_editor_semantic_requests TestEditorSemanticRequests.cpp)
+add_qalam_test(test_completion_popup TestCompletionPopup.cpp)
 add_qalam_test(test_syntax_highlighter TestSyntaxHighlighter.cpp)
 add_qalam_test(test_workspace_edit TestWorkspaceEdit.cpp)
 

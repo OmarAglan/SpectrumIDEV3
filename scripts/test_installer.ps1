@@ -40,6 +40,10 @@ $markerKey = 'HKCU:\Software\BaaEcosystem\Qalam'
 $nazmArabicExecutableName =
     (-join [char[]](0x0646, 0x0638, 0x0645)) + '.exe'
 $qalamArabicName = -join [char[]](0x0642, 0x0644, 0x0645)
+$baaSourceExtension = '.' + (-join [char[]](0x0628, 0x0627, 0x0621))
+$baaHeaderExtension = '.' + (-join [char[]](
+    0x0631, 0x0623, 0x0633, 0x0628, 0x0627, 0x0621))
+$nazmSourceExtension = '.' + (-join [char[]](0x0646, 0x0638, 0x0645))
 $startMenuShortcut = Join-Path $env:APPDATA (
     'Microsoft\Windows\Start Menu\Programs\' + $qalamArabicName + '\' +
     $qalamArabicName + '.lnk')
@@ -145,6 +149,18 @@ function Invoke-QalamInstaller {
     }
 }
 
+function Assert-OpenWithRegistration {
+    param([string]$Extension, [string]$ProgramId)
+    $key = "HKCU:\Software\Classes\$Extension\OpenWithProgids"
+    if (!(Test-Path -LiteralPath $key)) {
+        throw "Qalam file association key is missing: $Extension"
+    }
+    $properties = Get-ItemProperty -LiteralPath $key
+    if ($properties.PSObject.Properties.Name -notcontains $ProgramId) {
+        throw "Qalam Open With registration is missing: $Extension -> $ProgramId"
+    }
+}
+
 try {
     $arguments = @(
         '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-',
@@ -163,7 +179,22 @@ try {
         (Test-Path -LiteralPath $startMenuShortcut -PathType Leaf) -and
         (Test-Path -LiteralPath $markerKey)
     }
+    $staleUpgradeFile = Join-Path $installRoot 'platforms\removed-by-upgrade.tmp'
+    [IO.File]::WriteAllText($staleUpgradeFile, 'stale')
     Invoke-QalamInstaller $arguments
+    if (Test-Path -LiteralPath $staleUpgradeFile) {
+        throw 'Qalam repair did not remove an obsolete Qt plugin.'
+    }
+    $marker = Get-ItemProperty -LiteralPath $markerKey
+    if ($marker.Version -ne $Version -or
+        $marker.InstallLocation -ine $installRoot) {
+        throw 'Qalam installer did not record its installed version and location.'
+    }
+    Assert-OpenWithRegistration $baaSourceExtension 'Qalam.BaaSource'
+    Assert-OpenWithRegistration $baaHeaderExtension 'Qalam.BaaHeader'
+    Assert-OpenWithRegistration '.baa' 'Qalam.BaaSource'
+    Assert-OpenWithRegistration '.baahd' 'Qalam.BaaHeader'
+    Assert-OpenWithRegistration $nazmSourceExtension 'Qalam.NazmSource'
     foreach ($required in @(
         $qalam, $lsp,
         (Join-Path $installRoot 'Qt6Core.dll'),
@@ -264,6 +295,12 @@ try {
     Wait-InstallerState 'Qalam uninstall cleanup' {
         !(Test-Path -LiteralPath $installRoot) -and
         !(Test-Path -LiteralPath $markerKey)
+    }
+    foreach ($programId in @('Qalam.BaaSource', 'Qalam.BaaHeader',
+                              'Qalam.NazmSource')) {
+        if (Test-Path -LiteralPath "HKCU:\Software\Classes\$programId") {
+            throw "Qalam uninstaller left a file association: $programId"
+        }
     }
     if ([Environment]::GetEnvironmentVariable('Path', 'User') -ne $userPathBefore -or
         [Environment]::GetEnvironmentVariable('Path', 'Machine') -ne $machinePathBefore) {
