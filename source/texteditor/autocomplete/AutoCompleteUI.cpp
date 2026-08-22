@@ -47,19 +47,30 @@ QalamCompletionPopup::QalamCompletionPopup(QWidget *parent) : QListView(parent),
     // setAttribute(Qt::WA_TranslucentBackground);
 
     setLayoutDirection(Qt::RightToLeft);
-    // Hide horizontal scrollbar always
     setHorizontalScrollBarPolicy(Qt::ScrollBarPolicy::ScrollBarAlwaysOff);
+    setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
+    setUniformItemSizes(true);
 
     // Style the list itself
     setStyleSheet(
         "QListView { "
         "   background-color: #1e202e; "
-        "   border: 1px solid #4b5263; "
-        // "   border-radius: 7px; "
+        "   border: 1px solid #596273; "
+        "   border-radius: 6px; "
         "   color: #abb2bf; "
         "   outline: none; "
         "}"
+        "QListView::item:hover { background-color: #282c36; }"
         "QListView::item:selected { background-color: #3e4451; }"
+        "QScrollBar:vertical {"
+        "   background: #191b25; width: 10px; margin: 2px 1px;"
+        "}"
+        "QScrollBar::handle:vertical {"
+        "   background: #596273; min-height: 28px; border-radius: 4px;"
+        "}"
+        "QScrollBar::handle:vertical:hover { background: #6c768a; }"
+        "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }"
+        "QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; }"
         );
 
     // 2. The Info Panel (Label)
@@ -69,10 +80,8 @@ QalamCompletionPopup::QalamCompletionPopup(QWidget *parent) : QListView(parent),
         "QLabel { "
         "   background-color: #2c313a; "
         "   border-top: 1px solid #4793FF; "
-        "   border-top-left-radius: 8px; "
-        "   border-top-right-radius: 8px; "
         "   color: #9da5b4; "
-        "   padding: 8px; "
+        "   padding: 8px 10px; "
         "   font-family: 'Tajawal'; "
         "}"
         );
@@ -149,7 +158,7 @@ QalamModernCompletionDelegate::QalamModernCompletionDelegate(QObject *parent) : 
 
 QSize QalamModernCompletionDelegate::sizeHint(const QStyleOptionViewItem &option, const QModelIndex &) const {
     // Shorter rows now that description is at the bottom
-    return QSize(option.rect.width(), 30);
+    return QSize(option.rect.width(), 32);
 }
 
 void QalamModernCompletionDelegate::paint(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const {

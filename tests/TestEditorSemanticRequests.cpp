@@ -14,6 +14,7 @@ class TestEditorSemanticRequests : public QObject
 private slots:
     void requestsSignaturesFromArabicEditingTriggers();
     void requestsCompletionInsideIncludePaths();
+    void keepsOrdinaryCompletionsOutOfIncludePaths();
     void keepsPairsAndSelectionsInLogicalDocumentOrder();
     void expandsAndShrinksCompilerOwnedSelections();
     void keepsLiteralBracesOutOfLocalFolding();
@@ -39,6 +40,41 @@ void TestEditorSemanticRequests::requestsCompletionInsideIncludePaths()
     QCOMPARE(requests.constLast().at(1).toInt(), 0);
     QCOMPARE(requests.constLast().at(2).toInt(),
              editor.textCursor().positionInBlock());
+}
+
+void TestEditorSemanticRequests::keepsOrdinaryCompletionsOutOfIncludePaths()
+{
+    QalamEditor editor;
+    editor.setFilePath(QStringLiteral("رئيسي.باء"));
+    editor.setPlainText(QStringLiteral("#تضمين \"\""));
+    QTextCursor cursor = editor.textCursor();
+    cursor.setPosition(QStringLiteral("#تضمين \"").size());
+    editor.setTextCursor(cursor);
+
+    BaaCompletionItem keyword;
+    keyword.label = QStringLiteral("اختر");
+    keyword.newText = keyword.label;
+    keyword.detail = QStringLiteral("كلمة محجوزة");
+    keyword.kind = 14;
+    keyword.startLine = 0;
+    keyword.startCharacter = cursor.positionInBlock();
+    keyword.endLine = 0;
+    keyword.endCharacter = cursor.positionInBlock();
+    editor.showLanguageCompletions({keyword}, 0, cursor.positionInBlock());
+
+    CompletionModel *model = editor.findChild<CompletionModel *>();
+    QVERIFY(model != nullptr);
+    QCOMPARE(model->rowCount(), 0);
+    QVERIFY(not editor.hasVisibleCompletion());
+
+    BaaCompletionItem header = keyword;
+    header.label = QStringLiteral("المكتبة_القياسية.رأسباء");
+    header.newText = header.label;
+    header.detail = QStringLiteral("ملف يمكن تضمينه");
+    header.kind = 17;
+    editor.showLanguageCompletions({header}, 0, cursor.positionInBlock());
+    QCOMPARE(model->rowCount(), 1);
+    QCOMPARE(model->index(0, 0).data().toString(), header.label);
 }
 
 void TestEditorSemanticRequests::requestsSignaturesFromArabicEditingTriggers()

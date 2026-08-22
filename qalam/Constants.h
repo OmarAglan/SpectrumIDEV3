@@ -220,9 +220,8 @@ namespace Constants {
         constexpr int ScrollbarWidth = 10;
         
         // Autocomplete popup
-        constexpr int PopupMinWidth = 295;
-        constexpr int PopupMaxWidth = 355;
-        constexpr int PopupBasePadding = 250;
+        constexpr int PopupMinWidth = 340;
+        constexpr int PopupMaxWidth = 440;
     }
 
     // ==========================================================================

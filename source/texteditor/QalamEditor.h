@@ -150,6 +150,7 @@ private:
     QVector<QPair<int, int>> m_searchMatches;
     int m_currentSearchMatchIndex{-1};
     QString textUnderCursor() const;
+    bool isIncludePathCompletionContext() const;
     void performCompletion(bool explicitRequest = false);
     void showCompletionPopup();
     void setupAutoComplete();

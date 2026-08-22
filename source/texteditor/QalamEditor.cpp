@@ -1294,14 +1294,8 @@ void QalamEditor::keyPressEvent(QKeyEvent *e) {
         if (e->text().contains('(')) requestSignatureHelp();
         if (e->text().contains(')')) QToolTip::hideText();
         if (e->text().contains('"')) {
-            const QTextCursor cursor = textCursor();
-            const QString linePrefix = cursor.block().text().left(
-                cursor.positionInBlock());
-            static const QRegularExpression includePathPattern(
-                QStringLiteral("^\\s*#تضمين\\s+\"[^\"]*$"));
-            if (includePathPattern.match(linePrefix).hasMatch()) {
-                performCompletion(true);
-            }
+            if (isIncludePathCompletionContext()) performCompletion(true);
+            else if (c and c->popup()) c->popup()->hide();
         }
         e->accept();
         return;
@@ -1389,13 +1383,7 @@ void QalamEditor::keyPressEvent(QKeyEvent *e) {
             hasSignatureTrigger = true;
     }
     if (hasSignatureTrigger) requestSignatureHelp();
-    const QTextCursor completionCursor = textCursor();
-    const QString linePrefix = completionCursor.block().text().left(
-        completionCursor.positionInBlock());
-    static const QRegularExpression includePathPattern(
-        QStringLiteral("^\\s*#تضمين\\s+\"[^\"]*$"));
-    const bool includePathContext = includePathPattern.match(linePrefix).hasMatch();
-    if (includePathContext) performCompletion(true);
+    if (isIncludePathCompletionContext()) performCompletion(true);
     else if (hasArabicTrigger) performCompletion();
     else if (c and c->popup()) c->popup()->hide();
 }
@@ -1424,9 +1412,14 @@ void QalamEditor::showLanguageCompletions(const QVector<BaaCompletionItem> &item
     const QTextCursor cursor = textCursor();
     if (cursor.blockNumber() != line or cursor.positionInBlock() != character) return;
 
+    const bool includePathContext = isIncludePathCompletionContext();
     std::vector<CompletionItem> completions;
     completions.reserve(static_cast<size_t>(items.size()));
     for (const BaaCompletionItem &source : items) {
+        // Include strings have their own completion domain. Never leave stale
+        // keywords, snippets, or symbols visible over a path expression.
+        if (includePathContext and source.kind != 17 and source.kind != 19)
+            continue;
         CompletionItem item;
         item.label = source.label;
         item.completion = source.newText;
@@ -1460,9 +1453,10 @@ void QalamEditor::showCompletionPopup()
     QPoint widgetPos = this->viewport()->mapTo(this, cr.topRight());
     cr.moveTo(widgetPos);
 
-    // Calculate popup width with constants
-    int popupWidth = std::clamp(
-        Constants::Layout::PopupBasePadding + c->popup()->verticalScrollBar()->width(),
+    // Give Arabic names and paths enough room without letting the popup cover
+    // most of a narrow editor.
+    const int popupWidth = std::clamp(
+        viewport()->width() * 2 / 5,
         Constants::Layout::PopupMinWidth,
         Constants::Layout::PopupMaxWidth);
 
@@ -1494,6 +1488,16 @@ QString QalamEditor::textUnderCursor() const {
     }
 
     return blockText.mid(start, end - start);
+}
+
+bool QalamEditor::isIncludePathCompletionContext() const
+{
+    const QTextCursor cursor = textCursor();
+    const QString linePrefix = cursor.block().text().left(
+        cursor.positionInBlock());
+    static const QRegularExpression includePathPattern(
+        QStringLiteral("^\\s*#تضمين\\s*\"[^\"]*$"));
+    return includePathPattern.match(linePrefix).hasMatch();
 }
 
 int QalamEditor::documentPosition(int zeroBasedLine, int utf16Character) const
