@@ -287,10 +287,11 @@ public static class QalamRuntimeWindowProbe
 '@
     }
 
-    $process = Start-Process -FilePath $resolvedLaunchPath `
-        -WindowStyle Hidden `
-        -PassThru
-    $windowStartupSeconds = [Math]::Max($StartupSeconds, 5)
+    # This probe verifies a real top-level IDE window. Passing SW_HIDE makes
+    # Process.MainWindowHandle host-dependent and caused clean CI runners to
+    # report zero even though the Qt event loop stayed alive.
+    $process = Start-Process -FilePath $resolvedLaunchPath -PassThru
+    $windowStartupSeconds = [Math]::Max($StartupSeconds, 15)
     $startupDeadline = [DateTime]::UtcNow.AddSeconds($windowStartupSeconds)
     do {
         Start-Sleep -Milliseconds 100
