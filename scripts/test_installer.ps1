@@ -45,6 +45,88 @@ $startMenuShortcut = Join-Path $env:APPDATA (
     $qalamArabicName + '.lnk')
 $installed = $false
 
+if (-not ('QalamShortcutReader' -as [type])) {
+    Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+using System.Runtime.InteropServices.ComTypes;
+using System.Text;
+
+[ComImport]
+[Guid("00021401-0000-0000-C000-000000000046")]
+public class QalamShellLinkObject
+{
+}
+
+[ComImport]
+[Guid("000214F9-0000-0000-C000-000000000046")]
+[InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+public interface IQalamShellLinkW
+{
+    void GetPath([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder path,
+                 int pathCapacity, IntPtr findData, uint flags);
+    void GetIDList(out IntPtr itemIdList);
+    void SetIDList(IntPtr itemIdList);
+    void GetDescription([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder text,
+                        int textCapacity);
+    void SetDescription([MarshalAs(UnmanagedType.LPWStr)] string text);
+    void GetWorkingDirectory(
+        [Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder directory,
+        int directoryCapacity);
+    void SetWorkingDirectory([MarshalAs(UnmanagedType.LPWStr)] string directory);
+    void GetArguments([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder arguments,
+                      int argumentCapacity);
+    void SetArguments([MarshalAs(UnmanagedType.LPWStr)] string arguments);
+    void GetHotkey(out short hotkey);
+    void SetHotkey(short hotkey);
+    void GetShowCmd(out int showCommand);
+    void SetShowCmd(int showCommand);
+    void GetIconLocation(
+        [Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder iconPath,
+        int iconPathCapacity, out int iconIndex);
+    void SetIconLocation([MarshalAs(UnmanagedType.LPWStr)] string iconPath,
+                         int iconIndex);
+    void SetRelativePath([MarshalAs(UnmanagedType.LPWStr)] string path,
+                         uint reserved);
+    void Resolve(IntPtr window, uint flags);
+    void SetPath([MarshalAs(UnmanagedType.LPWStr)] string path);
+}
+
+public sealed class QalamShortcutDetails
+{
+    public string TargetPath { get; set; }
+    public string WorkingDirectory { get; set; }
+}
+
+public static class QalamShortcutReader
+{
+    public static QalamShortcutDetails Read(string shortcutPath)
+    {
+        object linkObject = new QalamShellLinkObject();
+        try
+        {
+            var link = (IQalamShellLinkW)linkObject;
+            ((IPersistFile)linkObject).Load(shortcutPath, 0);
+            var target = new StringBuilder(32768);
+            var workingDirectory = new StringBuilder(32768);
+            link.GetPath(target, target.Capacity, IntPtr.Zero, 4);
+            link.GetWorkingDirectory(workingDirectory, workingDirectory.Capacity);
+            return new QalamShortcutDetails {
+                TargetPath = target.ToString(),
+                WorkingDirectory = workingDirectory.ToString()
+            };
+        }
+        finally
+        {
+            if (Marshal.IsComObject(linkObject)) {
+                Marshal.FinalReleaseComObject(linkObject);
+            }
+        }
+    }
+}
+'@
+}
+
 function Wait-InstallerState {
     param([string]$Description, [scriptblock]$Condition)
     for ($attempt = 0; $attempt -lt 300; $attempt++) {
@@ -109,8 +191,11 @@ try {
         throw 'Qalam installer modified PATH.'
     }
 
-    $shortcutMetadata = (New-Object -ComObject WScript.Shell).CreateShortcut(
-        $startMenuShortcut)
+    $shortcutMetadata = [QalamShortcutReader]::Read($startMenuShortcut)
+    if ([string]::IsNullOrWhiteSpace($shortcutMetadata.TargetPath) -or
+        [string]::IsNullOrWhiteSpace($shortcutMetadata.WorkingDirectory)) {
+        throw 'Qalam Start Menu shortcut has incomplete Unicode metadata.'
+    }
     $shortcutTarget = (Get-Item -LiteralPath $shortcutMetadata.TargetPath).FullName
     $installedQalam = (Get-Item -LiteralPath $qalam).FullName
     if ($shortcutTarget -ine $installedQalam) {
