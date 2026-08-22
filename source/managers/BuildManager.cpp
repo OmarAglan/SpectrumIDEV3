@@ -93,6 +93,72 @@ QString BuildManager::nazmObjectPath(const QString &filePath)
     return source.dir().filePath(source.completeBaseName() + suffix);
 }
 
+QStringList BuildManager::nazmCommandArguments(const QString &filePath,
+                                                const QString &objectPath)
+{
+#if defined(Q_OS_WIN)
+    const QString format = QStringLiteral("كوف");
+#else
+    const QString format = QStringLiteral("إلف64");
+#endif
+    return {filePath, QStringLiteral("--خرج"), objectPath,
+            QStringLiteral("--صيغة"), format};
+}
+
+BuildManager::ToolActionState BuildManager::toolActionState(
+    const QString &filePath,
+    const QString &operation,
+    bool baaAvailable,
+    bool takweenAvailable,
+    bool nazmAvailable)
+{
+    const QString normalized = operation.trimmed().toLower();
+    if (filePath.trimmed().isEmpty()) {
+        return {false, QStringLiteral("افتح ملف باء أو نظم محفوظًا أولًا.")};
+    }
+
+    const bool baaSource = filePath.endsWith(
+        QStringLiteral(".baa"), Qt::CaseInsensitive);
+    const bool nazmSource = isNazmSourcePath(filePath);
+    if (not baaSource and not nazmSource) {
+        return {false, QStringLiteral("الأمر متاح لملفات باء أو نظم فقط.")};
+    }
+
+    QStringList requiredTools;
+    const bool project = not findTakweenProjectRoot(filePath).isEmpty();
+    if (project) {
+        requiredTools << QStringLiteral("تكوين");
+        if (normalized != QStringLiteral("clean")) {
+            requiredTools << QStringLiteral("باء") << QStringLiteral("نظم");
+        }
+    } else if (normalized == QStringLiteral("build") and nazmSource) {
+        requiredTools << QStringLiteral("نظم");
+    } else if (normalized == QStringLiteral("run")) {
+        requiredTools << QStringLiteral("باء") << QStringLiteral("نظم");
+    } else if (normalized == QStringLiteral("build") and baaSource) {
+        return {false, QStringLiteral(
+            "بناء ملف باء المفرد يتم عند التشغيل؛ استخدم F5.")};
+    } else {
+        return {false, QStringLiteral(
+            "تتطلب هذه العملية ملفًا داخل مشروع تكوين.")};
+    }
+
+    QStringList missing;
+    for (const QString &tool : requiredTools) {
+        if ((tool == QStringLiteral("باء") and not baaAvailable) or
+            (tool == QStringLiteral("تكوين") and not takweenAvailable) or
+            (tool == QStringLiteral("نظم") and not nazmAvailable)) {
+            missing << tool;
+        }
+    }
+    if (not missing.isEmpty()) {
+        return {false, QStringLiteral(
+            "الأدوات المطلوبة غير متاحة: %1. ثبّتها في PATH أو اضبط مساراتها من الإعدادات.")
+            .arg(missing.join(QStringLiteral("، ")))};
+    }
+    return {true, QString()};
+}
+
 QStringList BuildManager::takweenCommandArguments(const QString &command,
                                                    const QString &targetName)
 {
@@ -342,14 +408,8 @@ void BuildManager::buildNazm(const QString &filePath, QalamConsole *console)
     if (not console or not isNazmSourcePath(filePath)) return;
     const QString output = nazmObjectPath(filePath);
     QFile::remove(output);
-#if defined(Q_OS_WIN)
-    const QString format = QStringLiteral("كوف");
-#else
-    const QString format = QStringLiteral("إلف64");
-#endif
     startProcess(resolveNazmProgram(),
-                 {filePath, QStringLiteral("--خرج"), output,
-                  QStringLiteral("--صيغة"), format},
+                 nazmCommandArguments(filePath, output),
                  QFileInfo(filePath).absolutePath(),
                  filePath,
                  QStringLiteral("assemble"),

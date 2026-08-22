@@ -2,6 +2,8 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$Executable,
 
+    [string]$LaunchPath = '',
+
     [string]$LanguageServer = '',
 
     [string]$Compiler = '',
@@ -25,6 +27,11 @@ $returnKeyword = -join [char[]](0x0625, 0x0631, 0x062C, 0x0639)
 $arabicZero = [char]0x0660
 
 $resolvedExecutable = (Resolve-Path $Executable).Path
+$resolvedLaunchPath = if ($LaunchPath) {
+    (Resolve-Path -LiteralPath $LaunchPath).Path
+} else {
+    $resolvedExecutable
+}
 $applicationDirectory = Split-Path -Parent $resolvedExecutable
 $requiredFiles = @(
     'libstdc++-6.dll',
@@ -272,7 +279,7 @@ public static class QalamRuntimeWindowProbe
 '@
     }
 
-    $process = Start-Process -FilePath $resolvedExecutable `
+    $process = Start-Process -FilePath $resolvedLaunchPath `
         -WindowStyle Hidden `
         -PassThru
     $windowStartupSeconds = [Math]::Max($StartupSeconds, 5)

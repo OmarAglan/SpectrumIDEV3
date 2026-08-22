@@ -81,6 +81,9 @@ One deferred item from Phase 2:
 - **Nazm authoring workflow** -- `.نظم` files are indexed and locally
   highlighted; standalone build produces a visible object and F5 links/runs
   through Baa without a GAS fallback
+- **File-aware tool admission** -- unavailable build, run, test, and clean
+  actions are disabled with an exact Arabic explanation while editing and the
+  bundled Baa-LSP remain usable without external ecosystem tools
 - **Qt Test foundation** -- focused tests cover diagnostics, workspace indexing, commands, and build-tool argument/project discovery
 
 ### Remaining Issues by Severity

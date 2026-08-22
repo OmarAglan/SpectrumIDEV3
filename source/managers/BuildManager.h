@@ -13,6 +13,11 @@ class BuildManager : public QObject {
     Q_OBJECT
 
 public:
+    struct ToolActionState {
+        bool enabled{};
+        QString explanation;
+    };
+
     enum class CompilerExitClass {
         Success,
         SourceError,
@@ -77,6 +82,15 @@ public:
 
     static bool isNazmSourcePath(const QString &filePath);
     static QString nazmObjectPath(const QString &filePath);
+    static QStringList nazmCommandArguments(const QString &filePath,
+                                            const QString &objectPath);
+
+    /// Compute whether a file-aware tooling action is usable and explain why not.
+    static ToolActionState toolActionState(const QString &filePath,
+                                           const QString &operation,
+                                           bool baaAvailable,
+                                           bool takweenAvailable,
+                                           bool nazmAvailable);
 
     /// Stop the currently running build process, if any.
     void stop();

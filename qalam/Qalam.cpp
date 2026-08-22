@@ -692,7 +692,7 @@ void Qalam::connectSignals()
                 tabWidget->setTabText(index, tabText.left(tabText.length() - 3));
             }
         }
-
+        refreshToolActions();
     });
     connect(m_fileManager, &FileManager::openEditorsChanged, this, &Qalam::syncOpenEditors);
 
@@ -976,10 +976,12 @@ void Qalam::openSettings() {
         }
     }, Qt::UniqueConnection);
     connect(setting, &QalamSettings::toolPathsChanged, this, [this]() {
-        if (not m_languageClient) return;
-        m_languageClient->stop();
-        m_languageClient->setCompilerProgram(BuildManager::resolveCompilerProgram());
-        m_languageClient->setTakweenProgram(BuildManager::resolveTakweenProgram());
+        refreshToolActions();
+        if (m_languageClient) {
+            m_languageClient->stop();
+            m_languageClient->setCompilerProgram(BuildManager::resolveCompilerProgram());
+            m_languageClient->setTakweenProgram(BuildManager::resolveTakweenProgram());
+        }
         scheduleEditorAnalysis(currentEditor());
         if (m_layoutManager and m_layoutManager->statusBar()) {
             m_layoutManager->statusBar()->showMessage(
@@ -999,6 +1001,7 @@ void Qalam::onCurrentTabChanged()
 {
     updateWindowTitle();
     updateCursorPosition();
+    refreshToolActions();
 
     QalamEditor* editor = currentEditor();
 
@@ -1055,6 +1058,53 @@ void Qalam::onCurrentTabChanged()
     }
 }
 
+void Qalam::refreshToolActions()
+{
+    if (not menuBar) return;
+    const QalamEditor *editor = currentEditor();
+    const QString filePath = editor ? editor->currentFilePath() : QString();
+    const bool baaAvailable = not BuildManager::resolveCompilerProgram().isEmpty();
+    const bool takweenAvailable = not BuildManager::resolveTakweenProgram().isEmpty();
+    const bool nazmAvailable = not BuildManager::resolveNazmProgram().isEmpty();
+
+    const auto apply = [](QAction *action,
+                          const BuildManager::ToolActionState &state) {
+        if (not action) return;
+        action->setEnabled(state.enabled);
+        action->setToolTip(state.explanation);
+        action->setStatusTip(state.explanation);
+    };
+    apply(menuBar->buildAction, BuildManager::toolActionState(
+        filePath, QStringLiteral("build"), baaAvailable,
+        takweenAvailable, nazmAvailable));
+    apply(menuBar->runAction, BuildManager::toolActionState(
+        filePath, QStringLiteral("run"), baaAvailable,
+        takweenAvailable, nazmAvailable));
+    apply(menuBar->testAction, BuildManager::toolActionState(
+        filePath, QStringLiteral("test"), baaAvailable,
+        takweenAvailable, nazmAvailable));
+    apply(menuBar->cleanAction, BuildManager::toolActionState(
+        filePath, QStringLiteral("clean"), baaAvailable,
+        takweenAvailable, nazmAvailable));
+}
+
+bool Qalam::ensureToolOperationAvailable(const QString &operation,
+                                         const QString &filePath)
+{
+    const auto state = BuildManager::toolActionState(
+        filePath, operation,
+        not BuildManager::resolveCompilerProgram().isEmpty(),
+        not BuildManager::resolveTakweenProgram().isEmpty(),
+        not BuildManager::resolveNazmProgram().isEmpty());
+    if (state.enabled) return true;
+    if (m_layoutManager and m_layoutManager->statusBar()) {
+        m_layoutManager->statusBar()->showMessage(state.explanation, 6000);
+    }
+    QMessageBox::information(this, QStringLiteral("الأداة غير متاحة"),
+                             state.explanation);
+    return false;
+}
+
 void Qalam::updateCursorPosition()
 {
     QalamEditor* editor = currentEditor();
@@ -1097,6 +1147,7 @@ void Qalam::runBaa() {
                                  QStringLiteral("يمكن تشغيل ملفات باء أو نظم فقط."));
         return;
     }
+    if (not ensureToolOperationAvailable(QStringLiteral("run"), filePath)) return;
 
     if (not BuildManager::findTakweenProjectRoot(filePath).isEmpty()) {
         runTakweenProjectCommand("run");
@@ -1132,6 +1183,7 @@ void Qalam::buildTakweenProject()
         filePath = editor->currentFilePath();
         if (filePath.isEmpty() or editor->document()->isModified()) return;
     }
+    if (not ensureToolOperationAvailable(QStringLiteral("build"), filePath)) return;
     if (BuildManager::findTakweenProjectRoot(filePath).isEmpty() and
         BuildManager::isNazmSourcePath(filePath)) {
         auto *panelArea = m_layoutManager->panelArea();
@@ -1167,6 +1219,8 @@ void Qalam::runTakweenProjectCommand(const QString &command)
         m_fileManager->saveFile();
         if (editor->document()->isModified()) return;
     }
+
+    if (not ensureToolOperationAvailable(command, editor->currentFilePath())) return;
 
     QString targetName;
     const QString normalized = command.trimmed().toLower();

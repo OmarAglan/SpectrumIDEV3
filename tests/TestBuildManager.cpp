@@ -17,6 +17,8 @@ private slots:
     void findsNearestTakweenProjectRoot();
     void returnsEmptyRootOutsideTakweenProject();
     void recognizesNazmSourcesAndObjects();
+    void buildsCanonicalNazmArguments();
+    void explainsUnavailableToolActions();
 };
 
 void TestBuildManager::buildsValidatedTakweenArguments()
@@ -108,6 +110,53 @@ void TestBuildManager::recognizesNazmSourcesAndObjects()
     QVERIFY(BuildManager::nazmObjectPath(QStringLiteral("/tmp/مشروع/بداية.نظم"))
                 .endsWith(QStringLiteral("بداية.o")));
 #endif
+}
+
+void TestBuildManager::buildsCanonicalNazmArguments()
+{
+    const QString source = QStringLiteral("C:/مشروع/بداية.نظم");
+    const QString object = QStringLiteral("C:/مشروع/بداية.obj");
+#if defined(Q_OS_WIN)
+    const QString format = QStringLiteral("كوف");
+#else
+    const QString format = QStringLiteral("إلف64");
+#endif
+    QCOMPARE(BuildManager::nazmCommandArguments(source, object),
+             (QStringList{source, QStringLiteral("--خرج"), object,
+                          QStringLiteral("--صيغة"), format}));
+}
+
+void TestBuildManager::explainsUnavailableToolActions()
+{
+    QTemporaryDir temp;
+    QVERIFY(temp.isValid());
+    const QString standalone = QDir(temp.path()).filePath(QStringLiteral("بدء.نظم"));
+
+    auto state = BuildManager::toolActionState(
+        standalone, QStringLiteral("build"), true, true, false);
+    QVERIFY(not state.enabled);
+    QCOMPARE(state.explanation, QStringLiteral(
+        "الأدوات المطلوبة غير متاحة: نظم. ثبّتها في PATH أو اضبط مساراتها من الإعدادات."));
+
+    state = BuildManager::toolActionState(
+        standalone, QStringLiteral("build"), false, false, true);
+    QVERIFY(state.enabled);
+
+    state = BuildManager::toolActionState(
+        standalone, QStringLiteral("run"), false, true, true);
+    QVERIFY(not state.enabled);
+    QVERIFY(state.explanation.contains(QStringLiteral("باء")));
+
+    QDir root(temp.path());
+    QVERIFY(root.mkpath(QStringLiteral("مشروع/مصدر")));
+    QFile manifest(root.filePath(QStringLiteral("مشروع/مشروع.تكوين")));
+    QVERIFY(manifest.open(QIODevice::WriteOnly));
+    manifest.close();
+    const QString projectSource = root.filePath(QStringLiteral("مشروع/مصدر/رئيسية.baa"));
+    state = BuildManager::toolActionState(
+        projectSource, QStringLiteral("build"), true, false, true);
+    QVERIFY(not state.enabled);
+    QVERIFY(state.explanation.contains(QStringLiteral("تكوين")));
 }
 
 QTEST_MAIN(TestBuildManager)

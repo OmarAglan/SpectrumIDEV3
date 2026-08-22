@@ -141,6 +141,9 @@ private:
                                           int documentVersion) const;
     QString lineTextForLocation(const BaaLocation &location) const;
     void runTakweenProjectCommand(const QString &command);
+    void refreshToolActions();
+    bool ensureToolOperationAvailable(const QString &operation,
+                                      const QString &filePath);
 
 private:
     QTabWidget *tabWidget{};

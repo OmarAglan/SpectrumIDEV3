@@ -6,6 +6,7 @@
 #include <QApplication>
 #include <QDir>
 #include <QFile>
+#include <QProcessEnvironment>
 #include <QSettings>
 #include <QTemporaryDir>
 
@@ -15,6 +16,7 @@ class TestToolchainDiscovery : public QObject
 
 private slots:
     void initTestCase();
+    void init();
     void cleanup();
     void settingsOverrideEnvironmentAndPath();
     void environmentOverridesPath();
@@ -26,6 +28,8 @@ private:
     QString makeExecutable(const QString &directory, const QString &name);
     std::unique_ptr<QTemporaryDir> m_filesDirectory;
     QByteArray m_originalPath;
+    QProcessEnvironment m_originalEnvironment;
+    QStringList m_isolatedVariables;
 };
 
 void TestToolchainDiscovery::initTestCase()
@@ -33,6 +37,23 @@ void TestToolchainDiscovery::initTestCase()
     m_filesDirectory = std::make_unique<QTemporaryDir>();
     QVERIFY(m_filesDirectory->isValid());
     m_originalPath = qgetenv("PATH");
+    m_originalEnvironment = QProcessEnvironment::systemEnvironment();
+    m_isolatedVariables = {
+        QStringLiteral("QALAM_BAA_PATH"),
+        QStringLiteral("QALAM_TAKWEEN_PATH"),
+        QStringLiteral("QALAM_NAZM_PATH"),
+        QStringLiteral("BAA_HOME"),
+        QStringLiteral("BAA_STDLIB"),
+        QStringLiteral("BAA_NAZM")
+    };
+}
+
+void TestToolchainDiscovery::init()
+{
+    for (const QString &name : m_isolatedVariables) {
+        qunsetenv(name.toLatin1().constData());
+    }
+    qputenv("PATH", m_originalPath);
 }
 
 void TestToolchainDiscovery::cleanup()
@@ -41,9 +62,14 @@ void TestToolchainDiscovery::cleanup()
                        Constants::OrgName, Constants::AppName);
     settings.clear();
     settings.sync();
-    qunsetenv("QALAM_BAA_PATH");
-    qunsetenv("QALAM_TAKWEEN_PATH");
-    qunsetenv("QALAM_NAZM_PATH");
+    for (const QString &name : m_isolatedVariables) {
+        const QByteArray key = name.toLatin1();
+        if (m_originalEnvironment.contains(name)) {
+            qputenv(key.constData(), m_originalEnvironment.value(name).toUtf8());
+        } else {
+            qunsetenv(key.constData());
+        }
+    }
     qputenv("PATH", m_originalPath);
 }
 

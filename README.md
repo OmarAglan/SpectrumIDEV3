@@ -38,7 +38,8 @@ Unsaved documents are analyzed in memory, results are tied to the exact document
 - Takween targets and structured build, run, test, clean, and cancellation workflows.
 - First-class Arabic Nazm editing: `.نظم` highlighting, indexing, direct object
   assembly, and link-and-run through the installed Baa toolchain.
-- One tool settings page with explicit health for Baa, Takween, and Nazm.
+- One tool settings page with explicit health for Baa, Takween, and Nazm;
+  unavailable actions are disabled with an exact Arabic explanation.
 - File explorer, command palette, problems panel, embedded console, themes, autosave, and crash recovery.
 - Deterministic Windows runtime deployment with no recurring manual DLL or `PATH` repair.
 

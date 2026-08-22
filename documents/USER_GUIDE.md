@@ -147,6 +147,14 @@ The page reports the selected source and exact executable path. An invalid
 explicit setting remains visible as an error instead of silently selecting a
 different installation.
 
+Build actions also follow the current file. Qalam keeps editing and Baa-LSP
+available when external tools are missing, disables only the actions that
+cannot run, and places the exact Arabic reason in the action tooltip and status
+bar. A standalone `.نظم` build needs Nazm; standalone run needs Baa and Nazm;
+project build, run, and test need Takween, Baa, and Nazm; project clean needs
+Takween only. Saving a new file or changing a tool path refreshes these states
+immediately.
+
 ---
 
 ## Keyboard Shortcuts

@@ -37,6 +37,10 @@ $uninstallLog = Join-Path ([IO.Path]::GetTempPath()) (
 $markerKey = 'HKCU:\Software\BaaEcosystem\Qalam'
 $nazmArabicExecutableName =
     (-join [char[]](0x0646, 0x0638, 0x0645)) + '.exe'
+$qalamArabicName = -join [char[]](0x0642, 0x0644, 0x0645)
+$startMenuShortcut = Join-Path $env:APPDATA (
+    'Microsoft\Windows\Start Menu\Programs\' + $qalamArabicName + '\' +
+    $qalamArabicName + '.lnk')
 $installed = $false
 
 function Wait-InstallerState {
@@ -72,6 +76,7 @@ try {
         (Test-Path -LiteralPath $qalam -PathType Leaf) -and
         (Test-Path -LiteralPath $lsp -PathType Leaf) -and
         (Test-Path -LiteralPath $uninstaller -PathType Leaf) -and
+        (Test-Path -LiteralPath $startMenuShortcut -PathType Leaf) -and
         (Test-Path -LiteralPath $markerKey)
     }
     Invoke-QalamInstaller $arguments
@@ -102,10 +107,39 @@ try {
         throw 'Qalam installer modified PATH.'
     }
 
-    & (Join-Path $PSScriptRoot 'test-windows-runtime.ps1') `
-        -Executable $qalam `
-        -LanguageServer $lsp `
-        -StartupSeconds $StartupSeconds
+    $shortcutMetadata = (New-Object -ComObject WScript.Shell).CreateShortcut(
+        $startMenuShortcut)
+    if ($shortcutMetadata.TargetPath -ine $qalam) {
+        throw 'Qalam Start Menu shortcut points to the wrong executable.'
+    }
+    if ($shortcutMetadata.WorkingDirectory -ine $installRoot) {
+        throw 'Qalam Start Menu shortcut has the wrong working directory.'
+    }
+
+    $previousProcessPath = $env:PATH
+    $toolOverrides = @('QALAM_BAA_PATH', 'QALAM_TAKWEEN_PATH',
+                       'QALAM_NAZM_PATH')
+    $previousOverrides = @{}
+    try {
+        $env:PATH = "$env:SystemRoot\System32;$env:SystemRoot"
+        foreach ($name in $toolOverrides) {
+            $previousOverrides[$name] = [Environment]::GetEnvironmentVariable(
+                $name, 'Process')
+            Remove-Item "Env:$name" -ErrorAction SilentlyContinue
+        }
+        & (Join-Path $PSScriptRoot 'test-windows-runtime.ps1') `
+            -Executable $qalam `
+            -LaunchPath $startMenuShortcut `
+            -LanguageServer $lsp `
+            -StartupSeconds $StartupSeconds
+    }
+    finally {
+        $env:PATH = $previousProcessPath
+        foreach ($name in $toolOverrides) {
+            [Environment]::SetEnvironmentVariable(
+                $name, $previousOverrides[$name], 'Process')
+        }
+    }
 
     if (!(Test-Path -LiteralPath $uninstaller -PathType Leaf)) {
         throw 'Qalam uninstaller is missing.'
