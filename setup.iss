@@ -28,6 +28,10 @@ DisableProgramGroupPage=yes
 AllowNoIcons=yes
 OutputDir=dist\installer
 OutputBaseFilename=qalam-setup-{#MyAppVersion}-x64
+#ifdef InstallerSignTool
+SignTool={#InstallerSignTool}
+SignedUninstaller=yes
+#endif
 SetupIconFile=qalam\resources\QalamLogo.ico
 Compression=lzma2/ultra64
 SolidCompression=yes

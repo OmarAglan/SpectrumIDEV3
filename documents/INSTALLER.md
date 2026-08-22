@@ -16,6 +16,10 @@
   -BaaLspExecutable ..\Baa-LSP\build\windows-release\baa-lsp.exe
 ```
 
+لإصدار Authenticode، أضف `-SignToolName releasesign` و
+`-SignToolCommand '<signtool command using $f>'`. يوقع البناء المثبت وبرنامج
+الإزالة ثم ينشئ ملف SHA-256 من البايتات الموقعة.
+
 ## التحقق
 
 ```powershell

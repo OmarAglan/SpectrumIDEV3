@@ -4,11 +4,21 @@ param(
     [string]$BuildDir = 'build/windows-release',
     [string]$BaaLspExecutable = $env:QALAM_BAA_LSP_PATH,
     [string]$IsccPath = '',
+    [string]$SignToolName = '',
+    [string]$SignToolCommand = '',
     [switch]$SkipBuild
 )
 
 $ErrorActionPreference = 'Stop'
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+if ([string]::IsNullOrWhiteSpace($SignToolName) -ne
+    [string]::IsNullOrWhiteSpace($SignToolCommand)) {
+    throw 'Pass both -SignToolName and -SignToolCommand, or neither.'
+}
+if (![string]::IsNullOrWhiteSpace($SignToolName) -and
+    $SignToolName -notmatch '^[A-Za-z0-9_-]+$') {
+    throw 'SignToolName may contain only letters, digits, underscore, and hyphen.'
+}
 $payload = Join-Path $root 'dist\installer-payload'
 $nazmArabicExecutableName =
     (-join [char[]](0x0646, 0x0638, 0x0645)) + '.exe'
@@ -79,9 +89,17 @@ if ([string]::IsNullOrWhiteSpace($IsccPath) -or
     throw 'Inno Setup 6 compiler was not found. Pass -IsccPath explicitly.'
 }
 
+$isccArguments = @(
+    "/DMyAppVersion=$Version",
+    "/DQalamPayloadDir=$payload"
+)
+if (![string]::IsNullOrWhiteSpace($SignToolName)) {
+    $isccArguments += "/DInstallerSignTool=$SignToolName"
+    $isccArguments += "/S$SignToolName=$SignToolCommand"
+}
 Push-Location $root
 try {
-    & $IsccPath "/DMyAppVersion=$Version" "/DQalamPayloadDir=$payload" setup.iss
+    & $IsccPath @isccArguments setup.iss
     if ($LASTEXITCODE -ne 0) { throw "ISCC failed with exit code $LASTEXITCODE." }
 }
 finally {
