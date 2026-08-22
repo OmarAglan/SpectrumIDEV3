@@ -30,7 +30,7 @@ jobs:
         shell: pwsh
         run: .\scripts\build_installer.ps1 -Version 3.3.0 -BuildDir build/windows-release -BaaLspExecutable ecosystem/Baa-LSP/build/windows-release/baa-lsp.exe -SkipBuild
       - name: Verify install, launch, and uninstall
-        shell: pwsh
+        shell: powershell
         run: .\scripts\test_installer.ps1 -Version 3.3.0
       - uses: actions/upload-artifact@v4
         with:
