@@ -30,6 +30,8 @@ $userPathBefore = [Environment]::GetEnvironmentVariable('Path', 'User')
 $machinePathBefore = [Environment]::GetEnvironmentVariable('Path', 'Machine')
 $installRoot = Join-Path ([IO.Path]::GetTempPath()) (
     'Qalam installer - ' + [Guid]::NewGuid().ToString('N'))
+$runtimeTemp = Join-Path ([IO.Path]::GetTempPath()) (
+    'Qalam runtime - ' + [Guid]::NewGuid().ToString('N'))
 $setupLog = Join-Path ([IO.Path]::GetTempPath()) (
     'qalam-setup-' + [Guid]::NewGuid().ToString('N') + '.log')
 $uninstallLog = Join-Path ([IO.Path]::GetTempPath()) (
@@ -109,19 +111,29 @@ try {
 
     $shortcutMetadata = (New-Object -ComObject WScript.Shell).CreateShortcut(
         $startMenuShortcut)
-    if ($shortcutMetadata.TargetPath -ine $qalam) {
+    $shortcutTarget = (Get-Item -LiteralPath $shortcutMetadata.TargetPath).FullName
+    $installedQalam = (Get-Item -LiteralPath $qalam).FullName
+    if ($shortcutTarget -ine $installedQalam) {
         throw 'Qalam Start Menu shortcut points to the wrong executable.'
     }
-    if ($shortcutMetadata.WorkingDirectory -ine $installRoot) {
+    $shortcutWorkingDirectory = (
+        Get-Item -LiteralPath $shortcutMetadata.WorkingDirectory).FullName
+    $installedRoot = (Get-Item -LiteralPath $installRoot).FullName
+    if ($shortcutWorkingDirectory -ine $installedRoot) {
         throw 'Qalam Start Menu shortcut has the wrong working directory.'
     }
 
     $previousProcessPath = $env:PATH
+    $previousTemp = $env:TEMP
+    $previousTmp = $env:TMP
+    [IO.Directory]::CreateDirectory($runtimeTemp) | Out-Null
     $toolOverrides = @('QALAM_BAA_PATH', 'QALAM_TAKWEEN_PATH',
                        'QALAM_NAZM_PATH')
     $previousOverrides = @{}
     try {
         $env:PATH = "$env:SystemRoot\System32;$env:SystemRoot"
+        $env:TEMP = $runtimeTemp
+        $env:TMP = $runtimeTemp
         foreach ($name in $toolOverrides) {
             $previousOverrides[$name] = [Environment]::GetEnvironmentVariable(
                 $name, 'Process')
@@ -135,9 +147,22 @@ try {
     }
     finally {
         $env:PATH = $previousProcessPath
+        $env:TEMP = $previousTemp
+        $env:TMP = $previousTmp
         foreach ($name in $toolOverrides) {
             [Environment]::SetEnvironmentVariable(
                 $name, $previousOverrides[$name], 'Process')
+        }
+        if (Test-Path -LiteralPath $runtimeTemp) {
+            $resolvedRuntimeTemp = [IO.Path]::GetFullPath($runtimeTemp)
+            $resolvedTempRoot = [IO.Path]::GetFullPath(
+                [IO.Path]::GetTempPath())
+            if (!$resolvedRuntimeTemp.StartsWith(
+                    $resolvedTempRoot,
+                    [StringComparison]::OrdinalIgnoreCase)) {
+                throw "Refusing to remove runtime files outside Temp: $resolvedRuntimeTemp"
+            }
+            Remove-Item -LiteralPath $resolvedRuntimeTemp -Recurse -Force
         }
     }
 
