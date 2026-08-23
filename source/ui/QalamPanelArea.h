@@ -102,6 +102,7 @@ private:
     
     // Output display
     QPlainTextEdit* m_outputText{nullptr};
+    QString m_lastOutputEntry;
     
     // Header buttons
     QPushButton* m_closeBtn{nullptr};

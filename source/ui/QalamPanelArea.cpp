@@ -314,6 +314,8 @@ void QalamPanelArea::updateProblemsBadge()
 void QalamPanelArea::appendOutput(const QString& text)
 {
     if (!m_outputText || text.isEmpty()) return;
+    if (text == m_lastOutputEntry) return;
+    m_lastOutputEntry = text;
     QTextCursor cursor = m_outputText->textCursor();
     cursor.movePosition(QTextCursor::End);
     cursor.insertText(text);
@@ -323,6 +325,7 @@ void QalamPanelArea::appendOutput(const QString& text)
 
 void QalamPanelArea::clearOutput()
 {
+    m_lastOutputEntry.clear();
     if (m_outputText) m_outputText->clear();
 }
 

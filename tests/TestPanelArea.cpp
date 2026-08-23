@@ -8,6 +8,7 @@ class TestPanelArea : public QObject
 
 private slots:
     void keepsBoundedPlainTextOutput();
+    void deduplicatesConsecutiveLanguageEvents();
     void loadsPanelActionIcons();
 };
 
@@ -28,6 +29,25 @@ void TestPanelArea::keepsBoundedPlainTextOutput()
     panel.clearOutput();
     QVERIFY(panel.outputText().isEmpty());
     QCOMPARE(panel.outputBlockCount(), 1);
+}
+
+void TestPanelArea::deduplicatesConsecutiveLanguageEvents()
+{
+    QalamPanelArea panel;
+    const QString failure = QStringLiteral("[خطأ] فشل تحليل مصرف باء.\n");
+    const QString recovery = QStringLiteral("[معلومة] استعاد خادم اللغة عمله.\n");
+
+    panel.appendOutput(failure);
+    panel.appendOutput(failure);
+    QCOMPARE(panel.outputText().count(QStringLiteral("فشل تحليل مصرف باء.")), 1);
+
+    panel.appendOutput(recovery);
+    panel.appendOutput(failure);
+    QCOMPARE(panel.outputText().count(QStringLiteral("فشل تحليل مصرف باء.")), 2);
+
+    panel.clearOutput();
+    panel.appendOutput(failure);
+    QCOMPARE(panel.outputText(), failure);
 }
 
 void TestPanelArea::loadsPanelActionIcons()

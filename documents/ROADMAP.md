@@ -464,7 +464,8 @@ the portable-linker candidate requires a new green CI receipt.
   source-safe painting, and accessible hint-count metadata
 - [x] 9.1.19 Consume opt-in `baa-lsp-log-v1` events with strict sequence,
   identifier, and bounded-data validation; render Arabic summaries in a
-  500-block plain-text Output view and reject replayed or telemetry payloads
+  500-block plain-text Output view, coalesce consecutive equivalent events,
+  and reject replayed or telemetry payloads
 
   Cross-platform receipt:
   [Baa-LSP 31509393734](https://github.com/OmarAglan/Baa-LSP/actions/runs/31509393734)
