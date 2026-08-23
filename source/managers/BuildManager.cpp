@@ -481,6 +481,7 @@ void BuildManager::startProcess(const QString &requestedProgram,
     // The same console hosts an interactive shell, so stop it while Baa owns stdin/stdout.
     cleanupBuild();
     console->stopCmd();
+    console->beginTask(heading.section(QLatin1Char('\n'), 0, 0));
 
     console->clear();
     console->appendPlainTextThreadSafe(heading);

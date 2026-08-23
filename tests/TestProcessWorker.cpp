@@ -9,6 +9,10 @@
 #include <QTest>
 #include <QThread>
 
+#if defined(Q_OS_WIN)
+#include <qt_windows.h>
+#endif
+
 class TestProcessWorker : public QObject
 {
     Q_OBJECT
@@ -20,6 +24,7 @@ private slots:
     void runsFollowUpProcessAndCapturesOutput();
     void skipsFollowUpProcessAfterFailure();
     void forwardsUtf8InputToTheRunningProgram();
+    void keepsConsoleProgramsEmbeddedOnWindows();
 };
 
 void TestProcessWorker::tailsCompleteAndFinalJsonLines()
@@ -220,6 +225,32 @@ void TestProcessWorker::forwardsUtf8InputToTheRunningProgram()
     QVERIFY(combinedOutput.contains(QStringLiteral("استقبل: مدخل عربي")));
 }
 
+void TestProcessWorker::keepsConsoleProgramsEmbeddedOnWindows()
+{
+    QTemporaryDir temporary;
+    QVERIFY(temporary.isValid());
+    ProcessWorker worker(
+        QCoreApplication::applicationFilePath(),
+        {"--helper-console-state"},
+        temporary.path());
+    QSignalSpy output(&worker, &ProcessWorker::outputReady);
+    QSignalSpy finished(&worker, &ProcessWorker::finished);
+
+    worker.start();
+    QTRY_COMPARE_WITH_TIMEOUT(finished.size(), 1, 5000);
+    QCOMPARE(finished.first().first().toInt(), 0);
+
+    QString combinedOutput;
+    for (const QList<QVariant> &arguments : output) {
+        combinedOutput += arguments.first().toString();
+    }
+#if defined(Q_OS_WIN)
+    QVERIFY(combinedOutput.contains(QStringLiteral("NO_CONSOLE")));
+#else
+    QVERIFY(combinedOutput.contains(QStringLiteral("EMBEDDED")));
+#endif
+}
+
 int main(int argc, char **argv)
 {
     QCoreApplication application(argc, argv);
@@ -246,6 +277,17 @@ int main(int argc, char **argv)
         if (not output.open(stdout, QIODevice::WriteOnly)) return 24;
         const QString line = QString::fromUtf8(input.readLine()).trimmed();
         output.write(QStringLiteral("استقبل: %1\n").arg(line).toUtf8());
+        output.flush();
+        return 0;
+    }
+    if (arguments.contains("--helper-console-state")) {
+        QFile output;
+        if (not output.open(stdout, QIODevice::WriteOnly)) return 25;
+#if defined(Q_OS_WIN)
+        output.write(GetConsoleWindow() == nullptr ? "NO_CONSOLE\n" : "HAS_CONSOLE\n");
+#else
+        output.write("EMBEDDED\n");
+#endif
         output.flush();
         return 0;
     }

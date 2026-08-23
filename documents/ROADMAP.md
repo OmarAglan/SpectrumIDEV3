@@ -166,8 +166,8 @@ One deferred item from Phase 2:
 
 - [ ] 4.3.1 Fix `Constants.h` to use `inline const` or `constexpr` instead of `const QString`
 - [ ] 4.3.2 Extract remaining magic numbers to `Constants.h` (zoom limits, font fallbacks, geometry offsets, splitter sizes)
-- [ ] 4.3.3 Align `QalamConsole::m_maxLines` with `Constants::Console::MaxBufferLines`
-- [ ] 4.3.4 Align `ProcessWorker` flush timer with `Constants::Timing::FlushInterval`
+- [x] 4.3.3 Align `QalamConsole::m_maxLines` with `Constants::Console::MaxBufferLines`
+- [x] 4.3.4 Align `ProcessWorker` flush timer with `Constants::Timing::FlushInterval`
 - [ ] 4.3.5 Remove dead code: `QalamConsole::appendOutput()`, `StateType` enum
 - [ ] 4.3.6 Remove undeclared `QalamWindow::initFrameless()` declaration
 - [ ] 4.3.7 Remove redundant `QString value` from `QalamToken` (carried from Phase 2.7)
@@ -229,7 +229,12 @@ One deferred item from Phase 2:
 - [x] 5.3.3 Add inline error indicators in editor (squiggly underlines and tooltips)
 - [x] 5.3.4 Click-to-navigate from Problems panel to error location in editor
 - [x] 5.3.5 Replace or clear problems on a successful editor check/run start
-- [x] 5.3.6 Make standalone F5 compile to Qalam's cache, launch only the newly built executable, and stream program stdout/stderr/stdin through the Terminal panel
+- [x] 5.3.6 Make standalone F5 compile to Qalam's cache, launch only the newly
+  built executable without a separate Windows console window, and stream program
+  stdout/stderr/stdin through the Terminal panel
+- [x] 5.3.7 Present the Terminal as an integrated session with live state,
+  restart/stop/clear controls, command history, a dedicated prompt row, and
+  task-aware program input
 
 ### 5.4 Console ANSI Colors
 
@@ -295,7 +300,8 @@ One deferred item from Phase 2:
 - [ ] 6.2.2 `QalamSyntaxDefinition` tests: keyword loading from JSON, fallback defaults
 - [ ] 6.2.3 `LanguageDefinition` tests: singleton access, keyword/builtin lists
 - [x] 6.2.4 Baa-LSP completion client test: version matching, exact edit range, Arabic label, and symbol kind
-- [ ] 6.2.5 `QalamBracketHandler` tests: pairing, skip-over, wrapping, edge cases
+- [x] 6.2.5 `QalamBracketHandler` tests: pairing, skip-over, open-literal
+  closing, escaped quotes, comment context, wrapping, and edge cases
 - [x] 6.2.6 `QalamSnippetManager` tests: standard placeholders, navigation, and indentation
 
 ### 6.3 Manager Unit Tests
@@ -365,6 +371,9 @@ the portable-linker candidate requires a new green CI receipt.
 - [x] 7.3.2 Create the Inno Setup standalone Windows installer and SHA-256 sidecar
 - [ ] 7.3.3 Auto-generate changelog from git commits
 - [ ] 7.3.4 Publish to GitHub Releases with artifacts
+- [ ] 7.3.5 Admit the complete portable bundle only after its pinned GCC/LD
+  passes the Arabic-and-spaces output-path smoke; UI preview archives must state
+  explicitly when the compiler toolchain is omitted
 
 ---
 
@@ -372,6 +381,21 @@ the portable-linker candidate requires a new green CI receipt.
 
 **Goal:** Bring Qalam closer to modern IDE capabilities
 **Effort:** 2-4 weeks | **Impact:** High
+
+### 8.0 Arabic Workbench Parity
+
+- [x] 8.0.1 Mirror the Primary Side Bar and Activity Bar to the right while
+  keeping explicit, non-double-mirrored widget geometry
+- [x] 8.0.2 Keep every Arabic menu visible beside the window controls and let
+  the centered Command Center shrink first
+- [x] 8.0.3 Give Problems and Output explanatory empty states and a functional
+  restore/maximize control
+- [x] 8.0.4 Open the bottom panel at a restrained default height while retaining
+  draggable resizing
+- [x] 8.0.5 Keep the integrated terminal controls and Arabic input prompt in
+  stable physical positions
+- [ ] 8.0.6 Replace the line-input terminal bridge with ConPTY on Windows and
+  PTY on Linux for a single-surface interactive terminal
 
 ### 8.1 Multi-Cursor Editing
 

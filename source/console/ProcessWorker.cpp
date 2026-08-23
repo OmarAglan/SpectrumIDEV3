@@ -1,4 +1,6 @@
 #include "ProcessWorker.h"
+#include "EmbeddedProcess.h"
+#include "Constants.h"
 #include <QDebug>
 #include <QDir>
 #include <QFile>
@@ -85,7 +87,7 @@ void ProcessWorker::start() {
     // Create timer in the worker thread (correct thread affinity)
     if (!flushTimer) {
         flushTimer = new QTimer(this);
-        flushTimer->setInterval(20);
+        flushTimer->setInterval(Constants::Timing::FlushInterval);
         connect(flushTimer, &QTimer::timeout, this, &ProcessWorker::flushBuffers);
     }
 
@@ -96,6 +98,7 @@ void ProcessWorker::start() {
         process = nullptr;
     }
     process = new QProcess(this);
+    QalamProcess::configureForEmbeddedConsole(process);
     m_finishedEmitted = false;
     m_cancelRequested = false;
     m_followUpStarted = false;

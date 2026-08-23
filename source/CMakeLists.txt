@@ -56,6 +56,7 @@ add_library(qalam_core STATIC
     components/QalamCommandPalette.cpp
     components/QalamCommandPalette.h
     # Console
+    console/EmbeddedProcess.h
     console/QalamConsole.cpp
     console/ProcessWorker.cpp
     # Menu

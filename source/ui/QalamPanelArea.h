@@ -10,6 +10,7 @@
 #include <QPlainTextEdit>
 
 class QalamConsole;
+class QShowEvent;
 
 /**
  * @brief QalamPanelArea - VSCode-like bottom panel with tabs
@@ -39,6 +40,7 @@ public:
 
 protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
+    void showEvent(QShowEvent* event) override;
 
 public:
     /// Set the active tab
@@ -68,6 +70,9 @@ public:
     /// Show/hide the panel
     void setCollapsed(bool collapsed);
     bool isCollapsed() const { return m_collapsed; }
+
+    /// Reflect the vertical split state in the panel action button.
+    void setMaximizedState(bool maximized);
 
 signals:
     void tabChanged(Tab tab);
@@ -99,9 +104,13 @@ private:
     // Problems list
     QVBoxLayout* m_problemsLayout{nullptr};
     QWidget* m_problemsContent{nullptr};
+    QStackedWidget* m_problemsStack{nullptr};
+    QLabel* m_problemsEmptyState{nullptr};
     
     // Output display
     QPlainTextEdit* m_outputText{nullptr};
+    QStackedWidget* m_outputStack{nullptr};
+    QLabel* m_outputEmptyState{nullptr};
     QString m_lastOutputEntry;
     
     // Header buttons
@@ -114,4 +123,6 @@ private:
     int m_warningCount{0};
     
     bool m_collapsed{false};
+    bool m_initialHeightApplied{false};
+    bool m_maximized{false};
 };

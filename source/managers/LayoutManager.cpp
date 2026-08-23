@@ -74,8 +74,9 @@ void LayoutManager::setupLayout()
     workbenchSplitter->setChildrenCollapsible(false);
 
     // Create editor + panel vertical splitter
-    QSplitter *editorPanelSplitter = new QSplitter(Qt::Vertical);
-    editorPanelSplitter->setHandleWidth(1);
+    m_editorPanelSplitter = new QSplitter(Qt::Vertical);
+    m_editorPanelSplitter->setHandleWidth(1);
+    m_editorPanelSplitter->setChildrenCollapsible(false);
 
     // Create editor area container with breadcrumb
     QWidget *editorContainer = new QWidget();
@@ -91,16 +92,48 @@ void LayoutManager::setupLayout()
     editorVLayout->addWidget(m_searchBar);
 
     // Add editor container and panel to splitter
-    editorPanelSplitter->addWidget(editorContainer);
-    editorPanelSplitter->addWidget(m_panelArea);
-    editorPanelSplitter->setSizes({700, 200});
+    m_editorPanelSplitter->addWidget(editorContainer);
+    m_editorPanelSplitter->addWidget(m_panelArea);
+    m_editorPanelSplitter->setStretchFactor(0, 1);
+    m_editorPanelSplitter->setStretchFactor(1, 0);
+    m_editorPanelSplitter->setSizes({700, Constants::Layout::PanelDefaultHeight});
+
+    connect(m_panelArea, &QalamPanelArea::maximizeRequested, this, [this]() {
+        if (not m_editorPanelSplitter or not m_panelArea) return;
+
+        if (not m_panelMaximized) {
+            m_panelRestoreSizes = m_editorPanelSplitter->sizes();
+            const int total = m_panelRestoreSizes.value(0)
+                + m_panelRestoreSizes.value(1);
+            const int editorHeight = qMax(Constants::Layout::PanelMinHeight,
+                                          total / 5);
+            m_editorPanelSplitter->setSizes({editorHeight,
+                                             qMax(1, total - editorHeight)});
+            m_panelMaximized = true;
+        } else {
+            m_editorPanelSplitter->setSizes(m_panelRestoreSizes.isEmpty()
+                ? QList<int>{700, Constants::Layout::PanelDefaultHeight}
+                : m_panelRestoreSizes);
+            m_panelMaximized = false;
+        }
+        m_panelArea->setMaximizedState(m_panelMaximized);
+    });
+
+    connect(m_panelArea, &QalamPanelArea::closeRequested, this, [this]() {
+        if (not m_panelMaximized or not m_editorPanelSplitter) return;
+        m_editorPanelSplitter->setSizes(m_panelRestoreSizes.isEmpty()
+            ? QList<int>{700, Constants::Layout::PanelDefaultHeight}
+            : m_panelRestoreSizes);
+        m_panelMaximized = false;
+        m_panelArea->setMaximizedState(false);
+    });
 
     // Explicit visual order for the RTL-first workbench:
     // [Editor + Panel] [Primary Side Bar] [Activity Bar]
     // The Activity Bar is now in the same splitter as the side bar, which makes
     // the right edge deterministic even when the global app direction is RTL.
     m_activityBar->setLayoutDirection(Qt::LeftToRight);
-    workbenchSplitter->addWidget(editorPanelSplitter);
+    workbenchSplitter->addWidget(m_editorPanelSplitter);
     workbenchSplitter->addWidget(m_sidebar);
     workbenchSplitter->addWidget(m_activityBar);
     workbenchSplitter->setCollapsible(0, false);

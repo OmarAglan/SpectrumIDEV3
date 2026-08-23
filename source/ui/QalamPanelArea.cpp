@@ -6,11 +6,17 @@
 #include <QTextEdit>
 #include <QMouseEvent>
 #include <QGroupBox>
+#include <QShowEvent>
+#include <QSplitter>
+#include <QSizePolicy>
+#include <QTimer>
 
 QalamPanelArea::QalamPanelArea(QWidget* parent)
     : QWidget(parent)
 {
     setAttribute(Qt::WA_StyledBackground, true);
+    setMinimumHeight(Constants::Layout::PanelMinHeight);
+    setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Ignored);
     setupUI();
     applyStyles();
 }
@@ -115,7 +121,17 @@ void QalamPanelArea::setupProblemsView()
     QVBoxLayout* layout = new QVBoxLayout(m_problemsView);
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(0);
-    
+
+    m_problemsStack = new QStackedWidget(m_problemsView);
+    m_problemsStack->setObjectName(QStringLiteral("problemsStack"));
+
+    m_problemsEmptyState = new QLabel(
+        QStringLiteral("لا توجد مشاكل\nستظهر تشخيصات باء وتكوين هنا."),
+        m_problemsStack);
+    m_problemsEmptyState->setObjectName(QStringLiteral("problemsEmptyState"));
+    m_problemsEmptyState->setAlignment(Qt::AlignCenter);
+    m_problemsEmptyState->setWordWrap(true);
+
     // Scroll area for problems
     QScrollArea* scroll = new QScrollArea(m_problemsView);
     scroll->setWidgetResizable(true);
@@ -130,7 +146,10 @@ void QalamPanelArea::setupProblemsView()
     m_problemsLayout->setAlignment(Qt::AlignTop);
     
     scroll->setWidget(m_problemsContent);
-    layout->addWidget(scroll);
+    m_problemsStack->addWidget(m_problemsEmptyState);
+    m_problemsStack->addWidget(scroll);
+    m_problemsStack->setCurrentWidget(m_problemsEmptyState);
+    layout->addWidget(m_problemsStack);
 }
 
 void QalamPanelArea::setupOutputView()
@@ -139,7 +158,17 @@ void QalamPanelArea::setupOutputView()
     QVBoxLayout* layout = new QVBoxLayout(m_outputView);
     layout->setContentsMargins(0, 0, 0, 0);
 
-    m_outputText = new QPlainTextEdit(m_outputView);
+    m_outputStack = new QStackedWidget(m_outputView);
+    m_outputStack->setObjectName(QStringLiteral("outputStack"));
+
+    m_outputEmptyState = new QLabel(
+        QStringLiteral("لا توجد رسائل\nستظهر أحداث خادم اللغة وعمليات البناء هنا."),
+        m_outputStack);
+    m_outputEmptyState->setObjectName(QStringLiteral("outputEmptyState"));
+    m_outputEmptyState->setAlignment(Qt::AlignCenter);
+    m_outputEmptyState->setWordWrap(true);
+
+    m_outputText = new QPlainTextEdit(m_outputStack);
     m_outputText->setObjectName(QStringLiteral("languageOutput"));
     m_outputText->setReadOnly(true);
     m_outputText->setMaximumBlockCount(500);
@@ -150,7 +179,10 @@ void QalamPanelArea::setupOutputView()
         QString("QPlainTextEdit { padding: 8px; color: %1; background: transparent; }")
             .arg(Constants::Colors::TextSecondary));
 
-    layout->addWidget(m_outputText);
+    m_outputStack->addWidget(m_outputEmptyState);
+    m_outputStack->addWidget(m_outputText);
+    m_outputStack->setCurrentWidget(m_outputEmptyState);
+    layout->addWidget(m_outputStack);
 }
 
 void QalamPanelArea::setupTerminal()
@@ -222,6 +254,8 @@ QalamPanelArea::Tab QalamPanelArea::currentTab() const
 void QalamPanelArea::addProblem(const QString& message, const QString& file,
                             int line, int column, const QString& severity)
 {
+    if (m_problemsStack) m_problemsStack->setCurrentIndex(1);
+
     QWidget* item = new QWidget(m_problemsContent);
     QHBoxLayout* layout = new QHBoxLayout(item);
     layout->setContentsMargins(4, 2, 4, 2);
@@ -282,6 +316,9 @@ void QalamPanelArea::clearProblems()
     }
     m_errorCount = 0;
     m_warningCount = 0;
+    if (m_problemsStack and m_problemsEmptyState) {
+        m_problemsStack->setCurrentWidget(m_problemsEmptyState);
+    }
     updateProblemsBadge();
 }
 
@@ -315,6 +352,7 @@ void QalamPanelArea::appendOutput(const QString& text)
 {
     if (!m_outputText || text.isEmpty()) return;
     if (text == m_lastOutputEntry) return;
+    if (m_outputStack) m_outputStack->setCurrentWidget(m_outputText);
     m_lastOutputEntry = text;
     QTextCursor cursor = m_outputText->textCursor();
     cursor.movePosition(QTextCursor::End);
@@ -327,6 +365,9 @@ void QalamPanelArea::clearOutput()
 {
     m_lastOutputEntry.clear();
     if (m_outputText) m_outputText->clear();
+    if (m_outputStack and m_outputEmptyState) {
+        m_outputStack->setCurrentWidget(m_outputEmptyState);
+    }
 }
 
 QString QalamPanelArea::outputText() const
@@ -347,6 +388,49 @@ void QalamPanelArea::setCollapsed(bool collapsed)
     m_collapsed = collapsed;
     m_stackedWidget->setVisible(!collapsed);
     emit collapseToggled(collapsed);
+}
+
+void QalamPanelArea::setMaximizedState(bool maximized)
+{
+    if (m_maximized == maximized) return;
+    m_maximized = maximized;
+    m_maximizeBtn->setIcon(QIcon(maximized
+        ? QStringLiteral(":/icons/resources/restore.svg")
+        : QStringLiteral(":/icons/resources/maximize.svg")));
+    m_maximizeBtn->setToolTip(maximized
+        ? QStringLiteral("استعادة الحجم")
+        : QStringLiteral("تكبير"));
+}
+
+void QalamPanelArea::showEvent(QShowEvent* event)
+{
+    QWidget::showEvent(event);
+    if (m_initialHeightApplied) return;
+    m_initialHeightApplied = true;
+
+    // QSplitter recalculates its children after their show events. Apply the
+    // initial VS Code-like panel height on the following event-loop turn so it
+    // is not overwritten by that layout pass.
+    QTimer::singleShot(0, this, [this]() {
+        auto *splitter = qobject_cast<QSplitter*>(parentWidget());
+        if (not isVisible() or not splitter
+            or splitter->orientation() != Qt::Vertical) {
+            m_initialHeightApplied = false;
+            return;
+        }
+
+        const int totalHeight = splitter->height();
+        if (totalHeight <= Constants::Layout::PanelMinHeight) {
+            m_initialHeightApplied = false;
+            return;
+        }
+
+        const int panelHeight = qBound(
+            Constants::Layout::PanelMinHeight,
+            Constants::Layout::PanelDefaultHeight,
+            totalHeight / 2);
+        splitter->setSizes({qMax(1, totalHeight - panelHeight), panelHeight});
+    });
 }
 
 bool QalamPanelArea::eventFilter(QObject* watched, QEvent* event)
@@ -415,6 +499,12 @@ void QalamPanelArea::applyStyles()
         
         QScrollArea > QWidget > QWidget {
             background: %1;
+        }
+
+        #problemsEmptyState, #outputEmptyState {
+            color: %3;
+            font-size: 13px;
+            padding: 24px;
         }
 
         #debugTitle {

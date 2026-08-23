@@ -841,8 +841,76 @@ QString QalamTheme::consoleStyleSheet() {
             font-family: 'Consolas', 'Courier New', monospace;
             font-size: %3px;
         }
+        #consoleToolbar {
+            min-height: 28px;
+            background-color: %4;
+            border-bottom: 1px solid %5;
+        }
+        #consoleSessionLabel {
+            color: %2;
+            font-family: 'Segoe UI', 'Tajawal', sans-serif;
+            font-weight: 600;
+            padding: 0 3px;
+        }
+        #consoleStateLabel {
+            color: %6;
+            font-family: 'Segoe UI', 'Tajawal', sans-serif;
+            font-size: 11px;
+            padding: 0 5px;
+        }
+        #consoleStateLabel[state="ready"] { color: %7; }
+        #consoleStateLabel[state="busy"] { color: %8; }
+        #consoleStateLabel[state="error"] { color: %9; }
+        #consoleStateLabel[state="stopped"] { color: %6; }
+        #consoleToolbar QToolButton {
+            background: transparent;
+            border: 1px solid transparent;
+            border-radius: 4px;
+            padding: 4px;
+        }
+        #consoleToolbar QToolButton:hover {
+            background: %10;
+            border-color: %5;
+        }
+        #consoleToolbar QToolButton:pressed { background: %11; }
+        #consoleOutput {
+            background: %1;
+            color: %2;
+            border: none;
+            padding: 8px 12px;
+            selection-background-color: %12;
+        }
+        #consoleInputFrame {
+            min-height: 34px;
+            background: %4;
+            border-top: 1px solid %5;
+        }
+        #consolePrompt {
+            color: %13;
+            font-family: 'Consolas', monospace;
+            font-weight: 700;
+            font-size: 16px;
+        }
+        #consoleInput {
+            background: transparent;
+            color: %2;
+            border: none;
+            padding: 4px 2px;
+            selection-background-color: %12;
+        }
+        #consoleInput:focus { border: none; }
     )")
     .arg(Colors::ConsoleBackground)
     .arg(Colors::ConsoleText)
-    .arg(Fonts::ConsoleSize);
+    .arg(Fonts::ConsoleSize)
+    .arg(Colors::SidebarBackground)
+    .arg(Colors::PanelBorder)
+    .arg(Colors::TextMuted)
+    .arg(Colors::SuccessForeground)
+    .arg(Colors::WarningForeground)
+    .arg(Colors::ErrorForeground)
+    .arg(Colors::ListHoverBackground)
+    .arg(Colors::ButtonPressed)
+    .arg(Colors::Selection)
+    .arg(Colors::Accent);
 }

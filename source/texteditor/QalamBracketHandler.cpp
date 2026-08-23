@@ -1,5 +1,71 @@
 #include "QalamBracketHandler.h"
 
+namespace {
+enum class QuoteScanState {
+    Code,
+    LineComment,
+    BlockComment,
+    DoubleQuote,
+    SingleQuote,
+    Backtick
+};
+
+QChar activeQuoteBefore(const QString &text, int cursorPosition)
+{
+    QuoteScanState state = QuoteScanState::Code;
+    const int limit = qBound(0, cursorPosition, text.size());
+
+    for (int index = 0; index < limit; ++index) {
+        const QChar current = text.at(index);
+        const QChar next = index + 1 < limit ? text.at(index + 1) : QChar{};
+
+        if (state == QuoteScanState::LineComment) {
+            if (current == QLatin1Char('\n')) state = QuoteScanState::Code;
+            continue;
+        }
+        if (state == QuoteScanState::BlockComment) {
+            if (current == QLatin1Char('*') and next == QLatin1Char('/')) {
+                state = QuoteScanState::Code;
+                ++index;
+            }
+            continue;
+        }
+
+        if (state != QuoteScanState::Code) {
+            if (current == QLatin1Char('\\')) {
+                if (index + 1 < limit) ++index;
+                continue;
+            }
+            const bool closes =
+                (state == QuoteScanState::DoubleQuote and current == QLatin1Char('"')) or
+                (state == QuoteScanState::SingleQuote and current == QLatin1Char('\'')) or
+                (state == QuoteScanState::Backtick and current == QLatin1Char('`'));
+            if (closes) state = QuoteScanState::Code;
+            continue;
+        }
+
+        if (current == QLatin1Char('/') and next == QLatin1Char('/')) {
+            state = QuoteScanState::LineComment;
+            ++index;
+        } else if (current == QLatin1Char('/') and next == QLatin1Char('*')) {
+            state = QuoteScanState::BlockComment;
+            ++index;
+        } else if (current == QLatin1Char('"')) {
+            state = QuoteScanState::DoubleQuote;
+        } else if (current == QLatin1Char('\'')) {
+            state = QuoteScanState::SingleQuote;
+        } else if (current == QLatin1Char('`')) {
+            state = QuoteScanState::Backtick;
+        }
+    }
+
+    if (state == QuoteScanState::DoubleQuote) return QLatin1Char('"');
+    if (state == QuoteScanState::SingleQuote) return QLatin1Char('\'');
+    if (state == QuoteScanState::Backtick) return QLatin1Char('`');
+    return {};
+}
+}
+
 QalamBracketHandler::QalamBracketHandler(QPlainTextEdit *editor) : m_editor(editor) {}
 
 bool QalamBracketHandler::handleAutoPairing(QKeyEvent *e) {
@@ -22,8 +88,7 @@ bool QalamBracketHandler::handleAutoPairing(QKeyEvent *e) {
                 return handleQuoteCompletion(typedChar);
         }
         // Handle closing brackets (skip over existing ones)
-        else if (typedChar == ')' || typedChar == ']' || typedChar == '}' ||
-                 typedChar == '\'' || typedChar == '"' || typedChar == '`') {
+        else if (typedChar == ')' || typedChar == ']' || typedChar == '}') {
             return handleBracketSkip(typedChar);
         }
     }
@@ -91,6 +156,15 @@ bool QalamBracketHandler::handleQuoteCompletion(QChar quoteChar) {
             m_editor->setTextCursor(cursor);
             return true;
         }
+    }
+
+    // Inside an existing literal, the typed character is content or the one
+    // closing delimiter. Insert only that character instead of creating a new
+    // pair, which previously produced triple quotes at the end of Baa strings.
+    if (!activeQuoteBefore(doc->toPlainText(), pos).isNull()) {
+        cursor.insertText(QString(quoteChar));
+        m_editor->setTextCursor(cursor);
+        return true;
     }
 
     // Insert the quote pair

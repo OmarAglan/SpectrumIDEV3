@@ -87,10 +87,15 @@ The editor supports:
 - **Zoom:** Use `Ctrl+Scroll` to change font size.
 
 ### The Console (`F6`)
-The embedded console allows you to interact with the system and view compiler output.
+The embedded console allows you to interact with the system and view compiler
+and program output without opening a separate Windows console window.
 - Use `Ctrl+L` to clear the console.
 - Command history is available using the Up/Down keys.
 - The console runs your default shell (cmd.exe on Windows, bash on Linux).
+- The session bar reports whether the shell or program is starting, ready,
+  running, stopped, or failed. Its controls clear, stop, or restart the shell.
+- During F5 execution, the prompt row sends typed input directly to the running
+  Baa program and returns to the system shell when it finishes.
 
 ### File Explorer
 The right sidebar shows your project files. You can double-click a file to open

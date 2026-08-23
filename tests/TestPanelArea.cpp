@@ -1,6 +1,8 @@
 #include "QalamPanelArea.h"
+#include "Constants.h"
 
 #include <QTest>
+#include <QSplitter>
 
 class TestPanelArea : public QObject
 {
@@ -10,6 +12,9 @@ private slots:
     void keepsBoundedPlainTextOutput();
     void deduplicatesConsecutiveLanguageEvents();
     void loadsPanelActionIcons();
+    void presentsHelpfulEmptyStates();
+    void reflectsPanelMaximizeState();
+    void opensAtRestrainedDefaultHeight();
 };
 
 void TestPanelArea::keepsBoundedPlainTextOutput()
@@ -64,6 +69,68 @@ void TestPanelArea::loadsPanelActionIcons()
     requireIcon(QStringLiteral("panelCloseButton"));
     requireIcon(QStringLiteral("debugRunButton"));
     requireIcon(QStringLiteral("debugStopButton"));
+}
+
+void TestPanelArea::presentsHelpfulEmptyStates()
+{
+    QalamPanelArea panel;
+    auto *problemsStack = panel.findChild<QStackedWidget *>(
+        QStringLiteral("problemsStack"));
+    auto *outputStack = panel.findChild<QStackedWidget *>(
+        QStringLiteral("outputStack"));
+    auto *problemsEmpty = panel.findChild<QLabel *>(
+        QStringLiteral("problemsEmptyState"));
+    auto *outputEmpty = panel.findChild<QLabel *>(
+        QStringLiteral("outputEmptyState"));
+    QVERIFY(problemsStack);
+    QVERIFY(outputStack);
+    QVERIFY(problemsEmpty);
+    QVERIFY(outputEmpty);
+    QCOMPARE(problemsStack->currentWidget(), problemsEmpty);
+    QCOMPARE(outputStack->currentWidget(), outputEmpty);
+
+    panel.addProblem(QStringLiteral("مشكلة تجريبية"),
+                     QStringLiteral("مثال.باء"), 2, 4);
+    QVERIFY(problemsStack->currentWidget() != problemsEmpty);
+    panel.appendOutput(QStringLiteral("رسالة تجريبية\n"));
+    QVERIFY(outputStack->currentWidget() != outputEmpty);
+
+    panel.clearProblems();
+    panel.clearOutput();
+    QCOMPARE(problemsStack->currentWidget(), problemsEmpty);
+    QCOMPARE(outputStack->currentWidget(), outputEmpty);
+}
+
+void TestPanelArea::reflectsPanelMaximizeState()
+{
+    QalamPanelArea panel;
+    auto *button = panel.findChild<QPushButton *>(
+        QStringLiteral("panelMaximizeButton"));
+    QVERIFY(button);
+
+    panel.setMaximizedState(true);
+    QCOMPARE(button->toolTip(), QStringLiteral("استعادة الحجم"));
+    QVERIFY(not button->icon().isNull());
+
+    panel.setMaximizedState(false);
+    QCOMPARE(button->toolTip(), QStringLiteral("تكبير"));
+    QVERIFY(not button->icon().isNull());
+}
+
+void TestPanelArea::opensAtRestrainedDefaultHeight()
+{
+    QSplitter splitter(Qt::Vertical);
+    splitter.resize(1000, 800);
+    splitter.addWidget(new QWidget(&splitter));
+    auto *panel = new QalamPanelArea(&splitter);
+    splitter.addWidget(panel);
+    panel->hide();
+    splitter.show();
+    QTest::qWait(20);
+
+    panel->show();
+    QTest::qWait(30);
+    QVERIFY(qAbs(panel->height() - Constants::Layout::PanelDefaultHeight) <= 2);
 }
 
 QTEST_MAIN(TestPanelArea)

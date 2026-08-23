@@ -141,6 +141,7 @@ namespace Constants {
         constexpr const char* ErrorForeground = "#f14c4c";
         constexpr const char* WarningForeground = "#cca700";
         constexpr const char* InfoForeground = "#3794ff";
+        constexpr const char* SuccessForeground = "#4ec9b0";
 
         // Borders (semantic aliases)
         constexpr const char* BorderActive = "#007acc";
@@ -186,6 +187,9 @@ namespace Constants {
         constexpr int CaptionButtonWidth = 46;
         constexpr int CaptionButtonHeight = 30;
         constexpr int CaptionIconSize = 14;
+        constexpr int TitleMenuMinWidth = 420;
+        constexpr int CommandCenterMinWidth = 220;
+        constexpr int CommandCenterMaxWidth = 430;
 
         // Activity Bar (VS Code-like)
         constexpr int ActivityBarWidth = 48;

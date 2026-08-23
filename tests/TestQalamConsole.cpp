@@ -1,7 +1,11 @@
 #include "QalamConsole.h"
 
 #include <QPlainTextEdit>
+#include <QFrame>
+#include <QLabel>
+#include <QLineEdit>
 #include <QTextCursor>
+#include <QToolButton>
 #include <QtTest>
 
 namespace {
@@ -33,6 +37,7 @@ private slots:
     void rendersStandard256AndTrueColorSgr();
     void resetsFormattingAndClearsPendingSequences();
     void boundsLargeOutputWithoutLosingTheTail();
+    void presentsAnIntegratedInteractiveTerminal();
 };
 
 void TestQalamConsole::preservesArabicAcrossSplitAnsiSequences()
@@ -107,16 +112,68 @@ void TestQalamConsole::boundsLargeOutputWithoutLosingTheTail()
     QVERIFY(output);
 
     QString largeOutput;
-    for (int index = 0; index < 2500; ++index) {
+    for (int index = 0; index < 10500; ++index) {
         largeOutput += QStringLiteral("\x1b[38;5;33mسطر %1\x1b[0m\n").arg(index);
     }
     console.appendPlainTextThreadSafe(largeOutput);
     flushConsole(console);
 
-    QVERIFY(output->document()->blockCount() <= 2000);
+    QVERIFY(output->document()->blockCount() <= 10000);
     QVERIFY(not output->toPlainText().contains(QStringLiteral("سطر 0\n")));
-    QVERIFY(output->toPlainText().contains(QStringLiteral("سطر 2499")));
+    QVERIFY(output->toPlainText().contains(QStringLiteral("سطر 10499")));
     QVERIFY(not output->toPlainText().contains(QChar(0x1b)));
+}
+
+void TestQalamConsole::presentsAnIntegratedInteractiveTerminal()
+{
+    QalamConsole console;
+    auto *toolbar = console.findChild<QWidget *>(QStringLiteral("consoleToolbar"));
+    auto *inputFrame = console.findChild<QFrame *>(QStringLiteral("consoleInputFrame"));
+    auto *input = console.findChild<QLineEdit *>(QStringLiteral("consoleInput"));
+    auto *session = console.findChild<QLabel *>(QStringLiteral("consoleSessionLabel"));
+    auto *state = console.findChild<QLabel *>(QStringLiteral("consoleStateLabel"));
+    auto *prompt = console.findChild<QLabel *>(QStringLiteral("consolePrompt"));
+    auto *clearButton =
+        console.findChild<QToolButton *>(QStringLiteral("consoleClearButton"));
+    auto *restartButton =
+        console.findChild<QToolButton *>(QStringLiteral("consoleRestartButton"));
+    auto *stopButton =
+        console.findChild<QToolButton *>(QStringLiteral("consoleStopButton"));
+
+    QVERIFY(toolbar);
+    QVERIFY(inputFrame);
+    QVERIFY(input);
+    QVERIFY(session);
+    QVERIFY(state);
+    QVERIFY(prompt);
+    QVERIFY(clearButton);
+    QVERIFY(restartButton);
+    QVERIFY(stopButton);
+    QCOMPARE(console.focusProxy(), input);
+    QVERIFY(not input->placeholderText().isEmpty());
+    QCOMPARE(input->alignment(), Qt::Alignment(Qt::AlignRight));
+    QVERIFY(not input->placeholderText().contains(QStringLiteral("Enter")));
+    QVERIFY(not clearButton->icon().isNull());
+    QVERIFY(not restartButton->icon().isNull());
+    QVERIFY(not stopButton->icon().isNull());
+
+    console.resize(760, 320);
+    console.show();
+    QTest::qWait(20);
+    // The RTL input caret belongs beside the prompt on the physical right.
+    QVERIFY(prompt->geometry().left() > input->geometry().left());
+    QVERIFY(session->geometry().left() > restartButton->geometry().left());
+
+    console.beginTask(QStringLiteral("تشغيل ملف باء"));
+    QCOMPARE(session->text(), QStringLiteral("تشغيل ملف باء"));
+    QCOMPARE(state->property("state").toString(), QStringLiteral("busy"));
+    QVERIFY(input->placeholderText().contains(QStringLiteral("بيانات البرنامج")));
+
+    console.appendPlainTextThreadSafe(QStringLiteral("ناتج\n"));
+    flushConsole(console);
+    QVERIFY(not consoleOutput(console)->toPlainText().isEmpty());
+    clearButton->click();
+    QVERIFY(consoleOutput(console)->toPlainText().isEmpty());
 }
 
 QTEST_MAIN(TestQalamConsole)

@@ -1,8 +1,11 @@
 #include "QalamConsole.h"
+#include "EmbeddedProcess.h"
 #include "Constants.h"
 #include "ui/QalamTheme.h"
 #include <QVBoxLayout>
+#include <QHBoxLayout>
 #include <QScrollBar>
+#include <QStyle>
 #include <QTextCursor>
 #include <QTextCharFormat>
 #include <QKeyEvent>
@@ -74,40 +77,143 @@ QalamConsole::QalamConsole(QWidget *parent)
     : QWidget(parent),
     m_output(new QPlainTextEdit(this)),
     m_input(new QLineEdit(this)),
+    m_toolbar(new QWidget(this)),
+    m_inputFrame(new QFrame(this)),
+    m_sessionLabel(new QLabel(this)),
+    m_stateLabel(new QLabel(this)),
+    m_promptLabel(new QLabel(this)),
+    m_clearButton(new QToolButton(this)),
+    m_restartButton(new QToolButton(this)),
+    m_stopButton(new QToolButton(this)),
     m_process(new QProcess(this)),
     m_flushTimer(new QTimer(this)),
     m_historyIndex(-1),
-    m_autoscroll(true)
+    m_autoscroll(true),
+    m_expectedStop(false),
+    m_maxLines(Constants::Console::MaxBufferLines)
 {
     // UI
     m_output->setObjectName(QStringLiteral("consoleOutput"));
     m_input->setObjectName(QStringLiteral("consoleInput"));
+    m_toolbar->setObjectName(QStringLiteral("consoleToolbar"));
+    m_inputFrame->setObjectName(QStringLiteral("consoleInputFrame"));
+    m_sessionLabel->setObjectName(QStringLiteral("consoleSessionLabel"));
+    m_stateLabel->setObjectName(QStringLiteral("consoleStateLabel"));
+    m_promptLabel->setObjectName(QStringLiteral("consolePrompt"));
+    m_clearButton->setObjectName(QStringLiteral("consoleClearButton"));
+    m_restartButton->setObjectName(QStringLiteral("consoleRestartButton"));
+    m_stopButton->setObjectName(QStringLiteral("consoleStopButton"));
     m_output->setReadOnly(true);
     m_output->setUndoRedoEnabled(false);
     m_output->setWordWrapMode(QTextOption::WordWrap);
+    m_output->setFrameShape(QFrame::NoFrame);
+    m_output->setContextMenuPolicy(Qt::DefaultContextMenu);
     // simple monospace font
     QFont f = QFontDatabase::systemFont(QFontDatabase::FixedFont);
     f.setPixelSize(Constants::Fonts::ConsoleSize);
     m_output->setFont(f);
     m_input->setFont(f);
+    m_input->setFrame(false);
+    m_input->setClearButtonEnabled(true);
+    m_input->setPlaceholderText(QStringLiteral("اكتب أمرًا ثم اضغط إدخال"));
+    m_input->setAlignment(Qt::AlignRight);
+
+    m_sessionLabel->setText(QStringLiteral("طرفية النظام"));
+    m_stateLabel->setText(QStringLiteral("● جارٍ البدء"));
+    m_stateLabel->setProperty("state", QStringLiteral("busy"));
+    m_promptLabel->setText(QStringLiteral("❮"));
+    m_promptLabel->setAlignment(Qt::AlignCenter);
+
+    const auto configureToolButton = [](QToolButton *button,
+                                        const QString &icon,
+                                        const QString &toolTip) {
+        button->setAutoRaise(true);
+        button->setFixedSize(28, 26);
+        button->setIcon(QIcon(icon));
+        button->setIconSize(QSize(15, 15));
+        button->setToolTip(toolTip);
+        button->setCursor(Qt::PointingHandCursor);
+    };
+    configureToolButton(m_clearButton,
+                        QStringLiteral(":/icons/resources/trash.svg"),
+                        QStringLiteral("مسح الطرفية (Ctrl+L)"));
+    configureToolButton(m_restartButton,
+                        QStringLiteral(":/icons/resources/run.svg"),
+                        QStringLiteral("إعادة تشغيل طرفية النظام"));
+    configureToolButton(m_stopButton,
+                        QStringLiteral(":/icons/resources/stop.svg"),
+                        QStringLiteral("إيقاف العملية الحالية"));
 
     setStyleSheet(QalamTheme::consoleStyleSheet());
 
     auto *lay = new QVBoxLayout(this);
     lay->setContentsMargins(0,0,0,0);
+    lay->setSpacing(0);
+
+    auto *toolbarLayout = new QHBoxLayout(m_toolbar);
+    toolbarLayout->setContentsMargins(10, 2, 6, 2);
+    toolbarLayout->setSpacing(6);
+    // Keep the shell geometry explicit. The action buttons live on the left,
+    // while the Arabic session identity and status form a group on the right.
+    m_toolbar->setLayoutDirection(Qt::LeftToRight);
+    toolbarLayout->setDirection(QBoxLayout::LeftToRight);
+    toolbarLayout->addWidget(m_clearButton);
+    toolbarLayout->addWidget(m_stopButton);
+    toolbarLayout->addWidget(m_restartButton);
+    toolbarLayout->addStretch(1);
+    toolbarLayout->addWidget(m_stateLabel);
+    toolbarLayout->addWidget(m_sessionLabel);
+
+    auto *inputLayout = new QHBoxLayout(m_inputFrame);
+    inputLayout->setContentsMargins(10, 3, 10, 3);
+    inputLayout->setSpacing(8);
+    // Use physical LTR geometry so the field always stretches first and the
+    // prompt remains attached to its right edge. The input itself stays RTL.
+    m_inputFrame->setLayoutDirection(Qt::LeftToRight);
+    inputLayout->setDirection(QBoxLayout::LeftToRight);
+    inputLayout->addWidget(m_input, 1);
+    inputLayout->addWidget(m_promptLabel);
+
+    lay->addWidget(m_toolbar);
     lay->addWidget(m_output);
-    lay->addWidget(m_input);
+    lay->addWidget(m_inputFrame);
     setLayout(lay);
 
     setLayoutDirection(Qt::RightToLeft);
     m_input->setLayoutDirection(Qt::RightToLeft);
+    setFocusProxy(m_input);
+
+    QalamProcess::configureForEmbeddedConsole(m_process);
 
     connect(m_process, &QProcess::readyReadStandardOutput, this, &QalamConsole::processStdout);
     connect(m_process, &QProcess::readyReadStandardError, this, &QalamConsole::processStderr);
     connect(m_process, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
             this, &QalamConsole::processFinished);
+    connect(m_process, &QProcess::started, this, [this]() {
+        setSessionState(QStringLiteral("طرفية النظام"),
+                        QStringLiteral("● جاهزة"),
+                        QStringLiteral("ready"));
+        m_input->setPlaceholderText(QStringLiteral("اكتب أمرًا ثم اضغط إدخال"));
+    });
+    connect(m_process, &QProcess::errorOccurred, this,
+            [this](QProcess::ProcessError error) {
+        if (error != QProcess::FailedToStart) return;
+        setSessionState(QStringLiteral("طرفية النظام"),
+                        QStringLiteral("● تعذر البدء"),
+                        QStringLiteral("error"));
+        appendPlainTextThreadSafe(
+            QStringLiteral("تعذر تشغيل طرفية النظام: %1\n").arg(m_process->errorString()));
+    });
 
     connect(m_input, &QLineEdit::returnPressed, this, &QalamConsole::onInputReturn);
+    connect(m_clearButton, &QToolButton::clicked, this, &QalamConsole::clear);
+    connect(m_restartButton, &QToolButton::clicked, this, &QalamConsole::restartShell);
+    connect(m_stopButton, &QToolButton::clicked, this, [this]() {
+        stopCmd();
+        setSessionState(QStringLiteral("طرفية النظام"),
+                        QStringLiteral("● متوقفة"),
+                        QStringLiteral("stopped"));
+    });
 
     m_input->installEventFilter(this);
 
@@ -125,11 +231,20 @@ void QalamConsole::startCmd()
 {
     if (m_process->state() != QProcess::NotRunning) return;
 
+    m_expectedStop = false;
+    setSessionState(QStringLiteral("طرفية النظام"),
+                    QStringLiteral("● جارٍ البدء"),
+                    QStringLiteral("busy"));
+    m_input->setPlaceholderText(QStringLiteral("اكتب أمرًا ثم اضغط إدخال"));
+
 #if defined(Q_OS_WIN)
     QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
     env.insert("TERM", "dumb");
     m_process->setProcessEnvironment(env);
-    m_process->start("cmd.exe", {"/Q", "/K", "chcp 65001 > nul"});
+    // The input row is Qalam's visible prompt, so keep cmd.exe's native path
+    // prompt quiet instead of duplicating it in the output viewport.
+    m_process->start("cmd.exe", {"/Q", "/K",
+                                  "chcp 65001 > nul & prompt $S"});
 #elif defined(Q_OS_MACOS)
     QStringList args;
     args << "-i" << "-l"; // Interactive login shell
@@ -151,6 +266,7 @@ void QalamConsole::startCmd()
 void QalamConsole::stopCmd()
 {
     if (m_process->state() != QProcess::NotRunning) {
+        m_expectedStop = true;
         m_process->terminate();
         if (!m_process->waitForFinished(500)) {
             m_process->kill();
@@ -180,6 +296,16 @@ void QalamConsole::setConsoleRTL()
     m_output->document()->setDefaultTextOption(opt);
 }
 
+void QalamConsole::beginTask(const QString &title)
+{
+    setSessionState(title.trimmed().isEmpty() ? QStringLiteral("تشغيل البرنامج")
+                                               : title.trimmed(),
+                    QStringLiteral("● قيد التشغيل"),
+                    QStringLiteral("busy"));
+    m_input->setPlaceholderText(QStringLiteral("أدخل بيانات البرنامج ثم اضغط إدخال"));
+    m_input->setFocus(Qt::OtherFocusReason);
+}
+
 void QalamConsole::appendPlainTextThreadSafe(const QString &text)
 {
     if (text.isEmpty()) return;
@@ -205,8 +331,38 @@ void QalamConsole::processStderr()
 
 void QalamConsole::processFinished(int code, QProcess::ExitStatus status)
 {
-    Q_UNUSED(status);
-    appendPlainTextThreadSafe(QString("\n[Process finished with code %1]\n").arg(code));
+    if (m_expectedStop) {
+        m_expectedStop = false;
+        return;
+    }
+
+    const bool crashed = status == QProcess::CrashExit;
+    setSessionState(QStringLiteral("طرفية النظام"),
+                    crashed ? QStringLiteral("● توقفت بخطأ")
+                            : QStringLiteral("● انتهت"),
+                    crashed ? QStringLiteral("error")
+                            : QStringLiteral("stopped"));
+    appendPlainTextThreadSafe(
+        QStringLiteral("\nانتهت طرفية النظام (رمز الخروج %1).\n").arg(code));
+}
+
+void QalamConsole::restartShell()
+{
+    stopCmd();
+    startCmd();
+    m_input->setFocus(Qt::ShortcutFocusReason);
+}
+
+void QalamConsole::setSessionState(const QString &title,
+                                   const QString &status,
+                                   const QString &state)
+{
+    m_sessionLabel->setText(title);
+    m_stateLabel->setText(status);
+    m_stateLabel->setProperty("state", state);
+    m_stateLabel->style()->unpolish(m_stateLabel);
+    m_stateLabel->style()->polish(m_stateLabel);
+    m_stateLabel->update();
 }
 
 void QalamConsole::onInputReturn()

@@ -1,5 +1,6 @@
 #include "BuildManager.h"
 #include "QalamMenuBar.h"
+#include "QalamTitleBar.h"
 
 #include <QtTest/QtTest>
 #include <QDir>
@@ -21,6 +22,7 @@ private slots:
     void buildsCanonicalNazmArguments();
     void explainsUnavailableToolActions();
     void keepsMenuBarRightToLeft();
+    void keepsFullMenuVisibleInArabicTitleBar();
 };
 
 void TestBuildManager::keepsMenuBarRightToLeft()
@@ -30,6 +32,36 @@ void TestBuildManager::keepsMenuBarRightToLeft()
     for (QAction *action : menu.actions()) {
         QVERIFY(action->menu());
         QCOMPARE(action->menu()->layoutDirection(), Qt::RightToLeft);
+    }
+}
+
+void TestBuildManager::keepsFullMenuVisibleInArabicTitleBar()
+{
+    QWidget owner;
+    QalamTitleBar titleBar;
+    QalamMenuBar menu(&owner);
+    menu.setStyleSheet(QStringLiteral(
+        "QMenuBar::item { padding: 4px 10px; }"));
+    titleBar.resize(1400, titleBar.height());
+    titleBar.addMenuBar(&menu);
+    titleBar.show();
+    QTest::qWait(20);
+
+    QCOMPARE(menu.layoutDirection(), Qt::RightToLeft);
+    QVERIFY(menu.width() >= menu.sizeHint().width());
+    auto *commandCenter = titleBar.findChild<QPushButton *>(
+        QStringLiteral("commandCenterButton"));
+    QVERIFY(commandCenter);
+    QVERIFY(qAbs(commandCenter->geometry().center().x()
+                 - titleBar.rect().center().x()) <= 1);
+    for (QAction *action : menu.actions()) {
+        const QRect actionRect = menu.actionGeometry(action);
+        QVERIFY2(actionRect.isValid(), qPrintable(action->text()));
+        QVERIFY2(actionRect.width()
+                     >= menu.fontMetrics().horizontalAdvance(action->text()),
+                 qPrintable(action->text()));
+        QVERIFY2(menu.rect().contains(actionRect.center()),
+                 qPrintable(action->text()));
     }
 }
 

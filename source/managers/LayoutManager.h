@@ -2,6 +2,7 @@
 
 #include "QalamActivityBar.h"
 #include <QObject>
+#include <QList>
 
 class QTabWidget;
 class QMainWindow;
@@ -11,6 +12,7 @@ class QalamStatusBar;
 class QalamPanelArea;
 class QalamBreadcrumb;
 class QalamEditor;
+class QSplitter;
 
 /**
  * @brief Manages the VSCode-like layout — creates components,
@@ -61,4 +63,7 @@ private:
     QalamStatusBar *m_statusBar{};
     QalamPanelArea *m_panelArea{};
     QalamBreadcrumb *m_breadcrumb{};
+    QSplitter *m_editorPanelSplitter{};
+    QList<int> m_panelRestoreSizes;
+    bool m_panelMaximized{false};
 };

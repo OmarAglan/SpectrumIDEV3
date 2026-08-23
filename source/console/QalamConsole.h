@@ -3,9 +3,12 @@
 #include <QWidget>
 #include <QPlainTextEdit>
 #include <QLineEdit>
+#include <QLabel>
 #include <QProcess>
+#include <QFrame>
 #include <QTextCharFormat>
 #include <QTimer>
+#include <QToolButton>
 #include <QMutex>
 #include <QVector>
 
@@ -21,6 +24,7 @@ public:
     void clear();                       // clear output
     void setConsoleRTL();               // force RTL on widgets
     void appendPlainTextThreadSafe(const QString &text); // thread-safe append
+    void beginTask(const QString &title);
 
 signals:
     void commandEntered(const QString &cmd); // emitted when user enters command
@@ -35,6 +39,14 @@ private slots:
 private:
     QPlainTextEdit *m_output{};
     QLineEdit *m_input{};
+    QWidget *m_toolbar{};
+    QFrame *m_inputFrame{};
+    QLabel *m_sessionLabel{};
+    QLabel *m_stateLabel{};
+    QLabel *m_promptLabel{};
+    QToolButton *m_clearButton{};
+    QToolButton *m_restartButton{};
+    QToolButton *m_stopButton{};
     QProcess *m_process{};
     QTimer *m_flushTimer{};
 
@@ -49,11 +61,16 @@ private:
 
     // autoscroll
     bool m_autoscroll{};
+    bool m_expectedStop{};
 
     // helpers
     void appendAnsiText(const QString &text);
     void applySgr(const QString &parameters);
+    void restartShell();
+    void setSessionState(const QString &title,
+                         const QString &status,
+                         const QString &state);
     bool eventFilter(QObject *obj, QEvent *ev) override;
 
-    int m_maxLines = 2000;         // آخر 2000 سطر
+    int m_maxLines{};
 };

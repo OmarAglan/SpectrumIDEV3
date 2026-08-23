@@ -60,6 +60,9 @@ The heart of Qalam is `QalamEditor`, a custom `QPlainTextEdit` subclass.
 
 #### 2. Console (`source/console`)
 `QalamConsole` provides an interactive terminal.
+- It owns an integrated session bar, state indicator, prompt row, history, ANSI
+  rendering, bounded output, and shell lifecycle controls. Windows processes
+  use `CREATE_NO_WINDOW`, keeping compiler and program streams inside the panel.
 - **`ProcessWorker`:** Runs in a background `QThread` with mutex-protected buffers for the compiler or external scripts, keeping the UI responsive.
   Standalone F5 uses one worker for an explicit two-phase pipeline: Baa first
   writes a uniquely keyed executable under Qalam's application cache, then the
