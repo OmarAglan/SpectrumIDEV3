@@ -352,6 +352,41 @@ if ($packagedCompiler) {
 if (!$SkipArchive) {
     if (Test-Path $ZipPath) { Remove-Item $ZipPath -Force }
     Compress-Archive -Path (Join-Path $PackageDir '*') -DestinationPath $ZipPath
+
+    $archiveTestRoot = Join-Path ([IO.Path]::GetTempPath()) (
+        'قلم حزمة مستخرجة - ' + [Guid]::NewGuid().ToString('N'))
+    try {
+        Expand-Archive -LiteralPath $ZipPath -DestinationPath $archiveTestRoot
+        $archiveRuntimeArguments = @{
+            Executable = (Join-Path $archiveTestRoot 'Qalam.exe')
+            StartupSeconds = 1
+        }
+        if ($packagedLanguageServer) {
+            $archiveRuntimeArguments.LanguageServer =
+                (Join-Path $archiveTestRoot 'baa-lsp\baa-lsp.exe')
+        }
+        if ($packagedCompiler) {
+            $archiveRuntimeArguments.Compiler =
+                (Join-Path $archiveTestRoot 'baa\baa.exe')
+            $archiveRuntimeArguments.Nazm =
+                (Join-Path $archiveTestRoot "baa\$nazmArabicExecutableName")
+            $archiveRuntimeArguments.ToolchainRoot =
+                (Join-Path $archiveTestRoot 'baa\gcc')
+        }
+        & (Join-Path $PSScriptRoot 'test-windows-runtime.ps1') `
+            @archiveRuntimeArguments
+    } finally {
+        if (Test-Path -LiteralPath $archiveTestRoot) {
+            $resolvedArchiveTestRoot = [IO.Path]::GetFullPath($archiveTestRoot)
+            $resolvedTempRoot = [IO.Path]::GetFullPath([IO.Path]::GetTempPath())
+            if (!$resolvedArchiveTestRoot.StartsWith(
+                    $resolvedTempRoot,
+                    [StringComparison]::OrdinalIgnoreCase)) {
+                throw "Refusing to remove archive test outside Temp: $resolvedArchiveTestRoot"
+            }
+            Remove-Item -LiteralPath $resolvedArchiveTestRoot -Recurse -Force
+        }
+    }
 }
 
 Write-Host "Packaged Qalam successfully:" -ForegroundColor Green

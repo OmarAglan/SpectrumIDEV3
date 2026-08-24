@@ -348,7 +348,10 @@ One deferred item from Phase 2:
   path mode and licenses, and require an isolated Arabic-path compile-link-run
   gate with no host GCC/MSYS2. Packaging probes the selected GCC instead of
   assuming direct Unicode support; Baa then uses either direct paths or its
-  no-copy short-path adapter according to the recorded capability.
+  no-copy path adapter according to the recorded capability. The gate runs once
+  from the assembled package and again after extracting the final ZIP below an
+  Arabic directory containing spaces, so relocation of the complete toolchain
+  is tested rather than inferred.
 - [ ] 7.2.1c Admit the standalone Windows installer in CI: Qalam + Qt + internal
   Baa-LSP only, silent install, native-window/LSP probes, unchanged `PATH`, and
   complete uninstall cleanup
@@ -376,9 +379,12 @@ the portable-linker candidate requires a new green CI receipt.
 - [x] 7.3.5 Admit the complete portable bundle only after its pinned GCC/LD
   passes the Arabic-and-spaces output-path smoke; UI preview archives must state
   explicitly when the compiler toolchain is omitted. Local admission on
-  2026-08-24 produced a 227.58 MiB archive with GCC 13.1.0 recorded as
-  `unicode_paths=short-path`; the isolated Qalam/Baa-LSP/Baa/Nazm/GCC
-  compile-link-run gate and all 26 Qalam tests passed.
+  2026-08-24 records GCC 13.1.0 as `unicode_paths=short-path`; both the assembled
+  tree and final ZIP extracted below an Arabic, spaced root must pass the isolated
+  Qalam/Baa-LSP/Baa/Nazm/GCC compile-link-run gate before an archive size/hash is
+  published. The admitted local archive is 227.59 MiB with SHA-256
+  `B995799E754FAB04633BAA95F8ACFD1216CD10BB338DD299FB5F0C42F759B217`.
+  All 26 Qalam tests also passed.
 
 ---
 
