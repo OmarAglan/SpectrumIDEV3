@@ -117,10 +117,13 @@ try {
             throw "Bundled Baa toolchain manifest is missing: $toolchainManifest"
         }
         $manifestLines = [IO.File]::ReadAllLines($toolchainManifest)
+        $unicodeModes = @($manifestLines | Where-Object {
+            $_ -in @('unicode_paths=direct', 'unicode_paths=short-path')
+        })
         if ($manifestLines -notcontains 'format=baa-portable-toolchain-v1' -or
-            $manifestLines -notcontains 'unicode_paths=direct' -or
+            $unicodeModes.Count -ne 1 -or
             $manifestLines -notcontains 'pei386_runtime_relocator=retain') {
-            throw 'Bundled Baa toolchain is not admitted for direct Unicode paths.'
+            throw 'Bundled Baa toolchain has no admitted Unicode path mode.'
         }
 
         $gccProbeInfo = [System.Diagnostics.ProcessStartInfo]::new()

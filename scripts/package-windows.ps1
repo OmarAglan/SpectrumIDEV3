@@ -20,6 +20,83 @@ $nazmArabicExecutableName =
     (-join [char[]](0x0646, 0x0638, 0x0645)) + '.exe'
 Set-Location (Split-Path -Parent $PSScriptRoot)
 
+function Get-GccUnicodePathMode {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$GccExecutable
+    )
+
+    $probeRoot = Join-Path ([IO.Path]::GetTempPath()) (
+        'Qalam GCC Unicode probe - ' + [Guid]::NewGuid().ToString('N'))
+    $probeDirectory = Join-Path $probeRoot 'مسار عربي مع مسافات'
+    $assemblyName = 'مدخل عربي.s'
+    $objectName = 'كائن عربي.o'
+    $responseName = 'خيارات رابط.rsp'
+    $programName = 'برنامج عربي.exe'
+    $entryPoint = 'الرئيسية_بدء'
+    $oldPath = $env:Path
+    $oldErrorPreference = $ErrorActionPreference
+    $directPathsPassed = $false
+
+    try {
+        [IO.Directory]::CreateDirectory($probeDirectory) | Out-Null
+        [IO.File]::WriteAllText(
+            (Join-Path $probeDirectory $assemblyName),
+            (@(
+                '.text',
+                ".globl $entryPoint",
+                '.extern ExitProcess',
+                "${entryPoint}:",
+                '    andq $-16, %rsp',
+                '    subq $32, %rsp',
+                '    xorl %ecx, %ecx',
+                '    call ExitProcess',
+                '    hlt'
+            ) -join "`n") + "`n",
+            [Text.UTF8Encoding]::new($false))
+        [IO.File]::WriteAllText(
+            (Join-Path $probeDirectory $responseName),
+            "-u`n$entryPoint`n-e`n$entryPoint`n",
+            [Text.UTF8Encoding]::new($false))
+
+        $env:Path = "$(Split-Path -Parent $GccExecutable);$env:SystemRoot\System32;$env:SystemRoot"
+        $ErrorActionPreference = 'Continue'
+        Push-Location $probeDirectory
+        try {
+            & $GccExecutable -c $assemblyName -o $objectName >$null 2>$null
+            $assembleExitCode = $LASTEXITCODE
+            if ($assembleExitCode -eq 0) {
+                & $GccExecutable -nostartfiles "-Wl,@$responseName" `
+                    $objectName -lkernel32 -o $programName >$null 2>$null
+                $linkExitCode = $LASTEXITCODE
+            } else {
+                $linkExitCode = -1
+            }
+        } finally {
+            Pop-Location
+        }
+
+        $programPath = Join-Path $probeDirectory $programName
+        if ($assembleExitCode -eq 0 -and
+            $linkExitCode -eq 0 -and
+            (Test-Path -LiteralPath $programPath -PathType Leaf)) {
+            & $programPath >$null 2>$null
+            $directPathsPassed = $LASTEXITCODE -eq 0
+        }
+    } catch {
+        Write-Warning "Direct Unicode GCC probe failed; using Baa's no-copy short-path adapter: $_"
+    } finally {
+        $ErrorActionPreference = $oldErrorPreference
+        $env:Path = $oldPath
+        if (Test-Path -LiteralPath $probeRoot) {
+            Remove-Item -LiteralPath $probeRoot -Recurse -Force
+        }
+    }
+
+    if ($directPathsPassed) { return 'direct' }
+    return 'short-path'
+}
+
 if (!$SkipBuild) {
     & (Join-Path $PSScriptRoot 'build-windows.ps1') `
         -Configuration Release `
@@ -243,6 +320,7 @@ x86_64-w64-mingw32 target tree.
         Copy-Item -Destination $packagedToolchain -Recurse -Force
 
     $gccHash = (Get-FileHash -LiteralPath $sourceGcc -Algorithm SHA256).Hash
+    $unicodePathMode = Get-GccUnicodePathMode -GccExecutable $sourceGcc
     [IO.File]::WriteAllLines(
         (Join-Path $packagedToolchain 'BAA-TOOLCHAIN-MANIFEST.txt'),
         @(
@@ -250,7 +328,7 @@ x86_64-w64-mingw32 target tree.
             "target=$gccTarget",
             "gcc_version=$gccVersion",
             "gcc_sha256=$gccHash",
-            'unicode_paths=direct',
+            "unicode_paths=$unicodePathMode",
             'pei386_runtime_relocator=retain',
             'purpose=Baa hosted linking until the native Nazm linker is admitted'
         ),
@@ -286,4 +364,5 @@ if ($packagedCompiler) {
     Write-Host "  Baa: $packagedCompiler"
     Write-Host "  Nazm: $packagedNazm"
     Write-Host "  GCC: $packagedToolchain"
+    Write-Host "  GCC Unicode paths: $unicodePathMode"
 }

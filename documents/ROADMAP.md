@@ -344,9 +344,11 @@ One deferred item from Phase 2:
   with Qt and MinGW paths removed; require all tooling probes, Qalam startup,
   and Baa-to-Nazm object generation from an Arabic path
 - [x] 7.2.1b Package the complete relocatable MinGW-w64 tree at Baa's explicit
-  `baa/gcc/` discovery path, record its target/version/hash, direct-Unicode
-  admission and licenses, and require an isolated Arabic-path compile-link-run
-  gate with no host GCC/MSYS2
+  `baa/gcc/` discovery path, record its target/version/hash, measured Unicode
+  path mode and licenses, and require an isolated Arabic-path compile-link-run
+  gate with no host GCC/MSYS2. Packaging probes the selected GCC instead of
+  assuming direct Unicode support; Baa then uses either direct paths or its
+  no-copy short-path adapter according to the recorded capability.
 - [ ] 7.2.1c Admit the standalone Windows installer in CI: Qalam + Qt + internal
   Baa-LSP only, silent install, native-window/LSP probes, unchanged `PATH`, and
   complete uninstall cleanup
@@ -371,9 +373,12 @@ the portable-linker candidate requires a new green CI receipt.
 - [x] 7.3.2 Create the Inno Setup standalone Windows installer and SHA-256 sidecar
 - [ ] 7.3.3 Auto-generate changelog from git commits
 - [ ] 7.3.4 Publish to GitHub Releases with artifacts
-- [ ] 7.3.5 Admit the complete portable bundle only after its pinned GCC/LD
+- [x] 7.3.5 Admit the complete portable bundle only after its pinned GCC/LD
   passes the Arabic-and-spaces output-path smoke; UI preview archives must state
-  explicitly when the compiler toolchain is omitted
+  explicitly when the compiler toolchain is omitted. Local admission on
+  2026-08-24 produced a 227.58 MiB archive with GCC 13.1.0 recorded as
+  `unicode_paths=short-path`; the isolated Qalam/Baa-LSP/Baa/Nazm/GCC
+  compile-link-run gate and all 26 Qalam tests passed.
 
 ---
 
