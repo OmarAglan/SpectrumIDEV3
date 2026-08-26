@@ -422,14 +422,21 @@ void QalamWelcomePage::populateRecents()
     m_recentList->clear();
 
     QSettings settings(Constants::OrgName, Constants::AppName);
-    const QStringList recentFiles = settings.value(Constants::SettingsKeyRecentFiles).toStringList();
+    const QStringList recentFolders = settings.value(
+        Constants::SettingsKeyRecentFolders).toStringList();
+    const QStringList recentFiles = settings.value(
+        Constants::SettingsKeyRecentFiles).toStringList();
+    QStringList recentPaths = recentFolders;
+    for (const QString &path : recentFiles) {
+        if (not recentPaths.contains(path)) recentPaths.append(path);
+    }
 
-    if (recentFiles.isEmpty()) {
+    if (recentPaths.isEmpty()) {
         showEmptyRecentsState();
         return;
     }
 
-    for (const QString &path : recentFiles) {
+    for (const QString &path : recentPaths) {
         if (path.trimmed().isEmpty()) continue;
 
         QFileInfo info(path);
@@ -494,11 +501,11 @@ void QalamWelcomePage::showEmptyRecentsState()
     icon->setPixmap(QIcon(":/icons/resources/folder-open.svg").pixmap(46, 46));
     icon->setAlignment(Qt::AlignCenter);
 
-    auto *title = new QLabel("لا توجد ملفات حديثة", emptyWidget);
+    auto *title = new QLabel("لا توجد مشاريع أو ملفات حديثة", emptyWidget);
     title->setObjectName("welcomeRecentsEmptyTitle");
     title->setAlignment(Qt::AlignCenter);
 
-    auto *hint = new QLabel("الملفات التي تفتحها ستظهر هنا", emptyWidget);
+    auto *hint = new QLabel("المجلدات والملفات التي تفتحها ستظهر هنا", emptyWidget);
     hint->setObjectName("welcomeRecentsEmptyHint");
     hint->setAlignment(Qt::AlignCenter);
 
@@ -536,7 +543,7 @@ void QalamWelcomePage::onRecentItemActivated(QListWidgetItem *item)
         return;
     }
 
-    emit recentFileRequested(path);
+    emit recentPathRequested(path);
 }
 
 void QalamWelcomePage::removeFromRecents(const QString &path)
@@ -545,6 +552,10 @@ void QalamWelcomePage::removeFromRecents(const QString &path)
     QStringList recentFiles = settings.value(Constants::SettingsKeyRecentFiles).toStringList();
     recentFiles.removeAll(path);
     settings.setValue(Constants::SettingsKeyRecentFiles, recentFiles);
+    QStringList recentFolders = settings.value(
+        Constants::SettingsKeyRecentFolders).toStringList();
+    recentFolders.removeAll(path);
+    settings.setValue(Constants::SettingsKeyRecentFolders, recentFolders);
 }
 
 void QalamWelcomePage::onClearRecentsRequested()
@@ -560,6 +571,7 @@ void QalamWelcomePage::onClearRecentsRequested()
 
     QSettings settings(Constants::OrgName, Constants::AppName);
     settings.remove(Constants::SettingsKeyRecentFiles);
+    settings.remove(Constants::SettingsKeyRecentFolders);
     populateRecents();
 }
 

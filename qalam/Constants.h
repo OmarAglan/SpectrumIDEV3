@@ -4,10 +4,12 @@
 namespace Constants {
     const QString OrgName = "BaaEcosystem";
     const QString AppName = "Qalam";
-    const QString AppVersion = "3.3.0";
+    const QString AppVersion = "3.4.0";
     
     // Settings Keys
     const QString SettingsKeyRecentFiles = "RecentFiles";
+    const QString SettingsKeyRecentFolders = "RecentFolders";
+    const QString SettingsKeyLastOpenLocation = "LastOpenLocation";
     const QString SettingsKeyFontSize = "editorFontSize";
     const QString SettingsKeyFontType = "editorFontType";
     const QString SettingsKeyTheme = "editorCodeTheme";
@@ -24,6 +26,8 @@ namespace Constants {
     const QString SessionKeyActiveTab = "session/activeTabIndex";
     const QString SessionKeyFolderPath = "session/folderPath";
     const QString SessionKeyWindowGeometry = "session/windowGeometry";
+    const QString SessionKeyDocuments = "session/documents";
+    const QString SessionKeyCleanShutdown = "session/cleanShutdown";
 
     // File Extensions
     const QString ProjectExtension = ".باء";

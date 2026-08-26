@@ -2,47 +2,188 @@
 #include "QalamExplorerView.h"
 
 #include <QSettings>
+#include <QCryptographicHash>
+#include <QDir>
+#include <QFile>
 #include <QFileInfo>
+#include <QSaveFile>
+#include <QStandardPaths>
+#include <QStringConverter>
+#include <QTextStream>
+#include <QVariantList>
+#include <QVariantMap>
 
-SessionManager::SessionManager(QTabWidget *tabWidget, QObject *parent)
+#include <utility>
+
+SessionManager::SessionManager(QTabWidget *tabWidget,
+                               QObject *parent,
+                               const QString &settingsFilePath)
     : QObject(parent)
     , m_tabWidget(tabWidget)
+    , m_settingsFilePath(settingsFilePath)
 {
 }
 
-void SessionManager::saveSession(const QString &folderPath, const QByteArray &windowGeometry)
+void SessionManager::saveSession(const QString &folderPath,
+                                 const QByteArray &windowGeometry,
+                                 bool cleanShutdown)
 {
-    QSettings settings(Constants::OrgName, Constants::AppName);
+    const std::unique_ptr<QSettings> settings = createSettings();
 
-    // Collect file paths of all open tabs
     QStringList openFiles;
+    QVariantList documents;
+    QStringList usedRecoveryPaths;
+    int activeDocumentIndex = -1;
+
     for (int i = 0; i < m_tabWidget->count(); ++i) {
         QalamEditor *editor = qobject_cast<QalamEditor*>(m_tabWidget->widget(i));
-        if (editor) {
-            QString filePath = editor->currentFilePath();
-            if (not filePath.isEmpty()) {
-                openFiles.append(filePath);
+        if (not editor) continue;
+
+        const QString filePath = editor->currentFilePath();
+        QString displayName = m_tabWidget->tabText(i);
+        if (displayName.endsWith(QStringLiteral("[*]"))) displayName.chop(3);
+        const bool modified = editor->document()->isModified();
+
+        // A clean shutdown follows an explicit save/discard decision. Do not
+        // resurrect discarded unnamed buffers on the next launch.
+        if (cleanShutdown and filePath.isEmpty()) continue;
+
+        QVariantMap document;
+        document.insert(QStringLiteral("filePath"), filePath);
+        document.insert(QStringLiteral("displayName"), displayName);
+        document.insert(QStringLiteral("modified"), modified and not cleanShutdown);
+
+        if (not cleanShutdown and modified) {
+            const QString identity = filePath.isEmpty()
+                ? QStringLiteral("untitled:%1:%2").arg(i).arg(displayName)
+                : QStringLiteral("file:%1").arg(QDir::cleanPath(filePath));
+            const QString backupPath = recoveryPath(identity);
+            QDir().mkpath(QFileInfo(backupPath).absolutePath());
+
+            QSaveFile recovery(backupPath);
+            if (recovery.open(QIODevice::WriteOnly | QIODevice::Text)) {
+                QTextStream out(&recovery);
+                out.setEncoding(QStringConverter::Utf8);
+                out << editor->toPlainText();
+                if (recovery.commit()) {
+                    document.insert(QStringLiteral("recoveryPath"), backupPath);
+                    usedRecoveryPaths.append(backupPath);
+                }
             }
         }
+
+        if (not filePath.isEmpty()) openFiles.append(filePath);
+        if (i == m_tabWidget->currentIndex()) activeDocumentIndex = documents.size();
+        documents.append(document);
     }
 
-    settings.setValue(Constants::SessionKeyOpenFiles, openFiles);
-    settings.setValue(Constants::SessionKeyActiveTab, m_tabWidget->currentIndex());
-    settings.setValue(Constants::SessionKeyFolderPath, folderPath);
-    settings.setValue(Constants::SessionKeyWindowGeometry, windowGeometry);
-    settings.sync();
+    settings->setValue(Constants::SessionKeyOpenFiles, openFiles);
+    settings->setValue(Constants::SessionKeyDocuments, documents);
+    settings->setValue(Constants::SessionKeyActiveTab, activeDocumentIndex);
+    settings->setValue(Constants::SessionKeyFolderPath, folderPath);
+    settings->setValue(Constants::SessionKeyWindowGeometry, windowGeometry);
+    settings->setValue(Constants::SessionKeyCleanShutdown, cleanShutdown);
+    settings->sync();
+
+    removeUnusedRecoveryFiles(usedRecoveryPaths);
 }
 
 SessionManager::SessionData SessionManager::restoreSession() const
 {
-    QSettings settings(Constants::OrgName, Constants::AppName);
+    const std::unique_ptr<QSettings> settings = createSettings();
 
     SessionData data;
-    data.openFiles = settings.value(Constants::SessionKeyOpenFiles).toStringList();
-    data.activeTabIndex = settings.value(Constants::SessionKeyActiveTab, -1).toInt();
-    data.folderPath = settings.value(Constants::SessionKeyFolderPath).toString();
-    data.windowGeometry = settings.value(Constants::SessionKeyWindowGeometry).toByteArray();
+    data.openFiles = settings->value(Constants::SessionKeyOpenFiles).toStringList();
+    data.activeTabIndex = settings->value(Constants::SessionKeyActiveTab, -1).toInt();
+    data.folderPath = settings->value(Constants::SessionKeyFolderPath).toString();
+    data.windowGeometry = settings->value(Constants::SessionKeyWindowGeometry).toByteArray();
+    const bool cleanShutdown = settings->value(
+        Constants::SessionKeyCleanShutdown, true).toBool();
+    data.recoveredAfterInterruption = not cleanShutdown;
+
+    const QVariantList documents = settings->value(
+        Constants::SessionKeyDocuments).toList();
+    for (const QVariant &value : documents) {
+        const QVariantMap saved = value.toMap();
+        DocumentData document;
+        document.filePath = saved.value(QStringLiteral("filePath")).toString();
+        document.displayName = saved.value(QStringLiteral("displayName")).toString();
+        document.modified = saved.value(QStringLiteral("modified")).toBool();
+
+        const QString recoveryPath = cleanShutdown
+            ? QString() : saved.value(QStringLiteral("recoveryPath")).toString();
+        if (not recoveryPath.isEmpty()) {
+            QFile recovery(recoveryPath);
+            if (recovery.open(QIODevice::ReadOnly | QIODevice::Text)) {
+                QTextStream in(&recovery);
+                in.setEncoding(QStringConverter::Utf8);
+                document.recoveredContent = in.readAll();
+                document.hasRecovery = true;
+            }
+        }
+
+        if (not document.filePath.isEmpty() or document.hasRecovery) {
+            data.documents.push_back(std::move(document));
+        }
+    }
+
+    // Compatibility with sessions written before structured documents.
+    if (data.documents.isEmpty()) {
+        for (const QString &filePath : data.openFiles) {
+            DocumentData document;
+            document.filePath = filePath;
+            document.displayName = QFileInfo(filePath).fileName();
+            data.documents.push_back(std::move(document));
+        }
+    }
     return data;
+}
+
+void SessionManager::markSessionRunning()
+{
+    const std::unique_ptr<QSettings> settings = createSettings();
+    settings->setValue(Constants::SessionKeyCleanShutdown, false);
+    settings->sync();
+}
+
+QString SessionManager::recoveryDirectory() const
+{
+    if (not m_settingsFilePath.isEmpty()) {
+        return QDir(QFileInfo(m_settingsFilePath).absolutePath())
+            .filePath(QStringLiteral("recovery"));
+    }
+    return QDir(QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation))
+        .filePath(QStringLiteral("recovery"));
+}
+
+QString SessionManager::recoveryPath(const QString &identity) const
+{
+    const QByteArray digest = QCryptographicHash::hash(
+        identity.toUtf8(), QCryptographicHash::Sha256).toHex();
+    return QDir(recoveryDirectory()).filePath(
+        QString::fromLatin1(digest) + QStringLiteral(".recovery"));
+}
+
+void SessionManager::removeUnusedRecoveryFiles(const QStringList &usedPaths) const
+{
+    QDir directory(recoveryDirectory());
+    if (not directory.exists()) return;
+
+    const QStringList files = directory.entryList(
+        {QStringLiteral("*.recovery")}, QDir::Files);
+    for (const QString &file : files) {
+        const QString path = directory.filePath(file);
+        if (not usedPaths.contains(path)) QFile::remove(path);
+    }
+}
+
+std::unique_ptr<QSettings> SessionManager::createSettings() const
+{
+    if (not m_settingsFilePath.isEmpty()) {
+        return std::make_unique<QSettings>(
+            m_settingsFilePath, QSettings::IniFormat);
+    }
+    return std::make_unique<QSettings>(Constants::OrgName, Constants::AppName);
 }
 
 bool SessionManager::isUsableWindowGeometry(

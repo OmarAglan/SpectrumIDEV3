@@ -1,7 +1,7 @@
 # Qalam IDE - Improvement Roadmap
 
 **Date:** 2026-08-15
-**Version:** 3.3.0
+**Version:** 3.4.0
 **Codebase:** ~9,750 lines C++ across 67 files (Qt 6 + C++23)
 
 > **Active product direction:** Qalam is now the dedicated Baa-first IDE. The
@@ -11,6 +11,9 @@
 > The permanent semantic boundary is the Baa-only language server described in
 > [BAA_LSP_INTEGRATION_AR.md](BAA_LSP_INTEGRATION_AR.md). The diagnostics slice
 > now uses that boundary exclusively; direct compiler analysis has been removed.
+> Session recovery, editor groups, contextual completion, learning controls,
+> responsive layout, and Arabic font packs are sequenced in
+> [WORKBENCH_EVOLUTION_AR.md](WORKBENCH_EVOLUTION_AR.md).
 
 ---
 
@@ -279,6 +282,16 @@ One deferred item from Phase 2:
 - [x] 5.8.3 Add Go-to-Definition for Baa symbols (compiler-resolved across the
   Takween source closure)
 - [ ] 5.8.4 Add matching tag/bracket highlight on hover
+
+### 5.9 Workspace and Session Flow
+
+- [x] 5.9.1 Separate recent projects from recent files and open each by type
+- [x] 5.9.2 Reuse the last open/save location in file and folder dialogs
+- [x] 5.9.3 Persist structured open-document order, active document, and project folder
+- [x] 5.9.4 Checkpoint modified and untitled buffers for interrupted-session recovery
+- [x] 5.9.5 Remove recovery buffers after a user-confirmed clean shutdown
+- [ ] 5.9.6 Add a dedicated recent-project picker and reopen-last-project command
+- [ ] 5.9.7 Add two editor groups with persisted horizontal/vertical layout
 
 ---
 

@@ -23,7 +23,7 @@ signals:
     void openFileRequested();
     void openFolderRequested();
     void cloneRepoRequested();
-    void recentFileRequested(const QString &path);
+    void recentPathRequested(const QString &path);
     void showWelcomeOnStartupChanged(bool show);
 
 private slots:

@@ -23,6 +23,7 @@ class DiagnosticsModel;
 class QalamWelcomePage;
 class QalamCommandPalette;
 class ProjectSearchService;
+class QTimer;
 class WorkspaceIndexer;
 struct BaaLocation;
 struct Diagnostic;
@@ -49,6 +50,7 @@ private slots:
 
     void newFileFromUi();
     void openFileFromUi(const QString &filePathOrEmpty = QString());
+    void openRecentPath(const QString &path);
 
     void runBaa();
     void buildTakweenProject();
@@ -142,6 +144,9 @@ private:
     QString lineTextForLocation(const BaaLocation &location) const;
     void runTakweenProjectCommand(const QString &command);
     void refreshToolActions();
+    void scheduleSessionSave();
+    void saveSessionCheckpoint();
+    void openFolderFromPath(const QString &path);
     bool ensureToolOperationAvailable(const QString &operation,
                                       const QString &filePath);
 
@@ -166,4 +171,6 @@ private:
     QalamWelcomePage *m_welcomePage{};
     QPointer<QalamCommandPalette> m_workspaceSymbolPalette;
     QalamEditor *m_lastConnectedEditor{}; // Track editor for cursor position disconnect
+    QTimer *m_sessionSaveTimer{};
+    bool m_sessionSavedCleanly{};
 };

@@ -27,6 +27,10 @@ public:
     /// Save the current or specified editor. Returns false if the save was cancelled or failed.
     bool saveEditor(QalamEditor *editor);
     bool saveEditorAs(QalamEditor *editor);
+    bool restoreDocument(const QString &filePath,
+                         const QString &displayName,
+                         const QString &recoveredContent,
+                         bool hasRecovery);
 
 public slots:
     void newFile();
@@ -39,6 +43,8 @@ signals:
     void fileStateChanged();
     /// Emitted when the set of open editors changes (tab added/removed)
     void openEditorsChanged();
+    /// Emitted for session recovery after an editor buffer changes.
+    void documentContentsChanged();
 
 private:
     QalamEditor *createEditor(const QString &filePath = QString());
@@ -49,4 +55,5 @@ private:
 
     QTabWidget *m_tabWidget{};
     QWidget *m_parentWindow{};
+    bool m_skipBackupPrompt{};
 };

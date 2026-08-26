@@ -66,6 +66,40 @@ void FileManager::removeBackupForPath(const QString &filePath) const
     }
 }
 
+bool FileManager::restoreDocument(const QString &filePath,
+                                  const QString &displayName,
+                                  const QString &recoveredContent,
+                                  bool hasRecovery)
+{
+    const QString normalizedPath = normalizePath(filePath);
+    QalamEditor *editor{};
+
+    if (not normalizedPath.isEmpty() and QFileInfo::exists(normalizedPath)) {
+        m_skipBackupPrompt = true;
+        openFile(normalizedPath);
+        m_skipBackupPrompt = false;
+        editor = currentEditor();
+    } else if (hasRecovery) {
+        editor = createEditor();
+        const QString title = displayName.trimmed().isEmpty()
+            ? nextUntitledName() : displayName;
+        const int index = m_tabWidget->addTab(editor, title);
+        m_tabWidget->setCurrentIndex(index);
+        if (not filePath.isEmpty()) m_tabWidget->setTabToolTip(index, filePath);
+    }
+
+    if (not editor) return false;
+
+    if (hasRecovery) {
+        editor->setPlainText(recoveredContent);
+        editor->document()->setModified(true);
+    }
+
+    emit fileStateChanged();
+    emit openEditorsChanged();
+    return true;
+}
+
 QalamEditor *FileManager::createEditor(const QString &filePath)
 {
     auto *editor = new QalamEditor(m_parentWindow);
@@ -78,6 +112,8 @@ QalamEditor *FileManager::createEditor(const QString &filePath)
         emit fileStateChanged();
         emit openEditorsChanged();
     });
+    connect(editor->document(), &QTextDocument::contentsChanged,
+            this, &FileManager::documentContentsChanged);
 
     return editor;
 }
@@ -95,6 +131,8 @@ void FileManager::addRecentFile(const QString &filePath)
         recentFiles.removeLast();
     }
     settings.setValue(Constants::SettingsKeyRecentFiles, recentFiles);
+    settings.setValue(Constants::SettingsKeyLastOpenLocation,
+                      QFileInfo(normalizedPath).absolutePath());
 }
 
 FileManager::SaveAction FileManager::needSave()
@@ -158,8 +196,11 @@ void FileManager::newFile()
 void FileManager::openFile(QString filePath)
 {
     if (filePath.isEmpty()) {
+        QSettings settings(Constants::OrgName, Constants::AppName);
+        const QString initialDirectory = settings.value(
+            Constants::SettingsKeyLastOpenLocation, QDir::homePath()).toString();
         filePath = QFileDialog::getOpenFileName(
-            m_parentWindow, "فتح ملف", "",
+            m_parentWindow, "فتح ملف", initialDirectory,
             "مصادر باء ونظم (*.باء *.رأسباء *.نظم *.baa *.baahd);;"
             "ملفات باء (*.باء *.رأسباء *.baa *.baahd);;"
             "ملف نظم (*.نظم);;ملفات نصية (*.txt);;كل الملفات (*)");
@@ -220,7 +261,7 @@ void FileManager::openFile(QString filePath)
 
     // Check for backup recovery. Only prompt when the backup is newer than the file.
     const QString backupPath = normalizedPath + Constants::BackupExtension;
-    if (QFile::exists(backupPath)) {
+    if (not m_skipBackupPrompt and QFile::exists(backupPath)) {
         const QFileInfo sourceInfo(normalizedPath);
         const QFileInfo backupInfo(backupPath);
         const bool backupIsNewer = backupInfo.lastModified() > sourceInfo.lastModified();
@@ -320,8 +361,13 @@ bool FileManager::saveEditorAs(QalamEditor *editor)
     QString currentPath = oldPath;
     QString currentName = currentPath.isEmpty()
         ? QStringLiteral("ملف جديد.باء") : QFileInfo(currentPath).fileName();
+    QSettings settings(Constants::OrgName, Constants::AppName);
+    const QString initialPath = currentPath.isEmpty()
+        ? QDir(settings.value(Constants::SettingsKeyLastOpenLocation,
+                              QDir::homePath()).toString()).filePath(currentName)
+        : currentPath;
     QString fileName = QFileDialog::getSaveFileName(
-        m_parentWindow, "حفظ الملف", currentName,
+        m_parentWindow, "حفظ الملف", initialPath,
         "ملف مصدر باء (*.باء);;ملف رأس باء (*.رأسباء);;"
         "ملف نظم (*.نظم);;امتدادات باء القديمة (*.baa *.baahd);;"
         "ملفات نصية (*.txt);;كل الملفات (*)");

@@ -6,8 +6,12 @@
 #include <QObject>
 #include <QRect>
 #include <QTabWidget>
+#include <QVector>
+
+#include <memory>
 
 class QalamExplorerView;
+class QSettings;
 
 /**
  * @brief Manages session persistence — saving/restoring open tabs,
@@ -17,21 +21,39 @@ class SessionManager : public QObject {
     Q_OBJECT
 
 public:
+    struct DocumentData {
+        QString filePath;
+        QString displayName;
+        QString recoveredContent;
+        bool modified{};
+        bool hasRecovery{};
+    };
+
     /// Data returned by restoreSession() for the caller to act on
     struct SessionData {
         QStringList openFiles;
+        QVector<DocumentData> documents;
         int activeTabIndex = -1;
         QString folderPath;
         QByteArray windowGeometry;
+        bool recoveredAfterInterruption{};
     };
 
-    explicit SessionManager(QTabWidget *tabWidget, QObject *parent = nullptr);
+    explicit SessionManager(QTabWidget *tabWidget,
+                            QObject *parent = nullptr,
+                            const QString &settingsFilePath = QString());
 
     /// Save the current session state (open files, active tab, folder, geometry)
-    void saveSession(const QString &folderPath, const QByteArray &windowGeometry);
+    void saveSession(const QString &folderPath,
+                     const QByteArray &windowGeometry,
+                     bool cleanShutdown = false);
 
     /// Load session data from settings (caller decides how to apply it)
     SessionData restoreSession() const;
+
+    /// Mark the running process before edits begin so an interrupted session
+    /// can be distinguished from a normal, user-confirmed shutdown.
+    void markSessionRunning();
 
     /// Reject tiny or unreachable persisted window rectangles before restore.
     static bool isUsableWindowGeometry(
@@ -45,5 +67,11 @@ public:
     void syncOpenEditors(QalamExplorerView *explorerView);
 
 private:
+    QString recoveryDirectory() const;
+    QString recoveryPath(const QString &identity) const;
+    void removeUnusedRecoveryFiles(const QStringList &usedPaths) const;
+    std::unique_ptr<QSettings> createSettings() const;
+
     QTabWidget *m_tabWidget{};
+    QString m_settingsFilePath;
 };

@@ -4,7 +4,7 @@
 #define MyAppId "{{1A6F6714-2C14-4DBD-BACB-B26CBABE36EE}"
 #define MyAppName "قلم"
 #ifndef MyAppVersion
-  #define MyAppVersion "3.3.0"
+  #define MyAppVersion "3.4.0"
 #endif
 #ifndef QalamPayloadDir
   #define QalamPayloadDir "dist\installer-payload"
@@ -107,8 +107,16 @@ Name: "{autodesktop}\قلم"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{a
 Filename: "{app}\{#MyAppExeName}"; Description: "تشغيل قلم"; Flags: nowait postinstall skipifsilent unchecked
 
 [Code]
+#include "installer\windows_scope_migration.iss"
+
 const
   QALAM_INSTALLER_KEY = 'Software\BaaEcosystem\Qalam';
+
+function PrepareToInstall(var NeedsRestart: Boolean): string;
+begin
+  Result := EcoMigrateOppositeInstall('{#MyAppName}',
+    'Software\Microsoft\Windows\CurrentVersion\Uninstall\{1A6F6714-2C14-4DBD-BACB-B26CBABE36EE}_is1');
+end;
 
 procedure QalamRegistryRoot(var Root: Integer);
 begin

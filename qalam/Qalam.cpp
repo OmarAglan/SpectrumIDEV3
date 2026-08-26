@@ -22,6 +22,7 @@
 #include <QCoreApplication>
 #include <QApplication>
 #include <QSettings>
+#include <QTimer>
 #include <QFile>
 #include <QFileInfo>
 #include <QSaveFile>
@@ -105,6 +106,11 @@ Qalam::Qalam(const QString& filePath, QWidget *parent)
     m_languageClient->setCompilerProgram(BuildManager::resolveCompilerProgram());
     m_languageClient->setTakweenProgram(BuildManager::resolveTakweenProgram());
     m_sessionManager = new SessionManager(tabWidget, this);
+    m_sessionSaveTimer = new QTimer(this);
+    m_sessionSaveTimer->setSingleShot(true);
+    m_sessionSaveTimer->setInterval(750);
+    connect(m_sessionSaveTimer, &QTimer::timeout,
+            this, &Qalam::saveSessionCheckpoint);
     m_commandRegistry = new CommandRegistry(this);
     for (const auto &command : CommandRegistry::defaultCommands()) {
         m_commandRegistry->registerCommand(command);
@@ -190,12 +196,17 @@ Qalam::Qalam(const QString& filePath, QWidget *parent)
             loadFolder(session.folderPath);
         }
 
-        // Restore open files
+        // Restore saved files and any crash-recovery buffers.
         bool restoredAny = false;
-        for (const QString &file : session.openFiles) {
-            if (QFile::exists(file)) {
-                m_fileManager->openFile(file);
+        bool restoredRecovery = false;
+        for (const SessionManager::DocumentData &document : session.documents) {
+            if (m_fileManager->restoreDocument(
+                    document.filePath,
+                    document.displayName,
+                    document.recoveredContent,
+                    document.hasRecovery)) {
                 restoredAny = true;
+                restoredRecovery = restoredRecovery or document.hasRecovery;
             }
         }
 
@@ -213,12 +224,23 @@ Qalam::Qalam(const QString& filePath, QWidget *parent)
                 m_fileManager->newFile();
             }
         }
+
+        if (session.recoveredAfterInterruption and restoredRecovery
+            and m_layoutManager and m_layoutManager->statusBar()) {
+            m_layoutManager->statusBar()->showMessage(
+                QStringLiteral("استعاد قلم تعديلات لم تُحفظ بعد الإغلاق غير المتوقع"),
+                9000);
+        }
     }
+
+    m_sessionManager->markSessionRunning();
+    scheduleSessionSave();
 }
 
 Qalam::~Qalam() {
-    // Save session state
-    m_sessionManager->saveSession(folderPath, saveGeometry());
+    if (not m_sessionSavedCleanly) {
+        m_sessionManager->saveSession(folderPath, saveGeometry());
+    }
 
     // Save user preferences
     m_sessionManager->savePreferences(currentEditor(), setting->getThemeCombo()->currentIndex());
@@ -695,6 +717,12 @@ void Qalam::connectSignals()
         refreshToolActions();
     });
     connect(m_fileManager, &FileManager::openEditorsChanged, this, &Qalam::syncOpenEditors);
+    connect(m_fileManager, &FileManager::openEditorsChanged,
+            this, &Qalam::scheduleSessionSave);
+    connect(m_fileManager, &FileManager::documentContentsChanged,
+            this, &Qalam::scheduleSessionSave);
+    connect(tabWidget, &QTabWidget::currentChanged,
+            this, &Qalam::scheduleSessionSave);
 
     // --- Layout component signals ---
     auto *activityBar = m_layoutManager->activityBar();
@@ -865,6 +893,9 @@ void Qalam::closeEvent(QCloseEvent *event) {
         return;
     }
 
+    if (m_sessionSaveTimer) m_sessionSaveTimer->stop();
+    m_sessionManager->saveSession(folderPath, saveGeometry(), true);
+    m_sessionSavedCleanly = true;
     event->accept();
 }
 
@@ -923,23 +954,51 @@ void Qalam::toggleConsole()
 
 void Qalam::loadFolder(const QString &path)
 {
-    this->folderPath = path;
+    const QFileInfo folderInfo(path);
+    if (not folderInfo.isDir()) return;
+
+    const QString canonicalPath = folderInfo.canonicalFilePath();
+    this->folderPath = canonicalPath.isEmpty()
+        ? QDir::cleanPath(folderInfo.absoluteFilePath())
+        : QDir::cleanPath(canonicalPath);
+
+    QSettings settings(Constants::OrgName, Constants::AppName);
+    QStringList recentFolders = settings.value(
+        Constants::SettingsKeyRecentFolders).toStringList();
+    recentFolders.removeAll(this->folderPath);
+    recentFolders.prepend(this->folderPath);
+    while (recentFolders.size() > 10) recentFolders.removeLast();
+    settings.setValue(Constants::SettingsKeyRecentFolders, recentFolders);
+    settings.setValue(Constants::SettingsKeyLastOpenLocation, this->folderPath);
     if (m_projectSearchService) {
         m_projectSearchService->cancel();
         m_projectSearchService->invalidateCache();
     }
     if (m_workspaceIndexer) {
-        m_workspaceIndexer->setRootPath(path);
+        m_workspaceIndexer->setRootPath(this->folderPath);
     }
-    m_layoutManager->loadFolder(path);
+    m_layoutManager->loadFolder(this->folderPath);
+    scheduleSessionSave();
 }
 
 void Qalam::handleOpenFolderMenu()
 {
-    QString folderPath = QFileDialog::getExistingDirectory(this, "اختر مجلد", QDir::homePath());
-    if (folderPath.isEmpty()) return;
+    QSettings settings(Constants::OrgName, Constants::AppName);
+    const QString initialDirectory = not folderPath.isEmpty()
+        ? folderPath
+        : settings.value(Constants::SettingsKeyLastOpenLocation,
+                         QDir::homePath()).toString();
+    const QString selectedPath = QFileDialog::getExistingDirectory(
+        this, QStringLiteral("فتح مجلد مشروع"), initialDirectory);
+    if (selectedPath.isEmpty()) return;
 
-    loadFolder(folderPath);
+    openFolderFromPath(selectedPath);
+}
+
+void Qalam::openFolderFromPath(const QString &path)
+{
+    loadFolder(path);
+    if (folderPath.isEmpty()) return;
 
     if (not hasAnyEditorTabs()) {
         m_fileManager->newFile();
@@ -1312,7 +1371,8 @@ void Qalam::showWelcomeTab()
     connect(m_welcomePage, &QalamWelcomePage::newFileRequested, this, &Qalam::newFileFromUi);
     connect(m_welcomePage, &QalamWelcomePage::openFileRequested, this, [this]() { openFileFromUi(QString()); });
     connect(m_welcomePage, &QalamWelcomePage::openFolderRequested, this, &Qalam::handleOpenFolderMenu);
-    connect(m_welcomePage, &QalamWelcomePage::recentFileRequested, this, &Qalam::openFileFromUi);
+    connect(m_welcomePage, &QalamWelcomePage::recentPathRequested,
+            this, &Qalam::openRecentPath);
     connect(m_welcomePage, &QalamWelcomePage::cloneRepoRequested, this, [this]() {
         QMessageBox::information(this, "استنساخ", "هذه الميزة قيد التطوير.");
     });
@@ -1346,6 +1406,29 @@ void Qalam::openFileFromUi(const QString &filePathOrEmpty)
     m_fileManager->openFile(filePathOrEmpty);
     if (hasAnyEditorTabs()) {
         removeWelcomeTabIfPresent();
+    }
+}
+
+void Qalam::openRecentPath(const QString &path)
+{
+    if (QFileInfo(path).isDir()) {
+        openFolderFromPath(path);
+        return;
+    }
+    openFileFromUi(path);
+}
+
+void Qalam::scheduleSessionSave()
+{
+    if (m_sessionSaveTimer and not m_sessionSavedCleanly) {
+        m_sessionSaveTimer->start();
+    }
+}
+
+void Qalam::saveSessionCheckpoint()
+{
+    if (m_sessionManager and not m_sessionSavedCleanly) {
+        m_sessionManager->saveSession(folderPath, saveGeometry());
     }
 }
 
@@ -1393,6 +1476,10 @@ bool Qalam::closeTabAt(int index, bool ensureReplacement)
         if (saveResult == FileManager::SaveAction::Save and !m_fileManager->saveEditor(editor)) {
             tabWidget->setCurrentIndex(previousIndex);
             return false;
+        }
+        if (saveResult == FileManager::SaveAction::Discard) {
+            editor->removeBackupFile();
+            editor->document()->setModified(false);
         }
     }
 
@@ -1496,6 +1583,10 @@ bool Qalam::maybeSaveAllModified()
         if (result == FileManager::SaveAction::Save and !m_fileManager->saveEditor(editor)) {
             tabWidget->setCurrentIndex(previousIndex);
             return false;
+        }
+        if (result == FileManager::SaveAction::Discard) {
+            editor->removeBackupFile();
+            editor->document()->setModified(false);
         }
     }
 
