@@ -21,6 +21,7 @@ struct BaaWorkspaceEdit;
 class CommandRegistry;
 class DiagnosticsModel;
 class QalamWelcomePage;
+class QalamEditorWorkspace;
 class QalamCommandPalette;
 class ProjectSearchService;
 class QTimer;
@@ -45,6 +46,7 @@ protected:
 
 private slots:
     void handleOpenFolderMenu();
+    void reopenLastProject();
     void openSettings();
     void exitApp();
 
@@ -151,7 +153,7 @@ private:
                                       const QString &filePath);
 
 private:
-    QTabWidget *tabWidget{};
+    QalamEditorWorkspace *tabWidget{};
     QalamMenuBar *menuBar{};
     QalamSettings *setting{};
     QString folderPath{};

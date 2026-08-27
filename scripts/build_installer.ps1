@@ -1,5 +1,5 @@
 param(
-    [string]$Version = '3.4.0',
+    [string]$Version = '3.5.0',
     [string]$QtRoot = $env:QALAM_QT_DIR,
     [string]$BuildDir = 'build/windows-release',
     [string]$BaaLspExecutable = $env:QALAM_BAA_LSP_PATH,

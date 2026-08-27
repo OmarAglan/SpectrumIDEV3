@@ -52,8 +52,8 @@ With Qalam and Baa-LSP already built:
 
 Outputs:
 
-- `dist/installer/qalam-setup-3.4.0-x64.exe`
-- `dist/installer/qalam-setup-3.4.0-x64.exe.sha256`
+- `dist/installer/qalam-setup-3.5.0-x64.exe`
+- `dist/installer/qalam-setup-3.5.0-x64.exe.sha256`
 
 The default installation is per-machine under `Program Files\Qalam`.
 `/CURRENTUSER` selects an unelevated per-user installation. Validate the actual

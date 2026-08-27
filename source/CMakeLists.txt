@@ -42,6 +42,8 @@ add_library(qalam_core STATIC
     debug/BreakpointModel.cpp
     debug/BreakpointModel.h
     # Text Editor
+    texteditor/QalamDocumentModel.cpp
+    texteditor/QalamDocumentModel.h
     texteditor/QalamEditor.cpp
     texteditor/QalamBracketHandler.cpp
     texteditor/QalamAutoSave.cpp
@@ -77,6 +79,8 @@ add_library(qalam_core STATIC
     ui/QalamActivityBar.cpp
     ui/QalamSidebar.cpp
     ui/QalamBreadcrumb.cpp
+    ui/QalamEditorWorkspace.cpp
+    ui/QalamEditorWorkspace.h
     ui/QalamPanelArea.cpp
     ui/QalamStatusBar.cpp
     # Managers

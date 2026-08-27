@@ -1060,7 +1060,7 @@ void BaaLanguageClient::sendInitialize()
         {QStringLiteral("processId"), static_cast<qint64>(QCoreApplication::applicationPid())},
         {QStringLiteral("clientInfo"), QJsonObject{
             {QStringLiteral("name"), QStringLiteral("Qalam")},
-            {QStringLiteral("version"), QStringLiteral("3.4.0")}
+            {QStringLiteral("version"), QStringLiteral("3.5.0")}
         }},
         {QStringLiteral("initializationOptions"), QJsonObject{
             {QStringLiteral("baaStructuredLogs"), QJsonObject{

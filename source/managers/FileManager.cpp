@@ -1,4 +1,5 @@
 #include "FileManager.h"
+#include "QalamEditorWorkspace.h"
 
 #include <QFileDialog>
 #include <QFile>
@@ -14,16 +15,17 @@
 #include <QAbstractButton>
 #include <QSet>
 
-FileManager::FileManager(QTabWidget *tabWidget, QWidget *parentWindow, QObject *parent)
+FileManager::FileManager(QalamEditorWorkspace *editorWorkspace,
+                         QWidget *parentWindow, QObject *parent)
     : QObject(parent)
-    , m_tabWidget(tabWidget)
+    , m_editorWorkspace(editorWorkspace)
     , m_parentWindow(parentWindow)
 {
 }
 
 QalamEditor *FileManager::currentEditor() const
 {
-    return qobject_cast<QalamEditor*>(m_tabWidget->currentWidget());
+    return m_editorWorkspace->currentEditor();
 }
 
 QString FileManager::normalizePath(const QString &filePath) const
@@ -40,8 +42,15 @@ QString FileManager::normalizePath(const QString &filePath) const
 QString FileManager::nextUntitledName() const
 {
     QSet<QString> existingNames;
-    for (int i = 0; i < m_tabWidget->count(); ++i) {
-        existingNames.insert(m_tabWidget->tabText(i).remove("[*]"));
+    QSet<QalamDocumentModel*> seenDocuments;
+    for (int i = 0; i < m_editorWorkspace->count(); ++i) {
+        auto *editor = qobject_cast<QalamEditor*>(
+            m_editorWorkspace->widget(i));
+        if (editor and seenDocuments.contains(editor->documentModel())) {
+            continue;
+        }
+        if (editor) seenDocuments.insert(editor->documentModel());
+        existingNames.insert(m_editorWorkspace->tabText(i).remove("[*]"));
     }
 
     if (!existingNames.contains(Constants::NewFileLabel)) {
@@ -83,9 +92,9 @@ bool FileManager::restoreDocument(const QString &filePath,
         editor = createEditor();
         const QString title = displayName.trimmed().isEmpty()
             ? nextUntitledName() : displayName;
-        const int index = m_tabWidget->addTab(editor, title);
-        m_tabWidget->setCurrentIndex(index);
-        if (not filePath.isEmpty()) m_tabWidget->setTabToolTip(index, filePath);
+        const int index = m_editorWorkspace->addTab(editor, title);
+        m_editorWorkspace->setCurrentIndex(index);
+        if (not filePath.isEmpty()) m_editorWorkspace->setTabToolTip(index, filePath);
     }
 
     if (not editor) return false;
@@ -145,8 +154,9 @@ FileManager::SaveAction FileManager::needSave(QalamEditor *editor)
     if (editor and editor->document()->isModified()) {
         QString displayName;
         if (editor->currentFilePath().isEmpty()) {
-            const int index = m_tabWidget->indexOf(editor);
-            displayName = index >= 0 ? m_tabWidget->tabText(index) : Constants::NewFileLabel;
+            const int index = m_editorWorkspace->indexOf(editor);
+            displayName = index >= 0
+                ? m_editorWorkspace->tabText(index) : Constants::NewFileLabel;
             if (displayName.endsWith("[*]")) {
                 displayName.chop(3);
             }
@@ -186,8 +196,8 @@ FileManager::SaveAction FileManager::needSave(QalamEditor *editor)
 void FileManager::newFile()
 {
     QalamEditor *newEditor = createEditor();
-    const int index = m_tabWidget->addTab(newEditor, nextUntitledName());
-    m_tabWidget->setCurrentIndex(index);
+    const int index = m_editorWorkspace->addTab(newEditor, nextUntitledName());
+    m_editorWorkspace->setCurrentIndex(index);
 
     emit fileStateChanged();
     emit openEditorsChanged();
@@ -212,10 +222,10 @@ void FileManager::openFile(QString filePath)
     if (normalizedPath.isEmpty()) return;
 
     // Check if file is already open in a tab
-    for (int i = 0; i < m_tabWidget->count(); ++i) {
-        QalamEditor *editor = qobject_cast<QalamEditor*>(m_tabWidget->widget(i));
+    for (int i = 0; i < m_editorWorkspace->count(); ++i) {
+        QalamEditor *editor = qobject_cast<QalamEditor*>(m_editorWorkspace->widget(i));
         if (editor and normalizePath(editor->currentFilePath()) == normalizedPath) {
-            m_tabWidget->setCurrentIndex(i);
+            m_editorWorkspace->setCurrentIndex(i);
             return;
         }
     }
@@ -291,9 +301,9 @@ void FileManager::openFile(QString filePath)
     }
 
     QFileInfo fileInfo(normalizedPath);
-    const int index = m_tabWidget->addTab(newEditor, fileInfo.fileName());
-    m_tabWidget->setCurrentIndex(index);
-    m_tabWidget->setTabToolTip(index, normalizedPath);
+    const int index = m_editorWorkspace->addTab(newEditor, fileInfo.fileName());
+    m_editorWorkspace->setCurrentIndex(index);
+    m_editorWorkspace->setTabToolTip(index, normalizedPath);
 
     addRecentFile(normalizedPath);
 
@@ -333,11 +343,13 @@ bool FileManager::saveEditor(QalamEditor *editor)
     editor->setFilePath(filePath);
     editor->document()->setModified(false);
 
-    int index = m_tabWidget->indexOf(editor);
-    if (index != -1) {
-        QFileInfo fileInfo(filePath);
-        m_tabWidget->setTabText(index, fileInfo.fileName());
-        m_tabWidget->setTabToolTip(index, filePath);
+    const QFileInfo fileInfo(filePath);
+    for (int index = 0; index < m_editorWorkspace->count(); ++index) {
+        auto *view = qobject_cast<QalamEditor*>(m_editorWorkspace->widget(index));
+        if (view and view->documentModel() == editor->documentModel()) {
+            m_editorWorkspace->setTabText(index, fileInfo.fileName());
+            m_editorWorkspace->setTabToolTip(index, filePath);
+        }
     }
 
     editor->removeBackupFile();
@@ -395,11 +407,13 @@ bool FileManager::saveEditorAs(QalamEditor *editor)
     editor->setFilePath(normalizedPath);
     editor->document()->setModified(false);
 
-    int index = m_tabWidget->indexOf(editor);
-    if (index != -1) {
-        QFileInfo fileInfo(normalizedPath);
-        m_tabWidget->setTabText(index, fileInfo.fileName());
-        m_tabWidget->setTabToolTip(index, normalizedPath);
+    const QFileInfo fileInfo(normalizedPath);
+    for (int index = 0; index < m_editorWorkspace->count(); ++index) {
+        auto *view = qobject_cast<QalamEditor*>(m_editorWorkspace->widget(index));
+        if (view and view->documentModel() == editor->documentModel()) {
+            m_editorWorkspace->setTabText(index, fileInfo.fileName());
+            m_editorWorkspace->setTabToolTip(index, normalizedPath);
+        }
     }
 
     editor->removeBackupFile();

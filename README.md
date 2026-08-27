@@ -40,7 +40,12 @@ Unsaved documents are analyzed in memory, results are tied to the exact document
   assembly, and link-and-run through the installed Baa toolchain.
 - One tool settings page with explicit health for Baa, Takween, and Nazm;
   unavailable actions are disabled with an exact Arabic explanation.
-- File explorer, command palette, problems panel, embedded console, themes, autosave, and crash recovery.
+- Dedicated recent-project reopening and removal, plus tested recovery of
+  unsaved work after an interrupted session.
+- Two horizontal or vertical editor groups with draggable tabs, shared
+  document/save/undo state, one bottom panel, and restored split layouts.
+- File explorer, command palette, problems panel, embedded console, themes,
+  and autosave.
 - Deterministic Windows runtime deployment with no recurring manual DLL or `PATH` repair.
 
 For the detailed feature state and remaining production work, see the [roadmap](documents/ROADMAP.md).

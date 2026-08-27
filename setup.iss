@@ -4,7 +4,7 @@
 #define MyAppId "{{1A6F6714-2C14-4DBD-BACB-B26CBABE36EE}"
 #define MyAppName "قلم"
 #ifndef MyAppVersion
-  #define MyAppVersion "3.4.0"
+  #define MyAppVersion "3.5.0"
 #endif
 #ifndef QalamPayloadDir
   #define QalamPayloadDir "dist\installer-payload"

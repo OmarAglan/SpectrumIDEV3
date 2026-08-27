@@ -4,7 +4,7 @@
 #include <QObject>
 #include <QList>
 
-class QTabWidget;
+class QalamEditorWorkspace;
 class QMainWindow;
 class QalamSearchPanel;
 class QalamSidebar;
@@ -22,7 +22,8 @@ class LayoutManager : public QObject {
     Q_OBJECT
 
 public:
-    explicit LayoutManager(QMainWindow *window, QTabWidget *tabWidget,
+    explicit LayoutManager(QMainWindow *window,
+                           QalamEditorWorkspace *editorWorkspace,
                            QalamSearchPanel *searchBar, QObject *parent = nullptr);
 
     /// Build and install the full layout onto the main window
@@ -55,7 +56,7 @@ signals:
 
 private:
     QMainWindow *m_window{};
-    QTabWidget *m_tabWidget{};
+    QalamEditorWorkspace *m_editorWorkspace{};
     QalamSearchPanel *m_searchBar{};
 
     QalamActivityBar *m_activityBar{};

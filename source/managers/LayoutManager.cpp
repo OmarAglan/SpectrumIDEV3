@@ -9,10 +9,10 @@
 #include "QalamConsole.h"
 #include "QalamSearchPanel.h"
 #include "QalamEditor.h"
+#include "QalamEditorWorkspace.h"
 #include "Constants.h"
 
 #include <QMainWindow>
-#include <QTabWidget>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QSplitter>
@@ -20,11 +20,12 @@
 #include <QDir>
 #include <QTabBar>
 
-LayoutManager::LayoutManager(QMainWindow *window, QTabWidget *tabWidget,
+LayoutManager::LayoutManager(QMainWindow *window,
+                             QalamEditorWorkspace *editorWorkspace,
                              QalamSearchPanel *searchBar, QObject *parent)
     : QObject(parent)
     , m_window(window)
-    , m_tabWidget(tabWidget)
+    , m_editorWorkspace(editorWorkspace)
     , m_searchBar(searchBar)
 {
 }
@@ -45,10 +46,10 @@ void LayoutManager::setupLayout()
     // Primary Side Bar and Activity Bar live on the right side. The editor text
     // and search UI remain RTL-aware, while the file paths/breadcrumbs can still
     // render naturally when they contain Latin segments.
-    m_tabWidget->setLayoutDirection(Qt::RightToLeft);
-    if (m_tabWidget->tabBar()) {
-        m_tabWidget->tabBar()->setLayoutDirection(Qt::RightToLeft);
-        m_tabWidget->tabBar()->setUsesScrollButtons(true);
+    m_editorWorkspace->setLayoutDirection(Qt::RightToLeft);
+    if (m_editorWorkspace->tabBar()) {
+        m_editorWorkspace->tabBar()->setLayoutDirection(Qt::RightToLeft);
+        m_editorWorkspace->tabBar()->setUsesScrollButtons(true);
     }
     m_searchBar->setLayoutDirection(Qt::RightToLeft);
 
@@ -88,7 +89,7 @@ void LayoutManager::setupLayout()
     editorVLayout->addWidget(m_breadcrumb);
 
     // Add tabs and search bar to editor container
-    editorVLayout->addWidget(m_tabWidget, 1);
+    editorVLayout->addWidget(m_editorWorkspace, 1);
     editorVLayout->addWidget(m_searchBar);
 
     // Add editor container and panel to splitter

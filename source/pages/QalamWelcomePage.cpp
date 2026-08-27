@@ -16,6 +16,8 @@
 #include <QSettings>
 #include <QVBoxLayout>
 
+#include <memory>
+
 namespace {
 QWidget *createSectionTitle(const QString &text, QWidget *parent)
 {
@@ -48,8 +50,10 @@ QWidget *createWelcomeCard(const QString &title, const QString &body, QWidget *p
 }
 }
 
-QalamWelcomePage::QalamWelcomePage(QWidget *parent)
-    : QWidget(parent)
+QalamWelcomePage::QalamWelcomePage(QWidget *parent,
+                                   const QString &settingsFilePath)
+    : QWidget(parent),
+      m_settingsFilePath(settingsFilePath)
 {
     setAttribute(Qt::WA_StyledBackground, true);
     setObjectName("welcomePage");
@@ -174,7 +178,7 @@ void QalamWelcomePage::setupUi()
     recentHeaderLayout->setSpacing(8);
     recentHeaderLayout->setDirection(QBoxLayout::RightToLeft);
 
-    auto *recentTitle = qobject_cast<QLabel*>(createSectionTitle("الأخيرة", recentHeader));
+    auto *recentTitle = qobject_cast<QLabel*>(createSectionTitle("فتح حديث", recentHeader));
     recentHeaderLayout->addWidget(recentTitle);
 
     recentHeaderLayout->addStretch(1);
@@ -190,8 +194,23 @@ void QalamWelcomePage::setupUi()
 
     recentCol->addWidget(recentHeader);
 
+    m_reopenLastProjectButton = createActionButton(
+        ":/icons/resources/folder-open.svg", "إعادة فتح آخر مشروع");
+    m_reopenLastProjectButton->setObjectName("welcomeReopenLastProject");
+    connect(m_reopenLastProjectButton, &QPushButton::clicked, this, [this]() {
+        std::unique_ptr<QSettings> settings(createSettings());
+        const QStringList projects = settings->value(
+            Constants::SettingsKeyRecentFolders).toStringList();
+        if (not projects.isEmpty()) {
+            emit reopenLastProjectRequested(projects.constFirst());
+        }
+    });
+    recentCol->addWidget(m_reopenLastProjectButton);
+
+    recentCol->addWidget(createSectionTitle("المشاريع الحديثة", container));
+
     m_recentList = new QListWidget(container);
-    m_recentList->setObjectName("welcomeRecents");
+    m_recentList->setObjectName("welcomeRecentProjects");
     m_recentList->setSelectionMode(QAbstractItemView::SingleSelection);
     m_recentList->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
     m_recentList->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
@@ -199,6 +218,20 @@ void QalamWelcomePage::setupUi()
     connect(m_recentList, &QListWidget::itemClicked, this, &QalamWelcomePage::onRecentItemActivated);
     connect(m_recentList, &QListWidget::itemDoubleClicked, this, &QalamWelcomePage::onRecentItemActivated);
     recentCol->addWidget(m_recentList, 1);
+
+    recentCol->addWidget(createSectionTitle("الملفات الحديثة", container));
+
+    m_recentFilesList = new QListWidget(container);
+    m_recentFilesList->setObjectName("welcomeRecentFiles");
+    m_recentFilesList->setSelectionMode(QAbstractItemView::SingleSelection);
+    m_recentFilesList->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    m_recentFilesList->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    m_recentFilesList->setFocusPolicy(Qt::NoFocus);
+    connect(m_recentFilesList, &QListWidget::itemClicked,
+            this, &QalamWelcomePage::onRecentItemActivated);
+    connect(m_recentFilesList, &QListWidget::itemDoubleClicked,
+            this, &QalamWelcomePage::onRecentItemActivated);
+    recentCol->addWidget(m_recentFilesList, 1);
 
     // Learning / walkthrough column - closer to VS Code's welcome walkthrough cards.
     auto *learnCol = new QVBoxLayout();
@@ -314,23 +347,27 @@ void QalamWelcomePage::applyStyles()
             color: %9;
         }
 
-        QListWidget#welcomeRecents {
+        QListWidget#welcomeRecentProjects,
+        QListWidget#welcomeRecentFiles {
             background-color: transparent;
             border: none;
             padding: 0px;
         }
 
-        QListWidget#welcomeRecents::item {
+        QListWidget#welcomeRecentProjects::item,
+        QListWidget#welcomeRecentFiles::item {
             padding: 0px;
             margin: 1px 0px;
             border-radius: 2px;
         }
 
-        QListWidget#welcomeRecents::item:hover {
+        QListWidget#welcomeRecentProjects::item:hover,
+        QListWidget#welcomeRecentFiles::item:hover {
             background-color: %6;
         }
 
-        QListWidget#welcomeRecents::item:selected {
+        QListWidget#welcomeRecentProjects::item:selected,
+        QListWidget#welcomeRecentFiles::item:selected {
             background-color: %10;
         }
 
@@ -417,31 +454,38 @@ QPushButton *QalamWelcomePage::createActionButton(const QString &iconPath, const
 
 void QalamWelcomePage::populateRecents()
 {
-    if (!m_recentList) return;
+    if (not m_recentList or not m_recentFilesList) return;
 
     m_recentList->clear();
+    m_recentFilesList->clear();
 
-    QSettings settings(Constants::OrgName, Constants::AppName);
-    const QStringList recentFolders = settings.value(
+    std::unique_ptr<QSettings> settings(createSettings());
+    const QStringList recentFolders = settings->value(
         Constants::SettingsKeyRecentFolders).toStringList();
-    const QStringList recentFiles = settings.value(
+    const QStringList recentFiles = settings->value(
         Constants::SettingsKeyRecentFiles).toStringList();
-    QStringList recentPaths = recentFolders;
-    for (const QString &path : recentFiles) {
-        if (not recentPaths.contains(path)) recentPaths.append(path);
-    }
+    m_reopenLastProjectButton->setEnabled(not recentFolders.isEmpty());
 
-    if (recentPaths.isEmpty()) {
-        showEmptyRecentsState();
+    populateRecentList(m_recentList, recentFolders, true);
+    populateRecentList(m_recentFilesList, recentFiles, false);
+}
+
+void QalamWelcomePage::populateRecentList(QListWidget *list,
+                                           const QStringList &paths,
+                                           bool projects)
+{
+    if (not list) return;
+    if (paths.isEmpty()) {
+        showEmptyRecentsState(list, projects);
         return;
     }
 
-    for (const QString &path : recentPaths) {
+    for (const QString &path : paths) {
         if (path.trimmed().isEmpty()) continue;
 
         QFileInfo info(path);
 
-        auto *itemWidget = new QWidget(m_recentList);
+        auto *itemWidget = new QWidget(list);
         itemWidget->setObjectName("welcomeRecentItemWidget");
         auto *layout = new QVBoxLayout(itemWidget);
         layout->setContentsMargins(10, 6, 10, 6);
@@ -453,7 +497,9 @@ void QalamWelcomePage::populateRecents()
         nameRow->setDirection(QBoxLayout::RightToLeft);
 
         auto *iconLabel = new QLabel(itemWidget);
-        const QString iconPath = info.isDir() ? ":/icons/resources/folder.svg" : ":/icons/resources/file-new.svg";
+        const QString iconPath = projects
+            ? ":/icons/resources/folder.svg"
+            : ":/icons/resources/file-new.svg";
         iconLabel->setPixmap(QIcon(iconPath).pixmap(16, 16));
         iconLabel->setFixedSize(16, 16);
 
@@ -463,6 +509,20 @@ void QalamWelcomePage::populateRecents()
         nameRow->addWidget(iconLabel);
         nameRow->addWidget(nameLabel, 1);
         nameRow->addStretch(1);
+
+        auto *removeButton = new QPushButton(itemWidget);
+        removeButton->setObjectName("welcomeRemoveRecent");
+        removeButton->setProperty("recentPath", path);
+        removeButton->setIcon(QIcon(QStringLiteral(":/icons/resources/close.svg")));
+        removeButton->setToolTip("إزالة من الحديثة");
+        removeButton->setAccessibleName("إزالة من الحديثة");
+        removeButton->setFlat(true);
+        removeButton->setFixedSize(24, 24);
+        connect(removeButton, &QPushButton::clicked, this, [this, path]() {
+            removeFromRecents(path);
+            populateRecents();
+        });
+        nameRow->addWidget(removeButton);
 
         const QFontMetrics fm(font());
         const QString elidedPath = fm.elidedText(path, Qt::ElideMiddle, 520);
@@ -479,19 +539,19 @@ void QalamWelcomePage::populateRecents()
         layout->addLayout(nameRow);
         layout->addWidget(pathLabel);
 
-        auto *item = new QListWidgetItem(m_recentList);
+        auto *item = new QListWidgetItem(list);
         item->setData(Qt::UserRole, path);
         item->setSizeHint(QSize(0, 50));
-        m_recentList->addItem(item);
-        m_recentList->setItemWidget(item, itemWidget);
+        list->addItem(item);
+        list->setItemWidget(item, itemWidget);
     }
 }
 
-void QalamWelcomePage::showEmptyRecentsState()
+void QalamWelcomePage::showEmptyRecentsState(QListWidget *list, bool projects)
 {
-    if (!m_recentList) return;
+    if (not list) return;
 
-    auto *emptyWidget = new QWidget(m_recentList);
+    auto *emptyWidget = new QWidget(list);
     auto *layout = new QVBoxLayout(emptyWidget);
     layout->setContentsMargins(0, 18, 0, 18);
     layout->setAlignment(Qt::AlignCenter);
@@ -501,11 +561,16 @@ void QalamWelcomePage::showEmptyRecentsState()
     icon->setPixmap(QIcon(":/icons/resources/folder-open.svg").pixmap(46, 46));
     icon->setAlignment(Qt::AlignCenter);
 
-    auto *title = new QLabel("لا توجد مشاريع أو ملفات حديثة", emptyWidget);
+    auto *title = new QLabel(
+        projects ? "لا توجد مشاريع حديثة" : "لا توجد ملفات حديثة",
+        emptyWidget);
     title->setObjectName("welcomeRecentsEmptyTitle");
     title->setAlignment(Qt::AlignCenter);
 
-    auto *hint = new QLabel("المجلدات والملفات التي تفتحها ستظهر هنا", emptyWidget);
+    auto *hint = new QLabel(
+        projects ? "المجلدات التي تفتحها ستظهر هنا"
+                 : "الملفات التي تفتحها ستظهر هنا",
+        emptyWidget);
     hint->setObjectName("welcomeRecentsEmptyHint");
     hint->setAlignment(Qt::AlignCenter);
 
@@ -513,11 +578,11 @@ void QalamWelcomePage::showEmptyRecentsState()
     layout->addWidget(title);
     layout->addWidget(hint);
 
-    auto *item = new QListWidgetItem(m_recentList);
+    auto *item = new QListWidgetItem(list);
     item->setFlags(Qt::NoItemFlags);
     item->setSizeHint(QSize(0, 160));
-    m_recentList->addItem(item);
-    m_recentList->setItemWidget(item, emptyWidget);
+    list->addItem(item);
+    list->setItemWidget(item, emptyWidget);
 }
 
 void QalamWelcomePage::onRecentItemActivated(QListWidgetItem *item)
@@ -548,14 +613,15 @@ void QalamWelcomePage::onRecentItemActivated(QListWidgetItem *item)
 
 void QalamWelcomePage::removeFromRecents(const QString &path)
 {
-    QSettings settings(Constants::OrgName, Constants::AppName);
-    QStringList recentFiles = settings.value(Constants::SettingsKeyRecentFiles).toStringList();
+    std::unique_ptr<QSettings> settings(createSettings());
+    QStringList recentFiles = settings->value(
+        Constants::SettingsKeyRecentFiles).toStringList();
     recentFiles.removeAll(path);
-    settings.setValue(Constants::SettingsKeyRecentFiles, recentFiles);
-    QStringList recentFolders = settings.value(
+    settings->setValue(Constants::SettingsKeyRecentFiles, recentFiles);
+    QStringList recentFolders = settings->value(
         Constants::SettingsKeyRecentFolders).toStringList();
     recentFolders.removeAll(path);
-    settings.setValue(Constants::SettingsKeyRecentFolders, recentFolders);
+    settings->setValue(Constants::SettingsKeyRecentFolders, recentFolders);
 }
 
 void QalamWelcomePage::onClearRecentsRequested()
@@ -569,26 +635,34 @@ void QalamWelcomePage::onClearRecentsRequested()
 
     if (reply != QMessageBox::Yes) return;
 
-    QSettings settings(Constants::OrgName, Constants::AppName);
-    settings.remove(Constants::SettingsKeyRecentFiles);
-    settings.remove(Constants::SettingsKeyRecentFolders);
+    std::unique_ptr<QSettings> settings(createSettings());
+    settings->remove(Constants::SettingsKeyRecentFiles);
+    settings->remove(Constants::SettingsKeyRecentFolders);
     populateRecents();
 }
 
 bool QalamWelcomePage::loadShowOnStartup() const
 {
-    QSettings settings(Constants::OrgName, Constants::AppName);
-    return settings.value(Constants::SettingsKeyShowWelcome, true).toBool();
+    std::unique_ptr<QSettings> settings(createSettings());
+    return settings->value(Constants::SettingsKeyShowWelcome, true).toBool();
 }
 
 void QalamWelcomePage::saveShowOnStartup(bool show)
 {
-    QSettings settings(Constants::OrgName, Constants::AppName);
-    settings.setValue(Constants::SettingsKeyShowWelcome, show);
+    std::unique_ptr<QSettings> settings(createSettings());
+    settings->setValue(Constants::SettingsKeyShowWelcome, show);
 }
 
 void QalamWelcomePage::onShowOnStartupToggled(bool show)
 {
     saveShowOnStartup(show);
     emit showWelcomeOnStartupChanged(show);
+}
+
+QSettings *QalamWelcomePage::createSettings() const
+{
+    if (m_settingsFilePath.isEmpty()) {
+        return new QSettings(Constants::OrgName, Constants::AppName);
+    }
+    return new QSettings(m_settingsFilePath, QSettings::IniFormat);
 }

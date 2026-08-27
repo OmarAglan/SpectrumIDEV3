@@ -1,7 +1,7 @@
 # Qalam IDE - Improvement Roadmap
 
 **Date:** 2026-08-15
-**Version:** 3.4.0
+**Version:** 3.5.0
 **Codebase:** ~9,750 lines C++ across 67 files (Qt 6 + C++23)
 
 > **Active product direction:** Qalam is now the dedicated Baa-first IDE. The
@@ -26,6 +26,8 @@ Phases 1-3 have been completed and are archived here for reference.
 | Phase 1: Stability | Fixed 14 critical/functional bugs (comment toggle, cursor direction, multi-line strings, crash guards, exit flow) | **Complete** |
 | Phase 2: Memory & Performance | Fixed leaks, hot-path copies, O(n^2) trimming, cached themes, dynamic word shrinking | **Complete** |
 | Phase 3: Architecture Refactoring | Single keyword source, QalamEditor decomposition, QalamTheme adoption, data-driven language definitions | **Complete** |
+| Workbench Phase A | Recent projects, explicit reopen/remove actions, and verified crash recovery | **Complete in 3.5.0** |
+| Workbench Phase B | Shared document model, two editor groups, drag/move actions, and restored split layout | **Complete in 3.5.0** |
 
 One deferred item from Phase 2:
 - 2.7 Remove redundant `QString value` from `QalamToken` *(low risk/reward -- carry forward to Phase 4)*
@@ -43,7 +45,12 @@ One deferred item from Phase 2:
 - **RTL/Arabic-first design** throughout -- UI strings, layout direction, icon positioning
 - **Comprehensive `Constants.h`** -- organized namespaces for colors, fonts, layout, timing
 - **Centralized theme engine** (`QalamTheme`, 805 lines) providing consistent styling
-- **Session persistence** -- restores tabs, geometry, folder, preferences
+- **Session persistence** -- restores tabs, geometry, folder, preferences,
+  shared editor views, both groups' active documents, split orientation, and
+  splitter sizes
+- **Shared editor workspace** -- up to two horizontal or vertical groups share
+  document content, path, save state, syntax highlighting, and undo/redo while
+  retaining one bottom panel
 - **Modern signal/slot connections** -- 100% pointer-to-member syntax, zero string-based connections
 - **Qalam-owned naming** -- legacy `T*` source files and types have migrated to
   collision-safe `Qalam*` names, with a configure-independent CMake guard that

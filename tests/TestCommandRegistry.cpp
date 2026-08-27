@@ -31,6 +31,23 @@ void TestCommandRegistry::exposesDefaultCommands()
         return command.id == "quick.open";
     }));
     QVERIFY(std::any_of(commands.begin(), commands.end(), [](const auto &command) {
+        return command.id == "folder.reopenLast" and
+            command.shortcut == "Ctrl+Shift+T";
+    }));
+    QVERIFY(std::any_of(commands.begin(), commands.end(), [](const auto &command) {
+        return command.id == "editor.splitRight" and
+            command.shortcut == "Ctrl+\\";
+    }));
+    QVERIFY(std::any_of(commands.begin(), commands.end(), [](const auto &command) {
+        return command.id == "editor.splitLeft";
+    }));
+    QVERIFY(std::any_of(commands.begin(), commands.end(), [](const auto &command) {
+        return command.id == "editor.splitDown";
+    }));
+    QVERIFY(std::any_of(commands.begin(), commands.end(), [](const auto &command) {
+        return command.id == "editor.splitUp";
+    }));
+    QVERIFY(std::any_of(commands.begin(), commands.end(), [](const auto &command) {
         return command.id == "project.test";
     }));
     QVERIFY(std::any_of(commands.begin(), commands.end(), [](const auto &command) {

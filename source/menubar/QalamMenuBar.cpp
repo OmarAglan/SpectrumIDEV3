@@ -25,6 +25,7 @@ QalamMenuBar::QalamMenuBar(QWidget* parent) : QMenuBar(parent) {
     newAction = new QAction("جديد", parent);
     openFileAction = new QAction("فتح ملف", parent);
     openFolderAction = new QAction("فتح مجلد", parent);
+    reopenLastProjectAction = new QAction("إعادة فتح آخر مشروع", parent);
     saveAction = new QAction("حفظ", parent);
     saveAsAction = new QAction("حفظ باسم", parent);
     SettingsAction = new QAction("الإعدادات", parent);
@@ -46,9 +47,14 @@ QalamMenuBar::QalamMenuBar(QWidget* parent) : QMenuBar(parent) {
     debugPanelAction = new QAction("لوحة التصحيح", parent);
     goToDefinitionAction = new QAction("الانتقال إلى التعريف", parent);
     findReferencesAction = new QAction("البحث عن المراجع", parent);
+    splitRightAction = new QAction("تقسيم المحرر إلى اليمين", parent);
+    splitDownAction = new QAction("تقسيم المحرر إلى الأسفل", parent);
+    moveEditorAction = new QAction("نقل التبويب إلى المجموعة الأخرى", parent);
+    closeEditorGroupAction = new QAction("إغلاق مجموعة التحرير الثانوية", parent);
 
     newAction->setShortcut(QKeySequence("Ctrl+N"));
     openFileAction->setShortcut(QKeySequence("Ctrl+O"));
+    reopenLastProjectAction->setShortcut(QKeySequence("Ctrl+Shift+T"));
     saveAction->setShortcut(QKeySequence("Ctrl+S"));
     saveAsAction->setShortcut(QKeySequence("Ctrl+Shift+S"));
     buildAction->setShortcut(QKeySequence("Ctrl+Shift+B"));
@@ -64,6 +70,7 @@ QalamMenuBar::QalamMenuBar(QWidget* parent) : QMenuBar(parent) {
     debugPanelAction->setShortcut(QKeySequence("Ctrl+Shift+D"));
     goToDefinitionAction->setShortcut(QKeySequence("F12"));
     findReferencesAction->setShortcut(QKeySequence("Shift+F12"));
+    splitRightAction->setShortcut(QKeySequence("Ctrl+\\"));
 
     aboutAction = new QAction("عن المحرر", parent);
 
@@ -71,6 +78,8 @@ QalamMenuBar::QalamMenuBar(QWidget* parent) : QMenuBar(parent) {
     fileMenu->addAction(newAction);
     fileMenu->addAction(openFileAction);
     fileMenu->addAction(openFolderAction);
+    fileMenu->addAction(reopenLastProjectAction);
+    fileMenu->addSeparator();
     fileMenu->addAction(saveAction);
     fileMenu->addAction(saveAsAction);
     fileMenu->addSeparator();
@@ -92,6 +101,13 @@ QalamMenuBar::QalamMenuBar(QWidget* parent) : QMenuBar(parent) {
     viewMenu->addAction(togglePanelAction);
     viewMenu->addAction(problemsAction);
     viewMenu->addAction(debugPanelAction);
+    viewMenu->addSeparator();
+    QMenu *editorLayoutMenu = viewMenu->addMenu("تخطيط المحرر");
+    editorLayoutMenu->setLayoutDirection(Qt::RightToLeft);
+    editorLayoutMenu->addAction(splitRightAction);
+    editorLayoutMenu->addAction(splitDownAction);
+    editorLayoutMenu->addAction(moveEditorAction);
+    editorLayoutMenu->addAction(closeEditorGroupAction);
 
     runMenu->addAction(buildAction);
     runMenu->addAction(runAction);
@@ -107,6 +123,8 @@ QalamMenuBar::QalamMenuBar(QWidget* parent) : QMenuBar(parent) {
     connect(newAction, &QAction::triggered, this, &QalamMenuBar::onNewAction);
     connect(openFileAction, &QAction::triggered, this, &QalamMenuBar::onOpenFileAction);
     connect(openFolderAction, &QAction::triggered, this, &QalamMenuBar::onOpenFolderAction);
+    connect(reopenLastProjectAction, &QAction::triggered,
+            this, &QalamMenuBar::onReopenLastProjectAction);
     connect(saveAction, &QAction::triggered, this, &QalamMenuBar::onSaveAction);
     connect(saveAsAction, &QAction::triggered, this, &QalamMenuBar::onSaveAsAction);
     connect(SettingsAction, &QAction::triggered, this, &QalamMenuBar::onSettingsAction);
@@ -127,6 +145,18 @@ QalamMenuBar::QalamMenuBar(QWidget* parent) : QMenuBar(parent) {
     connect(debugPanelAction, &QAction::triggered, this, &QalamMenuBar::onDebugPanelAction);
     connect(goToDefinitionAction, &QAction::triggered, this, &QalamMenuBar::onGoToDefinitionAction);
     connect(findReferencesAction, &QAction::triggered, this, &QalamMenuBar::onFindReferencesAction);
+    connect(splitRightAction, &QAction::triggered, this, [this]() {
+        emit commandRequested("editor.splitRight");
+    });
+    connect(splitDownAction, &QAction::triggered, this, [this]() {
+        emit commandRequested("editor.splitDown");
+    });
+    connect(moveEditorAction, &QAction::triggered, this, [this]() {
+        emit commandRequested("editor.moveRight");
+    });
+    connect(closeEditorGroupAction, &QAction::triggered, this, [this]() {
+        emit commandRequested("editor.closeGroup");
+    });
 
     connect(aboutAction, &QAction::triggered, this, &QalamMenuBar::onAboutAction);
 }
@@ -134,6 +164,7 @@ QalamMenuBar::QalamMenuBar(QWidget* parent) : QMenuBar(parent) {
 void QalamMenuBar::onNewAction() { emit newRequested(); }
 void QalamMenuBar::onOpenFileAction() { emit openFileRequested(); }
 void QalamMenuBar::onOpenFolderAction() { emit openFolderRequested(); }
+void QalamMenuBar::onReopenLastProjectAction() { emit reopenLastProjectRequested(); }
 void QalamMenuBar::onSaveAction() { emit saveRequested(); }
 void QalamMenuBar::onSaveAsAction() { emit saveAsRequested(); }
 void QalamMenuBar::onSettingsAction() { emit settingsRequest(); }

@@ -2,7 +2,8 @@
 
 #include "QalamEditor.h"
 #include "Constants.h"
-#include <QTabWidget>
+
+class QalamEditorWorkspace;
 
 class FileManager : public QObject {
     Q_OBJECT
@@ -15,7 +16,8 @@ public:
         Discard   ///< User chose to discard changes
     };
 
-    explicit FileManager(QTabWidget *tabWidget, QWidget *parentWindow, QObject *parent = nullptr);
+    explicit FileManager(QalamEditorWorkspace *editorWorkspace,
+                         QWidget *parentWindow, QObject *parent = nullptr);
 
     /// Get the currently active editor from the tab widget
     QalamEditor *currentEditor() const;
@@ -53,7 +55,7 @@ private:
     void removeBackupForPath(const QString &filePath) const;
     void addRecentFile(const QString &filePath);
 
-    QTabWidget *m_tabWidget{};
+    QalamEditorWorkspace *m_editorWorkspace{};
     QWidget *m_parentWindow{};
     bool m_skipBackupPrompt{};
 };

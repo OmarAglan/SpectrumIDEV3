@@ -1,8 +1,11 @@
 #include "SessionManager.h"
+#include "FileManager.h"
 #include "QalamEditor.h"
+#include "QalamEditorWorkspace.h"
 #include "Constants.h"
 
 #include <QSettings>
+#include <QFile>
 #include <QStandardPaths>
 #include <QTabWidget>
 #include <QTest>
@@ -20,6 +23,9 @@ private slots:
     void rejectsOffscreenGeometry();
     void rejectsBarelyVisibleGeometry();
     void restoresInterruptedUntitledBuffer();
+    void restoresInterruptedWorkbenchThroughFileManager();
+    void restoresSharedSplitWorkspaceLayout();
+    void restoresActiveDocumentInEachEditorGroup();
     void cleanShutdownDoesNotRestoreDiscardedUntitledBuffer();
 
 private:
@@ -65,7 +71,7 @@ void TestSessionManager::rejectsBarelyVisibleGeometry()
 
 void TestSessionManager::restoresInterruptedUntitledBuffer()
 {
-    QTabWidget tabs;
+    QalamEditorWorkspace tabs;
     auto *editor = new QalamEditor(&tabs);
     tabs.addTab(editor, QStringLiteral("غير معنون"));
     editor->setPlainText(QStringLiteral("صحيح الرئيسية() {\n    ارجع ٠.\n}"));
@@ -92,7 +98,7 @@ void TestSessionManager::restoresInterruptedUntitledBuffer()
 
 void TestSessionManager::cleanShutdownDoesNotRestoreDiscardedUntitledBuffer()
 {
-    QTabWidget tabs;
+    QalamEditorWorkspace tabs;
     auto *editor = new QalamEditor(&tabs);
     tabs.addTab(editor, QStringLiteral("غير معنون"));
     editor->setPlainText(QStringLiteral("تعديل لن يعود"));
@@ -106,6 +112,178 @@ void TestSessionManager::cleanShutdownDoesNotRestoreDiscardedUntitledBuffer()
     const SessionManager::SessionData restored = manager.restoreSession();
     QVERIFY(restored.documents.isEmpty());
     QVERIFY(not restored.recoveredAfterInterruption);
+}
+
+void TestSessionManager::restoresInterruptedWorkbenchThroughFileManager()
+{
+    const QString sourcePath = m_settingsDirectory.filePath(
+        QStringLiteral("ملف محفوظ.باء"));
+    QFile source(sourcePath);
+    QVERIFY(source.open(QIODevice::WriteOnly | QIODevice::Text));
+    source.write("original\n");
+    source.close();
+
+    QalamEditorWorkspace originalTabs;
+    auto *savedEditor = new QalamEditor(&originalTabs);
+    savedEditor->setFilePath(sourcePath);
+    savedEditor->setPlainText(QStringLiteral("تعديل قبل الانقطاع"));
+    savedEditor->document()->setModified(true);
+    originalTabs.addTab(savedEditor, QStringLiteral("ملف محفوظ.باء[*]"));
+
+    auto *untitledEditor = new QalamEditor(&originalTabs);
+    untitledEditor->setPlainText(QStringLiteral("مسودة غير محفوظة"));
+    untitledEditor->document()->setModified(true);
+    originalTabs.addTab(untitledEditor, QStringLiteral("غير معنون[*]"));
+    originalTabs.setCurrentIndex(1);
+
+    const QString settingsPath = m_settingsDirectory.filePath(
+        QStringLiteral("workbench-recovery.ini"));
+    SessionManager originalSession(&originalTabs, nullptr, settingsPath);
+    originalSession.saveSession(m_settingsDirectory.path(), QByteArray());
+
+    QalamEditorWorkspace restoredTabs;
+    FileManager fileManager(&restoredTabs, &restoredTabs);
+    SessionManager restoredSession(&restoredTabs, nullptr, settingsPath);
+    const SessionManager::SessionData data = restoredSession.restoreSession();
+    QVERIFY(data.recoveredAfterInterruption);
+    QCOMPARE(data.documents.size(), 2);
+    QCOMPARE(data.activeTabIndex, 1);
+
+    for (const SessionManager::DocumentData &document : data.documents) {
+        QVERIFY(fileManager.restoreDocument(
+            document.filePath, document.displayName,
+            document.recoveredContent, document.hasRecovery));
+    }
+    restoredTabs.setCurrentIndex(data.activeTabIndex);
+
+    QCOMPARE(restoredTabs.count(), 2);
+    auto *restoredSaved = qobject_cast<QalamEditor*>(restoredTabs.widget(0));
+    auto *restoredUntitled = qobject_cast<QalamEditor*>(restoredTabs.widget(1));
+    QVERIFY(restoredSaved);
+    QVERIFY(restoredUntitled);
+    QCOMPARE(restoredSaved->toPlainText(),
+             QStringLiteral("تعديل قبل الانقطاع"));
+    QCOMPARE(restoredSaved->currentFilePath(), sourcePath);
+    QVERIFY(restoredSaved->document()->isModified());
+    QCOMPARE(restoredUntitled->toPlainText(),
+             QStringLiteral("مسودة غير محفوظة"));
+    QVERIFY(restoredUntitled->currentFilePath().isEmpty());
+    QVERIFY(restoredUntitled->document()->isModified());
+    QCOMPARE(restoredTabs.currentIndex(), 1);
+}
+
+void TestSessionManager::restoresSharedSplitWorkspaceLayout()
+{
+    QalamEditorWorkspace originalWorkspace;
+    originalWorkspace.resize(900, 600);
+    auto *editor = new QalamEditor(&originalWorkspace);
+    originalWorkspace.addTab(editor, QStringLiteral("مشترك[*]"));
+    editor->setPlainText(QStringLiteral("محتوى مستعاد في نافذتين"));
+    editor->document()->setModified(true);
+    QVERIFY(originalWorkspace.splitCurrent(Qt::Vertical));
+    originalWorkspace.setSplitSizes({360, 240});
+    QCOMPARE(originalWorkspace.activeGroupIndex(), 1);
+
+    const QString settingsPath = m_settingsDirectory.filePath(
+        QStringLiteral("split-workspace.ini"));
+    SessionManager originalSession(
+        &originalWorkspace, nullptr, settingsPath);
+    originalSession.saveSession(QStringLiteral("C:/مشروع مشترك"),
+                                QByteArray());
+
+    const SessionManager::SessionData data = originalSession.restoreSession();
+    QCOMPARE(data.documents.size(), 1);
+    QCOMPARE(data.views.size(), 2);
+    QCOMPARE(data.views.at(0).documentIndex, 0);
+    QCOMPARE(data.views.at(1).documentIndex, 0);
+    QCOMPARE(data.views.at(0).groupIndex, 0);
+    QCOMPARE(data.views.at(1).groupIndex, 1);
+    QCOMPARE(data.activeGroupIndex, 1);
+    QCOMPARE(data.splitOrientation, Qt::Vertical);
+
+    QalamEditorWorkspace restoredWorkspace;
+    restoredWorkspace.resize(900, 600);
+    FileManager fileManager(&restoredWorkspace, &restoredWorkspace);
+    SessionManager restoredSession(
+        &restoredWorkspace, nullptr, settingsPath);
+    QVERIFY(restoredSession.restoreWorkspace(data, &fileManager));
+
+    QCOMPARE(restoredWorkspace.groupCount(), 2);
+    QCOMPARE(restoredWorkspace.editors().size(), 2);
+    QCOMPARE(restoredWorkspace.activeGroupIndex(), 1);
+    QCOMPARE(restoredWorkspace.splitOrientation(), Qt::Vertical);
+    QalamEditor *first = restoredWorkspace.editors().at(0);
+    QalamEditor *second = restoredWorkspace.editors().at(1);
+    QCOMPARE(first->documentModel(), second->documentModel());
+    QCOMPARE(first->document(), second->document());
+    QCOMPARE(first->toPlainText(),
+             QStringLiteral("محتوى مستعاد في نافذتين"));
+    QVERIFY(first->document()->isModified());
+}
+
+void TestSessionManager::restoresActiveDocumentInEachEditorGroup()
+{
+    const QStringList names{
+        QStringLiteral("الأول.باء"),
+        QStringLiteral("الثاني.باء"),
+        QStringLiteral("الثالث.باء")};
+    QStringList paths;
+    for (const QString &name : names) {
+        const QString path = m_settingsDirectory.filePath(name);
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::WriteOnly | QIODevice::Text));
+        file.write("صحيح الرئيسية() { ارجع ٠. }\n");
+        file.close();
+        paths.push_back(path);
+    }
+
+    QalamEditorWorkspace originalWorkspace;
+    FileManager originalFiles(&originalWorkspace, &originalWorkspace);
+    originalFiles.openFile(paths.at(0));
+    originalFiles.openFile(paths.at(1));
+    QalamEditor *sharedDocument = originalWorkspace.currentEditor();
+    QVERIFY(sharedDocument);
+    QVERIFY(originalWorkspace.splitCurrent(Qt::Horizontal));
+    originalFiles.openFile(paths.at(2));
+
+    QTabWidget *primary = originalWorkspace.group(0);
+    QTabWidget *secondary = originalWorkspace.group(1);
+    QVERIFY(primary);
+    QVERIFY(secondary);
+    primary->setCurrentIndex(0);
+    secondary->setCurrentIndex(0);
+    originalWorkspace.setActiveGroupIndex(1);
+
+    const QString settingsPath = m_settingsDirectory.filePath(
+        QStringLiteral("two-group-active-tabs.ini"));
+    SessionManager originalSession(
+        &originalWorkspace, nullptr, settingsPath);
+    originalSession.saveSession(m_settingsDirectory.path(), QByteArray());
+    const SessionManager::SessionData data = originalSession.restoreSession();
+
+    QalamEditorWorkspace restoredWorkspace;
+    FileManager restoredFiles(&restoredWorkspace, &restoredWorkspace);
+    SessionManager restoredSession(
+        &restoredWorkspace, nullptr, settingsPath);
+    QVERIFY(restoredSession.restoreWorkspace(data, &restoredFiles));
+
+    QCOMPARE(restoredWorkspace.groupCount(), 2);
+    primary = restoredWorkspace.group(0);
+    secondary = restoredWorkspace.group(1);
+    QCOMPARE(primary->count(), 2);
+    QCOMPARE(secondary->count(), 2);
+    QCOMPARE(primary->tabText(primary->currentIndex()), names.at(0));
+    QCOMPARE(secondary->tabText(secondary->currentIndex()), names.at(1));
+    QCOMPARE(restoredWorkspace.activeGroupIndex(), 1);
+
+    auto *restoredSharedPrimary = qobject_cast<QalamEditor*>(
+        primary->widget(1));
+    auto *restoredSharedSecondary = qobject_cast<QalamEditor*>(
+        secondary->widget(0));
+    QVERIFY(restoredSharedPrimary);
+    QVERIFY(restoredSharedSecondary);
+    QCOMPARE(restoredSharedPrimary->documentModel(),
+             restoredSharedSecondary->documentModel());
 }
 
 QTEST_MAIN(TestSessionManager)

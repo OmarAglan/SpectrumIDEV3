@@ -1,12 +1,17 @@
 #include "SessionManager.h"
 #include "QalamExplorerView.h"
+#include "QalamEditorWorkspace.h"
+#include "QalamDocumentModel.h"
+#include "FileManager.h"
 
 #include <QSettings>
 #include <QCryptographicHash>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QHash>
 #include <QSaveFile>
+#include <QSet>
 #include <QStandardPaths>
 #include <QStringConverter>
 #include <QTextStream>
@@ -14,12 +19,13 @@
 #include <QVariantMap>
 
 #include <utility>
+#include <algorithm>
 
-SessionManager::SessionManager(QTabWidget *tabWidget,
+SessionManager::SessionManager(QalamEditorWorkspace *editorWorkspace,
                                QObject *parent,
                                const QString &settingsFilePath)
     : QObject(parent)
-    , m_tabWidget(tabWidget)
+    , m_editorWorkspace(editorWorkspace)
     , m_settingsFilePath(settingsFilePath)
 {
 }
@@ -32,54 +38,101 @@ void SessionManager::saveSession(const QString &folderPath,
 
     QStringList openFiles;
     QVariantList documents;
+    QVariantList views;
     QStringList usedRecoveryPaths;
     int activeDocumentIndex = -1;
+    QHash<QalamDocumentModel*, int> documentIndices;
 
-    for (int i = 0; i < m_tabWidget->count(); ++i) {
-        QalamEditor *editor = qobject_cast<QalamEditor*>(m_tabWidget->widget(i));
-        if (not editor) continue;
+    for (int groupIndex = 0;
+         groupIndex < m_editorWorkspace->groupCount(); ++groupIndex) {
+        QTabWidget *group = m_editorWorkspace->group(groupIndex);
+        if (not group) continue;
 
-        const QString filePath = editor->currentFilePath();
-        QString displayName = m_tabWidget->tabText(i);
-        if (displayName.endsWith(QStringLiteral("[*]"))) displayName.chop(3);
-        const bool modified = editor->document()->isModified();
+        for (int tabIndex = 0; tabIndex < group->count(); ++tabIndex) {
+            QalamEditor *editor = qobject_cast<QalamEditor*>(
+                group->widget(tabIndex));
+            if (not editor) continue;
 
-        // A clean shutdown follows an explicit save/discard decision. Do not
-        // resurrect discarded unnamed buffers on the next launch.
-        if (cleanShutdown and filePath.isEmpty()) continue;
+            const QString filePath = editor->currentFilePath();
+            QString displayName = group->tabText(tabIndex);
+            if (displayName.endsWith(QStringLiteral("[*]"))) {
+                displayName.chop(3);
+            }
 
-        QVariantMap document;
-        document.insert(QStringLiteral("filePath"), filePath);
-        document.insert(QStringLiteral("displayName"), displayName);
-        document.insert(QStringLiteral("modified"), modified and not cleanShutdown);
+            // A clean shutdown follows an explicit save/discard decision. Do
+            // not resurrect discarded unnamed buffers on the next launch.
+            if (cleanShutdown and filePath.isEmpty()) continue;
 
-        if (not cleanShutdown and modified) {
-            const QString identity = filePath.isEmpty()
-                ? QStringLiteral("untitled:%1:%2").arg(i).arg(displayName)
-                : QStringLiteral("file:%1").arg(QDir::cleanPath(filePath));
-            const QString backupPath = recoveryPath(identity);
-            QDir().mkpath(QFileInfo(backupPath).absolutePath());
+            int documentIndex = documentIndices.value(
+                editor->documentModel(), -1);
+            if (documentIndex < 0) {
+                documentIndex = documents.size();
+                documentIndices.insert(editor->documentModel(), documentIndex);
 
-            QSaveFile recovery(backupPath);
-            if (recovery.open(QIODevice::WriteOnly | QIODevice::Text)) {
-                QTextStream out(&recovery);
-                out.setEncoding(QStringConverter::Utf8);
-                out << editor->toPlainText();
-                if (recovery.commit()) {
-                    document.insert(QStringLiteral("recoveryPath"), backupPath);
-                    usedRecoveryPaths.append(backupPath);
+                const bool modified = editor->document()->isModified();
+                QVariantMap document;
+                document.insert(QStringLiteral("filePath"), filePath);
+                document.insert(QStringLiteral("displayName"), displayName);
+                document.insert(QStringLiteral("modified"),
+                                modified and not cleanShutdown);
+
+                if (not cleanShutdown and modified) {
+                    const QString identity = filePath.isEmpty()
+                        ? QStringLiteral("untitled:%1:%2")
+                              .arg(documentIndex).arg(displayName)
+                        : QStringLiteral("file:%1")
+                              .arg(QDir::cleanPath(filePath));
+                    const QString backupPath = recoveryPath(identity);
+                    QDir().mkpath(QFileInfo(backupPath).absolutePath());
+
+                    QSaveFile recovery(backupPath);
+                    if (recovery.open(QIODevice::WriteOnly | QIODevice::Text)) {
+                        QTextStream out(&recovery);
+                        out.setEncoding(QStringConverter::Utf8);
+                        out << editor->toPlainText();
+                        if (recovery.commit()) {
+                            document.insert(QStringLiteral("recoveryPath"),
+                                            backupPath);
+                            usedRecoveryPaths.append(backupPath);
+                        }
+                    }
                 }
+
+                if (not filePath.isEmpty()
+                    and not openFiles.contains(filePath)) {
+                    openFiles.append(filePath);
+                }
+                documents.append(document);
+            }
+
+            QVariantMap view;
+            view.insert(QStringLiteral("documentIndex"), documentIndex);
+            view.insert(QStringLiteral("groupIndex"), groupIndex);
+            view.insert(QStringLiteral("tabIndex"), tabIndex);
+            const bool active = group->currentIndex() == tabIndex;
+            view.insert(QStringLiteral("active"), active);
+            views.append(view);
+
+            if (groupIndex == m_editorWorkspace->activeGroupIndex()
+                and active) {
+                activeDocumentIndex = documentIndex;
             }
         }
-
-        if (not filePath.isEmpty()) openFiles.append(filePath);
-        if (i == m_tabWidget->currentIndex()) activeDocumentIndex = documents.size();
-        documents.append(document);
     }
 
     settings->setValue(Constants::SessionKeyOpenFiles, openFiles);
     settings->setValue(Constants::SessionKeyDocuments, documents);
+    settings->setValue(Constants::SessionKeyEditorViews, views);
     settings->setValue(Constants::SessionKeyActiveTab, activeDocumentIndex);
+    settings->setValue(Constants::SessionKeyEditorGroupCount,
+                       m_editorWorkspace->groupCount());
+    settings->setValue(Constants::SessionKeyEditorSplitOrientation,
+                       int(m_editorWorkspace->splitOrientation()));
+    QVariantList splitSizes;
+    for (int size : m_editorWorkspace->splitSizes()) splitSizes.append(size);
+    settings->setValue(Constants::SessionKeyEditorSplitSizes, splitSizes);
+    settings->setValue(Constants::SessionKeyActiveEditorGroup,
+                       m_editorWorkspace->activeGroupIndex());
     settings->setValue(Constants::SessionKeyFolderPath, folderPath);
     settings->setValue(Constants::SessionKeyWindowGeometry, windowGeometry);
     settings->setValue(Constants::SessionKeyCleanShutdown, cleanShutdown);
@@ -95,6 +148,16 @@ SessionManager::SessionData SessionManager::restoreSession() const
     SessionData data;
     data.openFiles = settings->value(Constants::SessionKeyOpenFiles).toStringList();
     data.activeTabIndex = settings->value(Constants::SessionKeyActiveTab, -1).toInt();
+    data.activeGroupIndex = settings->value(
+        Constants::SessionKeyActiveEditorGroup, 0).toInt();
+    data.splitOrientation = Qt::Orientation(settings->value(
+        Constants::SessionKeyEditorSplitOrientation,
+        int(Qt::Horizontal)).toInt());
+    const QVariantList savedSplitSizes = settings->value(
+        Constants::SessionKeyEditorSplitSizes).toList();
+    for (const QVariant &size : savedSplitSizes) {
+        data.splitSizes.append(size.toInt());
+    }
     data.folderPath = settings->value(Constants::SessionKeyFolderPath).toString();
     data.windowGeometry = settings->value(Constants::SessionKeyWindowGeometry).toByteArray();
     const bool cleanShutdown = settings->value(
@@ -136,7 +199,105 @@ SessionManager::SessionData SessionManager::restoreSession() const
             data.documents.push_back(std::move(document));
         }
     }
+
+    const QVariantList views = settings->value(
+        Constants::SessionKeyEditorViews).toList();
+    for (const QVariant &value : views) {
+        const QVariantMap saved = value.toMap();
+        ViewData view;
+        view.documentIndex = saved.value(
+            QStringLiteral("documentIndex"), -1).toInt();
+        view.groupIndex = saved.value(QStringLiteral("groupIndex"), 0).toInt();
+        view.tabIndex = saved.value(QStringLiteral("tabIndex"), 0).toInt();
+        view.active = saved.value(QStringLiteral("active"), false).toBool();
+        if (view.documentIndex >= 0
+            and view.documentIndex < data.documents.size()
+            and view.groupIndex >= 0 and view.groupIndex < 2) {
+            data.views.push_back(view);
+        }
+    }
+    if (data.views.isEmpty()) {
+        for (int index = 0; index < data.documents.size(); ++index) {
+            data.views.push_back({index, 0, index,
+                                  index == data.activeTabIndex});
+        }
+    }
     return data;
+}
+
+bool SessionManager::restoreWorkspace(const SessionData &session,
+                                      FileManager *fileManager)
+{
+    if (not fileManager or not m_editorWorkspace) return false;
+
+    QVector<QalamEditor*> restoredDocuments(session.documents.size());
+    const bool needsSecondGroup = std::any_of(
+        session.views.cbegin(), session.views.cend(),
+        [](const ViewData &view) { return view.groupIndex == 1; });
+    if (needsSecondGroup) {
+        m_editorWorkspace->ensureTwoGroups(session.splitOrientation);
+    }
+
+    bool restoredAny = false;
+    for (int groupIndex = 0; groupIndex < 2; ++groupIndex) {
+        QVector<ViewData> groupViews;
+        for (const ViewData &view : session.views) {
+            if (view.groupIndex == groupIndex) groupViews.push_back(view);
+        }
+        std::sort(groupViews.begin(), groupViews.end(),
+                  [](const ViewData &left, const ViewData &right) {
+            return left.tabIndex < right.tabIndex;
+        });
+
+        for (const ViewData &view : groupViews) {
+            if (view.documentIndex < 0
+                or view.documentIndex >= session.documents.size()) {
+                continue;
+            }
+            const DocumentData &document = session.documents.at(
+                view.documentIndex);
+            QalamEditor *editor = restoredDocuments.at(view.documentIndex);
+            if (not editor) {
+                m_editorWorkspace->setActiveGroupIndex(groupIndex);
+                if (not fileManager->restoreDocument(
+                        document.filePath, document.displayName,
+                        document.recoveredContent, document.hasRecovery)) {
+                    continue;
+                }
+                editor = m_editorWorkspace->currentEditor();
+                restoredDocuments[view.documentIndex] = editor;
+                restoredAny = true;
+            } else {
+                m_editorWorkspace->addSharedView(
+                    editor, groupIndex, document.displayName,
+                    document.filePath);
+            }
+        }
+    }
+
+    if (not restoredAny) return false;
+
+    m_editorWorkspace->setSplitSizes(session.splitSizes);
+    for (const ViewData &view : session.views) {
+        if (not view.active
+            or view.documentIndex < 0
+            or view.documentIndex >= restoredDocuments.size()) {
+            continue;
+        }
+        QalamEditor *modelView = restoredDocuments.at(view.documentIndex);
+        QTabWidget *group = m_editorWorkspace->group(view.groupIndex);
+        if (not modelView or not group) continue;
+        for (int index = 0; index < group->count(); ++index) {
+            auto *candidate = qobject_cast<QalamEditor*>(group->widget(index));
+            if (candidate and candidate->documentModel()
+                == modelView->documentModel()) {
+                group->setCurrentIndex(index);
+                break;
+            }
+        }
+    }
+    m_editorWorkspace->setActiveGroupIndex(session.activeGroupIndex);
+    return true;
 }
 
 void SessionManager::markSessionRunning()
@@ -227,16 +388,20 @@ void SessionManager::syncOpenEditors(QalamExplorerView *explorerView)
     if (not explorerView) return;
 
     explorerView->clearOpenEditors();
+    QSet<QalamDocumentModel*> seenDocuments;
 
-    for (int i = 0; i < m_tabWidget->count(); ++i) {
-        QalamEditor *editor = qobject_cast<QalamEditor*>(m_tabWidget->widget(i));
+    for (int i = 0; i < m_editorWorkspace->count(); ++i) {
+        QalamEditor *editor = qobject_cast<QalamEditor*>(
+            m_editorWorkspace->widget(i));
         if (editor) {
+            if (seenDocuments.contains(editor->documentModel())) continue;
+            seenDocuments.insert(editor->documentModel());
             QString filePath = editor->currentFilePath();
             bool modified = editor->document()->isModified();
 
             // Use tab text if no file path (unsaved file)
             if (filePath.isEmpty()) {
-                filePath = m_tabWidget->tabText(i);
+                filePath = m_editorWorkspace->tabText(i);
                 if (filePath.endsWith("[*]")) {
                     filePath.chop(3);
                 }

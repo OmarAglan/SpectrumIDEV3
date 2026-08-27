@@ -17,6 +17,7 @@ public:
     QAction* newAction;
     QAction* openFileAction;
     QAction* openFolderAction;
+    QAction* reopenLastProjectAction;
     QAction* saveAction;
     QAction* saveAsAction;
     QAction* SettingsAction;
@@ -37,11 +38,16 @@ public:
     QAction* debugPanelAction;
     QAction* goToDefinitionAction;
     QAction* findReferencesAction;
+    QAction* splitRightAction;
+    QAction* splitDownAction;
+    QAction* moveEditorAction;
+    QAction* closeEditorGroupAction;
 
 signals:
     void newRequested();
     void openFileRequested();
     void openFolderRequested();
+    void reopenLastProjectRequested();
     void saveRequested();
     void saveAsRequested();
     void settingsRequest();
@@ -62,12 +68,14 @@ signals:
     void debugPanelRequested();
     void goToDefinitionRequested();
     void findReferencesRequested();
+    void commandRequested(const QString &commandId);
 
 private slots:
 
     void onNewAction();
     void onOpenFileAction();
     void onOpenFolderAction();
+    void onReopenLastProjectAction();
     void onSaveAction();
     void onSaveAsAction();
     void onSettingsAction();

@@ -27,6 +27,7 @@
 
 
 class LineNumberArea;
+class QalamDocumentModel;
 
 
 class QalamEditor : public QPlainTextEdit {
@@ -41,7 +42,9 @@ public:
         QString message;
     };
 
-    QalamEditor(QWidget* parent = nullptr);
+    explicit QalamEditor(QWidget *parent = nullptr);
+    explicit QalamEditor(QalamDocumentModel *documentModel,
+                         QWidget *parent = nullptr);
 
     void setDiagnostics(const QVector<Diagnostic> &diagnostics);
     void clearDiagnostics();
@@ -70,6 +73,7 @@ public:
     QString filePath{};
     QString currentFilePath() const;
     void setFilePath(const QString &path);
+    QalamDocumentModel *documentModel() const { return m_documentModel; }
 
     QString getCurrentLineIndentation(const QTextCursor &cursor) const;
     void cursorIndentation();
@@ -117,6 +121,9 @@ protected:
     void focusOutEvent(QFocusEvent *e) override;
 
 private:
+    void initializeEditor();
+
+    QalamDocumentModel *m_documentModel{};
     QalamSyntaxHighlighter* highlighter{};
 
     LineNumberArea* lineNumberArea{};

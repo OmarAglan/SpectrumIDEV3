@@ -1,4 +1,5 @@
 #include "QalamEditor.h"
+#include "QalamDocumentModel.h"
 
 #include <QPainter>
 #include <QTextBlock>
@@ -57,23 +58,35 @@ CompletionType completionTypeForItem(const BaaCompletionItem &item)
 }
 
 
-QalamEditor::QalamEditor(QWidget* parent)
+QalamEditor::QalamEditor(QWidget *parent)
     : QPlainTextEdit(parent),
+      m_documentModel(new QalamDocumentModel(this)),
       m_bracketHandler(this),
-      m_snippetManager(this) {
+      m_snippetManager(this)
+{
+    initializeEditor();
+}
+
+QalamEditor::QalamEditor(QalamDocumentModel *documentModel, QWidget *parent)
+    : QPlainTextEdit(parent),
+      m_documentModel(documentModel ? documentModel
+                                    : new QalamDocumentModel(this)),
+      m_bracketHandler(this),
+      m_snippetManager(this)
+{
+    initializeEditor();
+}
+
+void QalamEditor::initializeEditor()
+{
+    setDocument(m_documentModel->document());
     setAcceptDrops(true);
     setMouseTracking(true);
     this->setStyleSheet(QalamTheme::editorStyleSheet());
     this->setTabStopDistance(32);
 
-    QTextDocument* editorDocument = this->document();
-    QTextOption option = editorDocument->defaultTextOption();
-    option.setTextDirection(Qt::RightToLeft);
-    option.setAlignment(Qt::AlignRight);
-    editorDocument->setDefaultTextOption(option);
-
-
-    highlighter = new QalamSyntaxHighlighter(editorDocument);
+    QTextDocument *editorDocument = document();
+    highlighter = m_documentModel->highlighter();
     lineNumberArea = new LineNumberArea(this);
 
     // ضبط الإكمال التلقائي
@@ -112,6 +125,15 @@ QalamEditor::QalamEditor(QWidget* parent)
     // Auto-save (delegated to QalamAutoSave helper)
     m_autoSave = new QalamAutoSave(this, this);
     connect(this->document(), &QTextDocument::contentsChanged, m_autoSave, &QalamAutoSave::onContentChanged);
+    connect(m_documentModel, &QalamDocumentModel::filePathChanged,
+            this, [this](const QString &path) {
+        filePath = path;
+        setProperty("filePath", path);
+        if (m_autoSave) m_autoSave->filePath = path;
+    });
+    filePath = m_documentModel->filePath();
+    setProperty("filePath", filePath);
+    m_autoSave->filePath = filePath;
     
     installEventFilter(this);
 }
@@ -152,25 +174,11 @@ void QalamEditor::wheelEvent(QWheelEvent *event) {
 }
 
 QString QalamEditor::currentFilePath() const {
-    return filePath;
+    return m_documentModel ? m_documentModel->filePath() : filePath;
 }
 
 void QalamEditor::setFilePath(const QString &path) {
-    filePath = path;
-    setProperty("filePath", path);
-    if (highlighter) {
-        if (path.endsWith(QStringLiteral(".نظم"), Qt::CaseInsensitive)) {
-            highlighter->setLanguageMode(QalamLanguageMode::Nazm);
-        } else if (Constants::isBaaDocumentPath(path) or
-                   path.isEmpty()) {
-            highlighter->setLanguageMode(QalamLanguageMode::Baa);
-        } else {
-            highlighter->setLanguageMode(QalamLanguageMode::PlainText);
-        }
-    }
-    if (m_autoSave) {
-        m_autoSave->filePath = path;
-    }
+    if (m_documentModel) m_documentModel->setFilePath(path);
 }
 
 void QalamEditor::setDiagnostics(const QVector<Diagnostic> &diagnostics) {

@@ -5,12 +5,13 @@
 #include <QList>
 #include <QObject>
 #include <QRect>
-#include <QTabWidget>
 #include <QVector>
 
 #include <memory>
 
 class QalamExplorerView;
+class QalamEditorWorkspace;
+class FileManager;
 class QSettings;
 
 /**
@@ -29,17 +30,28 @@ public:
         bool hasRecovery{};
     };
 
+    struct ViewData {
+        int documentIndex = -1;
+        int groupIndex{};
+        int tabIndex{};
+        bool active{};
+    };
+
     /// Data returned by restoreSession() for the caller to act on
     struct SessionData {
         QStringList openFiles;
         QVector<DocumentData> documents;
+        QVector<ViewData> views;
         int activeTabIndex = -1;
+        int activeGroupIndex{};
+        Qt::Orientation splitOrientation{Qt::Horizontal};
+        QList<int> splitSizes;
         QString folderPath;
         QByteArray windowGeometry;
         bool recoveredAfterInterruption{};
     };
 
-    explicit SessionManager(QTabWidget *tabWidget,
+    explicit SessionManager(QalamEditorWorkspace *editorWorkspace,
                             QObject *parent = nullptr,
                             const QString &settingsFilePath = QString());
 
@@ -50,6 +62,8 @@ public:
 
     /// Load session data from settings (caller decides how to apply it)
     SessionData restoreSession() const;
+    bool restoreWorkspace(const SessionData &session,
+                          FileManager *fileManager);
 
     /// Mark the running process before edits begin so an interrupted session
     /// can be distinguished from a normal, user-confirmed shutdown.
@@ -72,6 +86,6 @@ private:
     void removeUnusedRecoveryFiles(const QStringList &usedPaths) const;
     std::unique_ptr<QSettings> createSettings() const;
 
-    QTabWidget *m_tabWidget{};
+    QalamEditorWorkspace *m_editorWorkspace{};
     QString m_settingsFilePath;
 };
