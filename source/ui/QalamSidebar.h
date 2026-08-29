@@ -45,6 +45,7 @@ signals:
     void createFolderRequested(const QString &directoryPath);
     void renameEntryRequested(const QString &entryPath);
     void deleteEntryRequested(const QString &entryPath);
+    void removeRootRequested(const QString &rootPath);
 
 private:
     void setupUi();

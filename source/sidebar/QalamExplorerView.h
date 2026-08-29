@@ -8,6 +8,8 @@
 #include <QPushButton>
 #include <QEvent>
 #include <QPoint>
+#include <QStringList>
+#include <QVector>
 
 #include "BaaDocumentSymbol.h"
 
@@ -29,7 +31,9 @@ public:
     ~QalamExplorerView() = default;
 
     void setRootPath(const QString &path);
-    QString rootPath() const { return m_rootPath; }
+    void setRootPaths(const QStringList &paths);
+    QString rootPath() const { return m_rootPaths.value(0); }
+    QStringList rootPaths() const { return m_rootPaths; }
     
     void addOpenEditor(const QString &filePath, bool modified = false);
     void removeOpenEditor(const QString &filePath);
@@ -40,7 +44,7 @@ public:
         const QVector<BaaDocumentSymbol> &symbols);
     void clearOutlineSymbols();
 
-    QTreeView* treeView() const { return m_treeView; }
+    QTreeView* treeView() const { return m_treeViews.value(0); }
     QFileSystemModel* fileSystemModel() const { return m_fileSystemModel; }
     QalamSymbolOutlineView *outlineView() const { return m_outlineView; }
 
@@ -58,17 +62,22 @@ signals:
     void createFolderRequested(const QString &directoryPath);
     void renameEntryRequested(const QString &entryPath);
     void deleteEntryRequested(const QString &entryPath);
+    void removeRootRequested(const QString &rootPath);
     void outlineSymbolActivated(
         const QString &filePath, int line, int column);
 
 private:
     void setupUi();
     void applyStyles();
-    void showTreeContextMenu(const QPoint &position);
+    QTreeView *createRootTree(const QString &rootPath);
+    void clearRootTrees();
+    void showTreeContextMenu(QTreeView *treeView,
+                             const QString &rootPath,
+                             const QPoint &position);
     void showOpenEditorContextMenu(QWidget *item, const QPoint &position);
     QWidget* createSectionHeader(const QString &title, bool expanded = true);
     
-    QString m_rootPath;
+    QStringList m_rootPaths;
     
     QVBoxLayout *m_mainLayout = nullptr;
     
@@ -81,7 +90,9 @@ private:
     // Folder section
     QWidget *m_folderHeader = nullptr;
     QLabel *m_folderNameLabel = nullptr;
-    QTreeView *m_treeView = nullptr;
+    QWidget *m_rootsContainer = nullptr;
+    QVBoxLayout *m_rootsLayout = nullptr;
+    QVector<QTreeView*> m_treeViews;
     QFileSystemModel *m_fileSystemModel = nullptr;
     bool m_folderExpanded = true;
 

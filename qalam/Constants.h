@@ -4,7 +4,7 @@
 namespace Constants {
     const QString OrgName = "BaaEcosystem";
     const QString AppName = "Qalam";
-    const QString AppVersion = "3.5.0";
+    const QString AppVersion = "3.6.0";
     
     // Settings Keys
     const QString SettingsKeyRecentFiles = "RecentFiles";
@@ -20,11 +20,13 @@ namespace Constants {
     const QString SettingsKeySidebarWidth = "sidebarWidth";
     const QString SettingsKeyPanelHeight = "panelHeight";
     const QString SettingsKeyShowWelcome = "ShowWelcomeOnStartup";
+    const QString SettingsKeyCompletionUsage = "completion/usage-v1";
 
     // Session Keys
     const QString SessionKeyOpenFiles = "session/openFiles";
     const QString SessionKeyActiveTab = "session/activeTabIndex";
     const QString SessionKeyFolderPath = "session/folderPath";
+    const QString SessionKeyFolderPaths = "session/folderPaths";
     const QString SessionKeyWindowGeometry = "session/windowGeometry";
     const QString SessionKeyDocuments = "session/documents";
     const QString SessionKeyCleanShutdown = "session/cleanShutdown";
@@ -73,77 +75,77 @@ namespace Constants {
     const QString DefaultFontType = "Kawkab Mono";
 
     // ==========================================================================
-    // UI Colors - VS Code Dark+ (RTL-first)
+    // UI Colors - Qalam Sky (RTL-first)
     // ==========================================================================
     namespace Colors {
         // Surfaces
-        constexpr const char* WindowBackground = "#1f1f1f";
-        constexpr const char* EditorBackground = "#1f1f1f";
-        constexpr const char* SidebarBackground = "#181818";
-        constexpr const char* SidebarHeaderBackground = "#181818";
-        constexpr const char* ConsoleBackground = "#1f1f1f";
-        constexpr const char* MenuBackground = "#252526";
+        constexpr const char* WindowBackground = "#10243c";
+        constexpr const char* EditorBackground = "#10243c";
+        constexpr const char* SidebarBackground = "#0b1a2b";
+        constexpr const char* SidebarHeaderBackground = "#0d2035";
+        constexpr const char* ConsoleBackground = "#0e2137";
+        constexpr const char* MenuBackground = "#132a44";
 
         // Activity Bar
-        constexpr const char* ActivityBarBackground = "#181818";
-        constexpr const char* ActivityBarBorder = "#2b2b2b";
-        constexpr const char* IconInactive = "#c5c5c5";
-        constexpr const char* IconActive = "#ffffff";
-        constexpr const char* ActivityIndicator = "#007acc";
+        constexpr const char* ActivityBarBackground = "#091827";
+        constexpr const char* ActivityBarBorder = "#1d3b57";
+        constexpr const char* IconInactive = "#9fc5df";
+        constexpr const char* IconActive = "#f0f9ff";
+        constexpr const char* ActivityIndicator = "#38bdf8";
         constexpr const char* ActivityBarBadge = "#f14c4c";
 
         // Tabs
-        constexpr const char* TabBackground = "#2d2d2d";
-        constexpr const char* TabActiveBackground = "#1f1f1f";
-        constexpr const char* TabHoverBackground = "#2b2d2e";
-        constexpr const char* TabBorder = "#181818";
+        constexpr const char* TabBackground = "#132a44";
+        constexpr const char* TabActiveBackground = "#10243c";
+        constexpr const char* TabHoverBackground = "#183854";
+        constexpr const char* TabBorder = "#0b1a2b";
 
         // Accent
-        constexpr const char* Accent = "#007acc";
-        constexpr const char* AccentHover = "#1f8ad2";
-        constexpr const char* AccentAlt = "#006bb3";
+        constexpr const char* Accent = "#38bdf8";
+        constexpr const char* AccentHover = "#67d3fb";
+        constexpr const char* AccentAlt = "#0284c7";
 
         // Selection
-        constexpr const char* Selection = "#264f78";
-        constexpr const char* SelectionHighlight = "#264f7840";
-        constexpr const char* CurrentLineHighlight = "#2a2d2e";
+        constexpr const char* Selection = "#24577c";
+        constexpr const char* SelectionHighlight = "#38bdf840";
+        constexpr const char* CurrentLineHighlight = "#173653";
 
         // Inputs
-        constexpr const char* InputBackground = "#3c3c3c";
-        constexpr const char* Border = "#3c3c3c";
-        constexpr const char* BorderSubtle = "#2a2a2a";
-        constexpr const char* BorderFocus = "#007acc";
+        constexpr const char* InputBackground = "#173653";
+        constexpr const char* Border = "#28506f";
+        constexpr const char* BorderSubtle = "#1b3852";
+        constexpr const char* BorderFocus = "#38bdf8";
 
         // Text
-        constexpr const char* TextPrimary = "#d4d4d4";
-        constexpr const char* TextSecondary = "#cccccc";
-        constexpr const char* TextMuted = "#8a8a8a";
-        constexpr const char* TextDisabled = "#5a5a5a";
-        constexpr const char* ConsoleText = "#d4d4d4";
+        constexpr const char* TextPrimary = "#e6f4ff";
+        constexpr const char* TextSecondary = "#c7e2f4";
+        constexpr const char* TextMuted = "#82a9c2";
+        constexpr const char* TextDisabled = "#52758e";
+        constexpr const char* ConsoleText = "#d8efff";
 
         // Buttons / caption buttons
-        constexpr const char* ButtonHover = "#2a2d2e";
-        constexpr const char* ButtonPressed = "#3e3e3e";
-        constexpr const char* CaptionButtonHover = "#2a2d2e";
-        constexpr const char* CaptionButtonPressed = "#3e3e3e";
+        constexpr const char* ButtonHover = "#1b4260";
+        constexpr const char* ButtonPressed = "#235572";
+        constexpr const char* CaptionButtonHover = "#1b4260";
+        constexpr const char* CaptionButtonPressed = "#235572";
         constexpr const char* CloseButtonHover = "#e81123";
         constexpr const char* CloseButtonPressed = "#c50f1f";
 
         // Status Bar
-        constexpr const char* StatusBarBackground = "#007acc";
+        constexpr const char* StatusBarBackground = "#0284c7";
         constexpr const char* StatusBarForeground = "#ffffff";
-        constexpr const char* StatusBarHover = "#1f8ad2";
-        constexpr const char* StatusBarNoFolder = "#68217a";
+        constexpr const char* StatusBarHover = "#0ea5e9";
+        constexpr const char* StatusBarNoFolder = "#0369a1";
 
         // Breadcrumb
-        constexpr const char* BreadcrumbBackground = "#1f1f1f";
-        constexpr const char* BreadcrumbForeground = "#9e9e9e";
-        constexpr const char* BreadcrumbFocusForeground = "#e7e7e7";
+        constexpr const char* BreadcrumbBackground = "#10243c";
+        constexpr const char* BreadcrumbForeground = "#8fb8d2";
+        constexpr const char* BreadcrumbFocusForeground = "#e6f4ff";
 
         // Panel / Console Area
-        constexpr const char* PanelBackground = "#1f1f1f";
-        constexpr const char* PanelBorder = "#2a2a2a";
-        constexpr const char* PanelTabActive = "#1e1e1e";
+        constexpr const char* PanelBackground = "#0e2137";
+        constexpr const char* PanelBorder = "#1b3852";
+        constexpr const char* PanelTabActive = "#102b47";
         constexpr const char* PanelTabInactive = "transparent";
 
         // Problems colors
@@ -153,23 +155,23 @@ namespace Constants {
         constexpr const char* SuccessForeground = "#4ec9b0";
 
         // Borders (semantic aliases)
-        constexpr const char* BorderActive = "#007acc";
-        constexpr const char* LineNumberBorder = "#007acc";
+        constexpr const char* BorderActive = "#38bdf8";
+        constexpr const char* LineNumberBorder = "#38bdf8";
 
         // Scrollbar
         constexpr const char* ScrollbarBackground = "transparent";
-        constexpr const char* ScrollbarThumb = "#424242";
-        constexpr const char* ScrollbarThumbHover = "#4f4f4f";
+        constexpr const char* ScrollbarThumb = "#315873";
+        constexpr const char* ScrollbarThumbHover = "#42718f";
 
         // List / Tree
-        constexpr const char* ListHoverBackground = "#2a2d2e";
-        constexpr const char* ListSelectionBackground = "#094771";
-        constexpr const char* ListActiveBackground = "#094771";
-        constexpr const char* ListInactiveBackground = "#37373d";
+        constexpr const char* ListHoverBackground = "#173653";
+        constexpr const char* ListSelectionBackground = "#1d4f73";
+        constexpr const char* ListActiveBackground = "#1d4f73";
+        constexpr const char* ListInactiveBackground = "#1a344c";
 
         // Title Bar
-        constexpr const char* TitleBarBackground = "#181818";
-        constexpr const char* TitleBarActiveBackground = "#181818";
+        constexpr const char* TitleBarBackground = "#0b1a2b";
+        constexpr const char* TitleBarActiveBackground = "#0d2035";
     }
 
     // ==========================================================================
@@ -197,8 +199,9 @@ namespace Constants {
         constexpr int CaptionButtonHeight = 30;
         constexpr int CaptionIconSize = 14;
         constexpr int TitleMenuMinWidth = 420;
-        constexpr int CommandCenterMinWidth = 220;
+        constexpr int CommandCenterMinWidth = 200;
         constexpr int CommandCenterMaxWidth = 430;
+        constexpr int CommandCenterMinWindowWidth = 840;
 
         // Activity Bar (VS Code-like)
         constexpr int ActivityBarWidth = 48;

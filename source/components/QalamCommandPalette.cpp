@@ -235,23 +235,23 @@ void QalamCommandPalette::applyStyles()
         }
 
         #commandPaletteFrame {
-            background-color: #252526;
-            border: 1px solid #454545;
+            background-color: %3;
+            border: 1px solid %4;
             border-radius: 8px;
         }
 
         #commandPaletteInput {
-            background-color: #3c3c3c;
-            border: 1px solid #007acc;
+            background-color: %5;
+            border: 1px solid %6;
             border-radius: 4px;
             padding: 8px 10px;
-            color: #ffffff;
+            color: %1;
             font-size: 14px;
-            selection-background-color: #264f78;
+            selection-background-color: %7;
         }
 
         #commandPaletteList {
-            background-color: #252526;
+            background-color: %3;
             border: none;
             outline: 0;
         }
@@ -262,11 +262,11 @@ void QalamCommandPalette::applyStyles()
         }
 
         #commandPaletteList::item:hover {
-            background-color: #2a2d2e;
+            background-color: %8;
         }
 
         #commandPaletteList::item:selected {
-            background-color: #094771;
+            background-color: %9;
         }
 
         #commandPaletteRow {
@@ -286,13 +286,20 @@ void QalamCommandPalette::applyStyles()
 
         #commandPaletteShortcut {
             color: %2;
-            background-color: #333333;
-            border: 1px solid #454545;
+            background-color: %5;
+            border: 1px solid %4;
             border-radius: 4px;
             padding: 2px 6px;
             font-size: 11px;
         }
     )")
     .arg(Colors::TextPrimary)
-    .arg(Colors::TextMuted));
+    .arg(Colors::TextMuted)
+    .arg(Colors::MenuBackground)
+    .arg(Colors::Border)
+    .arg(Colors::InputBackground)
+    .arg(Colors::BorderFocus)
+    .arg(Colors::Selection)
+    .arg(Colors::ListHoverBackground)
+    .arg(Colors::ListSelectionBackground));
 }

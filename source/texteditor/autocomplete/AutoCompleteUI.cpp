@@ -1,4 +1,5 @@
 #include "AutoCompleteUI.h"
+#include "Constants.h"
 
 #include <QScrollBar>
 #include <QPainter>
@@ -52,39 +53,47 @@ QalamCompletionPopup::QalamCompletionPopup(QWidget *parent) : QListView(parent),
     setUniformItemSizes(true);
 
     // Style the list itself
-    setStyleSheet(
+    setStyleSheet(QString(
         "QListView { "
-        "   background-color: #1e202e; "
-        "   border: 1px solid #596273; "
+        "   background-color: %1; "
+        "   border: 1px solid %2; "
         "   border-radius: 6px; "
-        "   color: #abb2bf; "
+        "   color: %3; "
         "   outline: none; "
         "}"
-        "QListView::item:hover { background-color: #282c36; }"
-        "QListView::item:selected { background-color: #3e4451; }"
+        "QListView::item:hover { background-color: %4; }"
+        "QListView::item:selected { background-color: %5; }"
         "QScrollBar:vertical {"
-        "   background: #191b25; width: 10px; margin: 2px 1px;"
+        "   background: transparent; width: 10px; margin: 2px 1px;"
         "}"
         "QScrollBar::handle:vertical {"
-        "   background: #596273; min-height: 28px; border-radius: 4px;"
+        "   background: %6; min-height: 28px; border-radius: 4px;"
         "}"
-        "QScrollBar::handle:vertical:hover { background: #6c768a; }"
+        "QScrollBar::handle:vertical:hover { background: %7; }"
         "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }"
         "QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; }"
-        );
+        ).arg(Constants::Colors::MenuBackground,
+              Constants::Colors::Border,
+              Constants::Colors::TextSecondary,
+              Constants::Colors::ListHoverBackground,
+              Constants::Colors::ListSelectionBackground,
+              Constants::Colors::ScrollbarThumb,
+              Constants::Colors::ScrollbarThumbHover));
 
     // 2. The Info Panel (Label)
     infoLabel = new QLabel(this);
     infoLabel->setObjectName(QStringLiteral("completionInfoLabel"));
-    infoLabel->setStyleSheet(
+    infoLabel->setStyleSheet(QString(
         "QLabel { "
-        "   background-color: #2c313a; "
-        "   border-top: 1px solid #4793FF; "
-        "   color: #9da5b4; "
+        "   background-color: %1; "
+        "   border-top: 1px solid %2; "
+        "   color: %3; "
         "   padding: 8px 10px; "
         "   font-family: 'Tajawal'; "
         "}"
-        );
+        ).arg(Constants::Colors::PanelBackground,
+              Constants::Colors::Accent,
+              Constants::Colors::TextSecondary));
     infoLabel->setAlignment(Qt::AlignTop | Qt::AlignRight);
     infoLabel->setWordWrap(true);
     infoLabel->setTextFormat(Qt::RichText);
@@ -146,9 +155,11 @@ void QalamCompletionPopup::currentChanged(const QModelIndex &current, const QMod
     QString html = QString("<div dir='rtl'>"
                            "<span style='font-weight:bold; color:%1; font-size:14px;'>%2</span>"
                            "<br>"
-                           "<span style='font-family: Tajawal; font-size:12px; color: #dcdfe4;'>%3</span>"
+                           "<span style='font-family: Tajawal; font-size:12px; color:%3;'>%4</span>"
                            "</div>")
-                       .arg(colorStr, typeStr, desc.toHtmlEscaped().replace("\n", "<br>"));
+                       .arg(colorStr, typeStr,
+                            Constants::Colors::TextPrimary,
+                            desc.toHtmlEscaped().replace("\n", "<br>"));
     infoLabel->setText(html);
     updateFooterLayout();
 }
@@ -170,7 +181,9 @@ void QalamModernCompletionDelegate::paint(QPainter *painter, const QStyleOptionV
     CompletionType type = static_cast<CompletionType>(index.data(Qt::UserRole + 2).toInt());
 
     // Colors
-    QColor bgColor = (option.state & QStyle::State_Selected) ? QColor(62, 68, 81) : QColor(30, 32, 46); // Matches popup bg
+    QColor bgColor = (option.state & QStyle::State_Selected)
+        ? QColor(Constants::Colors::ListSelectionBackground)
+        : QColor(Constants::Colors::MenuBackground);
     QColor iconColor;
     switch (type) {
     case Keyword: iconColor = QColor(198, 120, 221); break;
@@ -267,9 +280,9 @@ void QalamModernCompletionDelegate::paint(QPainter *painter, const QStyleOptionV
     QRect textRect = option.rect.adjusted(10, 0, -iconWidth, 0);
 
     if (option.state & QStyle::State_Selected) {
-        painter->setPen(Qt::white);
+        painter->setPen(QColor(Constants::Colors::TextPrimary));
     } else {
-        painter->setPen(QColor(171, 178, 191));
+        painter->setPen(QColor(Constants::Colors::TextSecondary));
     }
 
     QFont mainFont("Tajawal", 10);

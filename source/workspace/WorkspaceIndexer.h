@@ -18,7 +18,9 @@ public:
     ~WorkspaceIndexer() override;
 
     void setRootPath(const QString &rootPath);
+    void setRootPaths(const QStringList &rootPaths);
     QString rootPath() const;
+    QStringList rootPaths() const;
     void refresh();
     bool isIndexing() const;
 
@@ -51,7 +53,7 @@ private:
     void clearWatchers();
 
     static IndexSnapshot buildSnapshot(
-        const QString &rootPath,
+        const QStringList &rootPaths,
         int requestId,
         const std::atomic_int &generation);
     static QVector<IgnoreRule> parseIgnoreRules(
@@ -66,7 +68,7 @@ private:
 
     static constexpr int MaximumNativeWatchPaths = 4096;
 
-    QString m_rootPath;
+    QStringList m_rootPaths;
     QStringList m_files;
     QVector<IgnoreRule> m_ignoreRules;
     QFileSystemWatcher m_fileWatcher;

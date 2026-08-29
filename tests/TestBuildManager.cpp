@@ -52,8 +52,14 @@ void TestBuildManager::keepsFullMenuVisibleInArabicTitleBar()
     auto *commandCenter = titleBar.findChild<QPushButton *>(
         QStringLiteral("commandCenterButton"));
     QVERIFY(commandCenter);
-    QVERIFY(qAbs(commandCenter->geometry().center().x()
-                 - titleBar.rect().center().x()) <= 1);
+    const int commandCenterX = commandCenter->geometry().center().x();
+    const int titleCenterX = titleBar.rect().center().x();
+    QVERIFY2(qAbs(commandCenterX - titleCenterX) <= 1,
+             qPrintable(QStringLiteral(
+                 "مركز الأوامر %1 لا يطابق مركز النافذة %2؛ هندسة المركز: %3")
+                 .arg(commandCenterX)
+                 .arg(titleCenterX)
+                 .arg(commandCenter->geometry().x())));
     for (QAction *action : menu.actions()) {
         const QRect actionRect = menu.actionGeometry(action);
         QVERIFY2(actionRect.isValid(), qPrintable(action->text()));

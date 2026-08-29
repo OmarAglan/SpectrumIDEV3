@@ -23,10 +23,9 @@ signals:
     void commandCenterClicked();
 
 protected:
+    bool eventFilter(QObject *watched, QEvent *event) override;
     void paintEvent(QPaintEvent *event) override;
     void resizeEvent(QResizeEvent *event) override;
-    // Mouse handling for dragging is handled by parent QalamWindow logic usually,
-    // or we can bubble it up. Using WM_NCHITTEST is better.
 
 private:
     QLabel *m_iconLabel;
@@ -37,9 +36,12 @@ private:
     QPushButton *m_maximizeBtn;
     QPushButton *m_closeBtn;
     QHBoxLayout *m_rightLayout{};
+    QWidget *m_menuWidget{};
+    int m_menuPreferredWidth{};
     int m_rightContentWidth{};
 
     void setupUi();
+    bool isInteractiveTitleBarChild(const QObject *object) const;
     void updateCommandCenterWidth();
     QPushButton* createCaptionButton(const QString &iconPath, const QString &objName);
 };

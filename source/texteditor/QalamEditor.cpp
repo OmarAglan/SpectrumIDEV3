@@ -21,6 +21,7 @@
 #include "highlighter/QalamSyntaxDefinition.h"
 #include <QTextCharFormat>
 #include "ui/QalamTheme.h"
+#include "autocomplete/QalamCompletionHistory.h"
 
 #include <algorithm>
 
@@ -1432,6 +1433,9 @@ void QalamEditor::showLanguageCompletions(const QVector<BaaCompletionItem> &item
         item.label = source.label;
         item.completion = source.newText;
         item.description = source.detail;
+        item.serverSortText = source.sortText;
+        item.context = source.context;
+        item.stableKey = source.stableKey;
         item.type = completionTypeForItem(source);
         item.snippet = source.insertTextFormat == 2;
         item.startLine = source.startLine;
@@ -1440,6 +1444,8 @@ void QalamEditor::showLanguageCompletions(const QVector<BaaCompletionItem> &item
         item.endCharacter = source.endCharacter;
         completions.push_back(std::move(item));
     }
+    QSettings completionSettings(Constants::OrgName, Constants::AppName);
+    QalamCompletionHistory::rank(completions, completionSettings);
     model->updateData(completions);
     if (completions.empty()) {
         c->popup()->hide();
@@ -1520,6 +1526,10 @@ void QalamEditor::insertCompletion(const CompletionItem &item) {
     const int start = documentPosition(item.startLine, item.startCharacter);
     const int end = documentPosition(item.endLine, item.endCharacter);
     if (start < 0 or end < start) return;
+
+    QSettings completionSettings(Constants::OrgName, Constants::AppName);
+    QalamCompletionHistory::record(
+        completionSettings, item.context, item.stableKey);
 
     QTextCursor tc = textCursor();
     tc.setPosition(start);

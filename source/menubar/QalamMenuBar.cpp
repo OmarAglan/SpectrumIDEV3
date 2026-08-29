@@ -25,6 +25,7 @@ QalamMenuBar::QalamMenuBar(QWidget* parent) : QMenuBar(parent) {
     newAction = new QAction("جديد", parent);
     openFileAction = new QAction("فتح ملف", parent);
     openFolderAction = new QAction("فتح مجلد", parent);
+    addFolderAction = new QAction("إضافة مجلد إلى مساحة العمل", parent);
     reopenLastProjectAction = new QAction("إعادة فتح آخر مشروع", parent);
     saveAction = new QAction("حفظ", parent);
     saveAsAction = new QAction("حفظ باسم", parent);
@@ -78,6 +79,7 @@ QalamMenuBar::QalamMenuBar(QWidget* parent) : QMenuBar(parent) {
     fileMenu->addAction(newAction);
     fileMenu->addAction(openFileAction);
     fileMenu->addAction(openFolderAction);
+    fileMenu->addAction(addFolderAction);
     fileMenu->addAction(reopenLastProjectAction);
     fileMenu->addSeparator();
     fileMenu->addAction(saveAction);
@@ -123,6 +125,7 @@ QalamMenuBar::QalamMenuBar(QWidget* parent) : QMenuBar(parent) {
     connect(newAction, &QAction::triggered, this, &QalamMenuBar::onNewAction);
     connect(openFileAction, &QAction::triggered, this, &QalamMenuBar::onOpenFileAction);
     connect(openFolderAction, &QAction::triggered, this, &QalamMenuBar::onOpenFolderAction);
+    connect(addFolderAction, &QAction::triggered, this, &QalamMenuBar::onAddFolderAction);
     connect(reopenLastProjectAction, &QAction::triggered,
             this, &QalamMenuBar::onReopenLastProjectAction);
     connect(saveAction, &QAction::triggered, this, &QalamMenuBar::onSaveAction);
@@ -164,6 +167,7 @@ QalamMenuBar::QalamMenuBar(QWidget* parent) : QMenuBar(parent) {
 void QalamMenuBar::onNewAction() { emit newRequested(); }
 void QalamMenuBar::onOpenFileAction() { emit openFileRequested(); }
 void QalamMenuBar::onOpenFolderAction() { emit openFolderRequested(); }
+void QalamMenuBar::onAddFolderAction() { emit addFolderRequested(); }
 void QalamMenuBar::onReopenLastProjectAction() { emit reopenLastProjectRequested(); }
 void QalamMenuBar::onSaveAction() { emit saveRequested(); }
 void QalamMenuBar::onSaveAsAction() { emit saveAsRequested(); }

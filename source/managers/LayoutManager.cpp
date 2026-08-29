@@ -235,10 +235,19 @@ void LayoutManager::toggleSidebar()
 // ===================================================================
 void LayoutManager::loadFolder(const QString &path)
 {
-    if (!path.isEmpty() and QDir(path).exists()) {
+    loadFolders(path.isEmpty() ? QStringList{} : QStringList{path});
+}
+
+void LayoutManager::loadFolders(const QStringList &paths)
+{
+    QStringList existingPaths;
+    for (const QString &path : paths) {
+        if (not path.isEmpty() and QDir(path).exists()) existingPaths.push_back(path);
+    }
+    if (not existingPaths.isEmpty()) {
         // Update sidebar with folder path and show it
         if (m_sidebar and m_sidebar->explorerView()) {
-            m_sidebar->explorerView()->setRootPath(path);
+            m_sidebar->explorerView()->setRootPaths(existingPaths);
             m_sidebar->setCurrentView(QalamActivityBar::ViewType::Explorer);
             m_sidebar->show();
         }
@@ -250,7 +259,7 @@ void LayoutManager::loadFolder(const QString &path)
 
         // Update breadcrumb project root
         if (m_breadcrumb) {
-            m_breadcrumb->setProjectRoot(path);
+            m_breadcrumb->setProjectRoot(existingPaths.constFirst());
         }
 
         // Update status bar
@@ -258,6 +267,9 @@ void LayoutManager::loadFolder(const QString &path)
             m_statusBar->setFolderOpen(true);
         }
     } else {
+        if (m_sidebar and m_sidebar->explorerView()) {
+            m_sidebar->explorerView()->setRootPaths({});
+        }
         if (m_statusBar) {
             m_statusBar->setFolderOpen(false);
         }
@@ -268,13 +280,13 @@ void LayoutManager::loadFolder(const QString &path)
 // Handle view changes from the activity bar
 // ===================================================================
 void LayoutManager::onActivityViewChanged(QalamActivityBar::ViewType view,
-                                          const QString &folderPath)
+                                          const QStringList &folderPaths)
 {
     m_sidebar->setCurrentView(view);
     m_sidebar->show();
 
     // Update the sidebar root path when switching to Explorer
-    if (view == QalamActivityBar::ViewType::Explorer and !folderPath.isEmpty()) {
-        m_sidebar->explorerView()->setRootPath(folderPath);
+    if (view == QalamActivityBar::ViewType::Explorer and !folderPaths.isEmpty()) {
+        m_sidebar->explorerView()->setRootPaths(folderPaths);
     }
 }

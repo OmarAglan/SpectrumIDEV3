@@ -85,7 +85,8 @@ QString localizedProjectSearchNumber(qlonglong number)
 
 }
 
-Qalam::Qalam(const QString& filePath, QWidget *parent)
+Qalam::Qalam(const QString& filePath, QWidget *parent,
+             const QString &sessionSettingsPath)
     : QalamWindow(parent)
 {
 
@@ -105,7 +106,8 @@ Qalam::Qalam(const QString& filePath, QWidget *parent)
     m_languageClient = new BaaLanguageClient(this);
     m_languageClient->setCompilerProgram(BuildManager::resolveCompilerProgram());
     m_languageClient->setTakweenProgram(BuildManager::resolveTakweenProgram());
-    m_sessionManager = new SessionManager(tabWidget, this);
+    m_sessionManager = new SessionManager(
+        tabWidget, this, sessionSettingsPath);
     m_sessionSaveTimer = new QTimer(this);
     m_sessionSaveTimer->setSingleShot(true);
     m_sessionSaveTimer->setInterval(750);
@@ -192,8 +194,8 @@ Qalam::Qalam(const QString& filePath, QWidget *parent)
         }
 
         // Restore folder
-        if (not session.folderPath.isEmpty()) {
-            loadFolder(session.folderPath);
+        if (not session.folderPaths.isEmpty()) {
+            loadFolders(session.folderPaths);
         }
 
         // Restore saved files and any crash-recovery buffers.
@@ -228,7 +230,7 @@ Qalam::Qalam(const QString& filePath, QWidget *parent)
 
 Qalam::~Qalam() {
     if (not m_sessionSavedCleanly) {
-        m_sessionManager->saveSession(folderPath, saveGeometry());
+        m_sessionManager->saveSession(folderPaths, saveGeometry());
     }
 
     // Save user preferences
@@ -301,6 +303,7 @@ void Qalam::connectSignals()
     connect(menuBar, &QalamMenuBar::cleanRequested, this, &Qalam::cleanTakweenProject);
     connect(menuBar, &QalamMenuBar::aboutRequested, this, &Qalam::aboutQalam);
     connect(menuBar, &QalamMenuBar::openFolderRequested, this, &Qalam::handleOpenFolderMenu);
+    connect(menuBar, &QalamMenuBar::addFolderRequested, this, &Qalam::handleAddFolderMenu);
     connect(menuBar, &QalamMenuBar::reopenLastProjectRequested,
             this, &Qalam::reopenLastProject);
     connect(menuBar, &QalamMenuBar::commandPaletteRequested, this, &Qalam::showCommandPalette);
@@ -770,6 +773,8 @@ void Qalam::connectSignals()
             this, &Qalam::renameWorkspaceEntry);
     connect(sidebar, &QalamSidebar::deleteEntryRequested,
             this, &Qalam::deleteWorkspaceEntry);
+    connect(sidebar, &QalamSidebar::removeRootRequested,
+            this, &Qalam::removeWorkspaceRoot);
     connect(sidebar, &QalamSidebar::searchRequested, this, &Qalam::performProjectSearch);
     connect(sidebar, &QalamSidebar::searchCancelled,
             m_projectSearchService, &ProjectSearchService::cancel);
@@ -903,7 +908,7 @@ void Qalam::closeEvent(QCloseEvent *event) {
     }
 
     if (m_sessionSaveTimer) m_sessionSaveTimer->stop();
-    m_sessionManager->saveSession(folderPath, saveGeometry(), true);
+    m_sessionManager->saveSession(folderPaths, saveGeometry(), true);
     m_sessionSavedCleanly = true;
     event->accept();
 }
@@ -963,30 +968,48 @@ void Qalam::toggleConsole()
 
 void Qalam::loadFolder(const QString &path)
 {
-    const QFileInfo folderInfo(path);
-    if (not folderInfo.isDir()) return;
+    loadFolders(path.isEmpty() ? QStringList{} : QStringList{path});
+}
 
-    const QString canonicalPath = folderInfo.canonicalFilePath();
-    this->folderPath = canonicalPath.isEmpty()
-        ? QDir::cleanPath(folderInfo.absoluteFilePath())
-        : QDir::cleanPath(canonicalPath);
+void Qalam::loadFolders(const QStringList &paths)
+{
+    QStringList normalizedRoots;
+    for (const QString &path : paths) {
+        const QFileInfo folderInfo(path);
+        if (not folderInfo.isDir()) continue;
+
+        const QString canonicalPath = folderInfo.canonicalFilePath();
+        const QString normalized = QDir::cleanPath(canonicalPath.isEmpty()
+            ? folderInfo.absoluteFilePath() : canonicalPath);
+        if (not normalizedRoots.contains(normalized, Qt::CaseInsensitive))
+            normalizedRoots.push_back(normalized);
+    }
+    if (normalizedRoots.isEmpty()) return;
+
+    folderPaths = normalizedRoots;
+    folderPath = folderPaths.constFirst();
 
     QSettings settings(Constants::OrgName, Constants::AppName);
     QStringList recentFolders = settings.value(
         Constants::SettingsKeyRecentFolders).toStringList();
-    recentFolders.removeAll(this->folderPath);
-    recentFolders.prepend(this->folderPath);
+    for (auto it = folderPaths.crbegin(); it != folderPaths.crend(); ++it) {
+        recentFolders.removeAll(*it);
+        recentFolders.prepend(*it);
+    }
     while (recentFolders.size() > 10) recentFolders.removeLast();
     settings.setValue(Constants::SettingsKeyRecentFolders, recentFolders);
-    settings.setValue(Constants::SettingsKeyLastOpenLocation, this->folderPath);
+    settings.setValue(Constants::SettingsKeyLastOpenLocation, folderPath);
     if (m_projectSearchService) {
         m_projectSearchService->cancel();
         m_projectSearchService->invalidateCache();
     }
     if (m_workspaceIndexer) {
-        m_workspaceIndexer->setRootPath(this->folderPath);
+        m_workspaceIndexer->setRootPaths(folderPaths);
     }
-    m_layoutManager->loadFolder(this->folderPath);
+    if (m_languageClient) {
+        m_languageClient->setWorkspaceRoots(folderPaths);
+    }
+    m_layoutManager->loadFolders(folderPaths);
     scheduleSessionSave();
 }
 
@@ -1014,6 +1037,56 @@ void Qalam::openFolderFromPath(const QString &path)
     }
 
     removeWelcomeTabIfPresent();
+}
+
+void Qalam::handleAddFolderMenu()
+{
+    QSettings settings(Constants::OrgName, Constants::AppName);
+    const QString initialDirectory = not folderPath.isEmpty()
+        ? folderPath
+        : settings.value(Constants::SettingsKeyLastOpenLocation,
+                         QDir::homePath()).toString();
+    const QString selectedPath = QFileDialog::getExistingDirectory(
+        this, QStringLiteral("إضافة مجلد إلى مساحة العمل"), initialDirectory);
+    if (selectedPath.isEmpty()) return;
+
+    QStringList updatedRoots = folderPaths;
+    updatedRoots.push_back(selectedPath);
+    const int previousCount = folderPaths.size();
+    loadFolders(updatedRoots);
+    if (folderPaths.size() == previousCount and m_layoutManager and
+        m_layoutManager->statusBar()) {
+        m_layoutManager->statusBar()->showMessage(
+            QStringLiteral("المجلد موجود بالفعل في مساحة العمل"), 3500);
+    }
+    removeWelcomeTabIfPresent();
+}
+
+QString Qalam::workspaceRootForPath(const QString &path) const
+{
+    if (path.isEmpty()) return folderPath;
+    const QString cleanPath = QDir::fromNativeSeparators(
+        QDir::cleanPath(QFileInfo(path).absoluteFilePath()));
+    for (const QString &root : folderPaths) {
+        const QString relative = QDir::fromNativeSeparators(
+            QDir(root).relativeFilePath(cleanPath));
+        if (not QDir::isAbsolutePath(relative) and
+            relative != QStringLiteral("..") and
+            not relative.startsWith(QStringLiteral("../"))) {
+            return root;
+        }
+    }
+    return folderPath;
+}
+
+QString Qalam::workspaceRelativePath(const QString &path) const
+{
+    const QString root = workspaceRootForPath(path);
+    const QString relative = root.isEmpty()
+        ? QFileInfo(path).fileName()
+        : QDir(root).relativeFilePath(path);
+    if (folderPaths.size() <= 1) return relative;
+    return QFileInfo(root).fileName() + QLatin1Char('/') + relative;
 }
 
 void Qalam::reopenLastProject()
@@ -1457,7 +1530,7 @@ void Qalam::scheduleSessionSave()
 void Qalam::saveSessionCheckpoint()
 {
     if (m_sessionManager and not m_sessionSavedCleanly) {
-        m_sessionManager->saveSession(folderPath, saveGeometry());
+        m_sessionManager->saveSession(folderPaths, saveGeometry());
     }
 }
 
@@ -1753,7 +1826,8 @@ void Qalam::refreshWorkspaceAfterFileOperation()
 
 void Qalam::createWorkspaceFile(const QString &directoryPath)
 {
-    if (folderPath.isEmpty()) return;
+    const QString rootPath = workspaceRootForPath(directoryPath);
+    if (rootPath.isEmpty()) return;
 
     bool accepted{};
     const QString name = QInputDialog::getText(
@@ -1766,7 +1840,7 @@ void Qalam::createWorkspaceFile(const QString &directoryPath)
     if (not accepted) return;
 
     const WorkspaceFileResult result = WorkspaceFileService::createFile(
-        folderPath, directoryPath, name);
+        rootPath, directoryPath, name);
     if (not result.success) {
         QMessageBox::warning(this, QStringLiteral("تعذر إنشاء الملف"), result.error);
         return;
@@ -1778,7 +1852,8 @@ void Qalam::createWorkspaceFile(const QString &directoryPath)
 
 void Qalam::createWorkspaceFolder(const QString &directoryPath)
 {
-    if (folderPath.isEmpty()) return;
+    const QString rootPath = workspaceRootForPath(directoryPath);
+    if (rootPath.isEmpty()) return;
 
     bool accepted{};
     const QString name = QInputDialog::getText(
@@ -1791,7 +1866,7 @@ void Qalam::createWorkspaceFolder(const QString &directoryPath)
     if (not accepted) return;
 
     const WorkspaceFileResult result = WorkspaceFileService::createDirectory(
-        folderPath, directoryPath, name);
+        rootPath, directoryPath, name);
     if (not result.success) {
         QMessageBox::warning(this, QStringLiteral("تعذر إنشاء المجلد"), result.error);
         return;
@@ -1802,7 +1877,8 @@ void Qalam::createWorkspaceFolder(const QString &directoryPath)
 
 void Qalam::renameWorkspaceEntry(const QString &entryPath)
 {
-    if (folderPath.isEmpty()) return;
+    const QString rootPath = workspaceRootForPath(entryPath);
+    if (rootPath.isEmpty()) return;
 
     const QFileInfo entryInfo(entryPath);
     const QString oldPath = entryInfo.canonicalFilePath().isEmpty()
@@ -1823,7 +1899,7 @@ void Qalam::renameWorkspaceEntry(const QString &entryPath)
     if (not accepted or newName == entryInfo.fileName()) return;
 
     const WorkspaceFileResult result = WorkspaceFileService::renameEntry(
-        folderPath, oldPath, newName);
+        rootPath, oldPath, newName);
     if (not result.success) {
         QMessageBox::warning(this, QStringLiteral("تعذرت إعادة التسمية"), result.error);
         return;
@@ -1871,7 +1947,8 @@ void Qalam::renameWorkspaceEntry(const QString &entryPath)
 
 void Qalam::deleteWorkspaceEntry(const QString &entryPath)
 {
-    if (folderPath.isEmpty()) return;
+    const QString rootPath = workspaceRootForPath(entryPath);
+    if (rootPath.isEmpty()) return;
 
     const QFileInfo entryInfo(entryPath);
     const QString canonicalPath = entryInfo.canonicalFilePath().isEmpty()
@@ -1904,7 +1981,7 @@ void Qalam::deleteWorkspaceEntry(const QString &entryPath)
     }
 
     const WorkspaceFileResult result = WorkspaceFileService::removeEntry(
-        folderPath, canonicalPath);
+        rootPath, canonicalPath);
     if (not result.success) {
         QMessageBox::warning(this, QStringLiteral("تعذر الحذف"), result.error);
         return;
@@ -1919,6 +1996,25 @@ void Qalam::deleteWorkspaceEntry(const QString &entryPath)
     refreshWorkspaceAfterFileOperation();
     syncOpenEditors();
     ensureEditorSurface();
+}
+
+void Qalam::removeWorkspaceRoot(const QString &rootPath)
+{
+    if (folderPaths.size() <= 1) {
+        if (m_layoutManager and m_layoutManager->statusBar()) {
+            m_layoutManager->statusBar()->showMessage(
+                QStringLiteral("لا يمكن إزالة الجذر الوحيد؛ افتح مجلدًا آخر بدلًا منه"),
+                4500);
+        }
+        return;
+    }
+    QStringList updatedRoots;
+    for (const QString &candidate : folderPaths) {
+        if (candidate.compare(rootPath, Qt::CaseInsensitive) != 0)
+            updatedRoots.push_back(candidate);
+    }
+    if (updatedRoots.size() == folderPaths.size()) return;
+    loadFolders(updatedRoots);
 }
 
 void Qalam::performProjectSearch(const QString &query, bool caseSensitive, bool wholeWord, bool regex)
@@ -2180,6 +2276,7 @@ bool Qalam::runCommandById(const QString &commandId)
     if (commandId == "file.new") { newFileFromUi(); return true; }
     if (commandId == "file.open") { openFileFromUi(QString()); return true; }
     if (commandId == "folder.open") { handleOpenFolderMenu(); return true; }
+    if (commandId == "folder.add") { handleAddFolderMenu(); return true; }
     if (commandId == "folder.reopenLast") { reopenLastProject(); return true; }
     if (commandId == "file.save") { m_fileManager->saveFile(); return true; }
     if (commandId == "file.saveAs") { m_fileManager->saveFileAs(); return true; }
@@ -2286,7 +2383,7 @@ void Qalam::showQuickOpen()
         QVector<QalamCommandPalette::Entry> entries;
         entries.reserve(qMin(files.size(), 600));
         for (const QString &file : files) {
-            const QString relative = QDir(folderPath).relativeFilePath(file);
+            const QString relative = workspaceRelativePath(file);
             entries.push_back({
                 "file.open.path", relative, QFileInfo(file).absolutePath(),
                 QString(), file});
@@ -2363,9 +2460,7 @@ void Qalam::showWorkspaceSymbols()
             QVector<QalamCommandPalette::Entry> entries;
             entries.reserve(symbols.size());
             for (const BaaWorkspaceSymbol &symbol : symbols) {
-                const QString relativePath = folderPath.isEmpty()
-                    ? QFileInfo(symbol.filePath).fileName()
-                    : QDir(folderPath).relativeFilePath(symbol.filePath);
+                const QString relativePath = workspaceRelativePath(symbol.filePath);
                 QStringList context;
                 if (not symbol.containerName.isEmpty())
                     context.push_back(symbol.containerName);
@@ -2771,7 +2866,7 @@ void Qalam::updateWindowTitle() {
 
 void Qalam::onActivityViewChanged(QalamActivityBar::ViewType view)
 {
-    m_layoutManager->onActivityViewChanged(view, folderPath);
+    m_layoutManager->onActivityViewChanged(view, folderPaths);
 }
 
 void Qalam::onSidebarFileSelected(const QString &filePath)
@@ -2892,8 +2987,8 @@ void Qalam::scheduleEditorAnalysis(QalamEditor *editor)
 
     const QString projectRoot =
         BuildManager::findTakweenProjectRoot(normalizedPath);
-    const QString workspaceRoot =
-        projectRoot.isEmpty() ? folderPath : projectRoot;
+    const QString workspaceRoot = projectRoot.isEmpty()
+        ? workspaceRootForPath(normalizedPath) : projectRoot;
     const int previousVersion =
         editor->property("qalam.lsp.version").toInt();
     const int version = m_languageClient->synchronizeDocument(

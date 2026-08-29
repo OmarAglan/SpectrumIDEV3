@@ -55,6 +55,7 @@ QVector<CommandRegistry::Command> CommandRegistry::defaultCommands()
         {"file.new", "ملف: ملف جديد", "إنشاء ملف باء جديد", "Ctrl+N"},
         {"file.open", "ملف: فتح ملف", "اختيار ملف من الجهاز", "Ctrl+O"},
         {"folder.open", "ملف: فتح مجلد", "فتح مجلد عمل أو مشروع", ""},
+        {"folder.add", "ملف: إضافة مجلد إلى مساحة العمل", "إضافة جذر آخر مع إبقاء المجلدات المفتوحة", ""},
         {"folder.reopenLast", "ملف: إعادة فتح آخر مشروع", "فتح أحدث مجلد مشروع محفوظ", "Ctrl+Shift+T"},
         {"file.save", "ملف: حفظ", "حفظ الملف الحالي", "Ctrl+S"},
         {"file.saveAs", "ملف: حفظ باسم", "حفظ نسخة باسم جديد", "Ctrl+Shift+S"},

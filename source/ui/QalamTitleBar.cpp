@@ -6,7 +6,10 @@
 #include <QStyleOptionMenuItem>
 #include <QSizePolicy>
 #include <QGridLayout>
+#include <QMenuBar>
 #include <QResizeEvent>
+#include <QMouseEvent>
+#include <QWindow>
 
 QalamTitleBar::QalamTitleBar(QWidget *parent) : QWidget(parent) {
     setLayoutDirection(Qt::LeftToRight);
@@ -34,7 +37,10 @@ void QalamTitleBar::setupUi() {
     m_commandCenterBtn->setObjectName("commandCenterButton");
     m_commandCenterBtn->setIcon(QIcon(QStringLiteral(":/icons/resources/search.svg")));
     m_commandCenterBtn->setIconSize(QSize(14, 14));
-    m_commandCenterBtn->setMinimumSize(Layout::CommandCenterMinWidth, 22);
+    // Keep the layout's true minimum compact. A fixed 220-430 px child made
+    // the frameless window refuse to shrink far enough for the responsive
+    // breakpoint to run, which felt like a frozen resize/drag operation.
+    m_commandCenterBtn->setMinimumSize(0, 22);
     m_commandCenterBtn->setMaximumSize(Layout::CommandCenterMaxWidth, 22);
     m_commandCenterBtn->setSizePolicy(QSizePolicy::Expanding,
                                       QSizePolicy::Fixed);
@@ -51,9 +57,8 @@ void QalamTitleBar::setupUi() {
     connect(m_maximizeBtn, &QPushButton::clicked, this, &QalamTitleBar::maximizeRestoreClicked);
     connect(m_closeBtn, &QPushButton::clicked, this, &QalamTitleBar::closeClicked);
 
-    // Three equal logical zones keep the Command Center at the actual window
-    // center even though the Arabic menu group on the right is much wider than
-    // the logo on the left.
+    // The layout owns only the edge content. The command centre is overlaid at
+    // the physical window centre when enough symmetric free space exists.
     auto *layout = new QGridLayout(this);
     layout->setContentsMargins(8, 0, 0, 0);
     layout->setSpacing(0);
@@ -70,7 +75,9 @@ void QalamTitleBar::setupUi() {
     leftLayout->addStretch(1);
     layout->addWidget(leftZone, 0, 0);
 
-    layout->addWidget(m_commandCenterBtn, 0, 1);
+    // The command centre is positioned as an overlay in resizeEvent. Keeping
+    // it out of the layout prevents its preferred width from imposing a large
+    // minimum width on the frameless window.
 
     auto *rightZone = new QWidget(this);
     rightZone->setLayoutDirection(Qt::LeftToRight);
@@ -89,6 +96,62 @@ void QalamTitleBar::setupUi() {
     m_rightLayout->addWidget(controlsWidget);
     m_rightContentWidth = 3 * Layout::CaptionButtonWidth;
     layout->addWidget(rightZone, 0, 2);
+
+    // Forward presses from the otherwise passive title-bar zones to Qt's
+    // native system move operation.  This keeps Windows Snap, drag-to-restore,
+    // mixed-DPI monitors and repeated dragging under the operating system's
+    // control instead of emulating movement with widget coordinates.
+    installEventFilter(this);
+    for (QWidget *child : findChildren<QWidget*>()) {
+        child->installEventFilter(this);
+    }
+}
+
+bool QalamTitleBar::isInteractiveTitleBarChild(const QObject *object) const
+{
+    for (const QObject *candidate = object;
+         candidate and candidate != this;
+         candidate = candidate->parent()) {
+        if (qobject_cast<const QPushButton*>(candidate) or
+            qobject_cast<const QMenuBar*>(candidate)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool QalamTitleBar::eventFilter(QObject *watched, QEvent *event)
+{
+    if (not isInteractiveTitleBarChild(watched)) {
+        if (event->type() == QEvent::MouseButtonDblClick) {
+            auto *mouseEvent = static_cast<QMouseEvent*>(event);
+            if (mouseEvent->button() == Qt::LeftButton) {
+                emit maximizeRestoreClicked();
+                return true;
+            }
+        }
+        if (event->type() == QEvent::MouseButtonPress) {
+            auto *mouseEvent = static_cast<QMouseEvent*>(event);
+            if (mouseEvent->button() == Qt::LeftButton) {
+#if defined(Q_OS_WIN)
+                // QalamWindow returns HTCAPTION for passive title-bar areas,
+                // so Windows owns moving, Snap, drag-to-restore and DPI
+                // transitions.  Calling startSystemMove() as well created two
+                // competing native move loops and made repeated drags appear
+                // intermittently stuck.
+                return QWidget::eventFilter(watched, event);
+#else
+                QWidget *topLevel = window();
+                if (topLevel and topLevel->windowHandle() and
+                    topLevel->windowHandle()->startSystemMove()) {
+                    mouseEvent->accept();
+                    return true;
+                }
+#endif
+            }
+        }
+    }
+    return QWidget::eventFilter(watched, event);
 }
 
 void QalamTitleBar::paintEvent(QPaintEvent *) {
@@ -143,11 +206,11 @@ void QalamTitleBar::addMenuBar(QWidget *menu) {
     menuWidth += 2 * menu->style()->pixelMetric(
         QStyle::PM_MenuBarHMargin, nullptr, menu);
     menuWidth = qMax(menuWidth, Constants::Layout::TitleMenuMinWidth);
-    menu->setMinimumWidth(menuWidth);
+    menu->setMinimumWidth(0);
     menu->setMaximumWidth(menuWidth);
     menu->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
-    m_rightContentWidth = menuWidth
-        + (3 * Constants::Layout::CaptionButtonWidth);
+    m_menuWidget = menu;
+    m_menuPreferredWidth = menuWidth;
 
     // The controls widget is the final item in the right zone. Insert the menu
     // immediately before it and after the flexible leading space.
@@ -162,11 +225,36 @@ void QalamTitleBar::addMenuBar(QWidget *menu) {
 void QalamTitleBar::updateCommandCenterWidth()
 {
     if (not m_commandCenterBtn) return;
-    const int available = width() - (2 * m_rightContentWidth);
-    const int targetWidth = qBound(Constants::Layout::CommandCenterMinWidth,
-                                   available,
-                                   Constants::Layout::CommandCenterMaxWidth);
-    m_commandCenterBtn->setFixedWidth(targetWidth);
+    const int controlsWidth = 3 * Constants::Layout::CaptionButtonWidth;
+    int menuWidth = 0;
+    if (m_menuWidget) {
+        const int availableForMenu = qMax(
+            150, width() - controlsWidth - Constants::Layout::IconSize - 32);
+        menuWidth = qMin(m_menuPreferredWidth, availableForMenu);
+        m_menuWidget->setFixedWidth(menuWidth);
+    }
+    m_rightContentWidth = controlsWidth + menuWidth;
+
+    // Use the space that the layout can actually give the command centre.
+    // Mirroring the right-side width on both sides made it disappear on
+    // ordinary laptop-sized windows even though ample space remained.
+    const int centeredAvailable = width() - (2 * m_rightContentWidth);
+    const bool showCommandCenter =
+        width() >= Constants::Layout::CommandCenterMinWindowWidth
+        and centeredAvailable >= Constants::Layout::CommandCenterMinWidth;
+    m_commandCenterBtn->setVisible(showCommandCenter);
+    if (showCommandCenter) {
+        int targetWidth = qMin(centeredAvailable,
+                               Constants::Layout::CommandCenterMaxWidth);
+        // Matching parity keeps QRect::center() exactly aligned.
+        if ((targetWidth & 1) != (width() & 1)) --targetWidth;
+        m_commandCenterBtn->setGeometry(
+            (width() - targetWidth) / 2,
+            (height() - 22) / 2,
+            targetWidth,
+            22);
+        m_commandCenterBtn->raise();
+    }
 }
 
 QPushButton* QalamTitleBar::createCaptionButton(const QString &iconPath, const QString &objName) {

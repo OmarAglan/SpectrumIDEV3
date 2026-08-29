@@ -3,6 +3,7 @@
 #include "QalamActivityBar.h"
 #include <QObject>
 #include <QList>
+#include <QStringList>
 
 class QalamEditorWorkspace;
 class QMainWindow;
@@ -46,9 +47,11 @@ public:
 
     /// Load a folder into the sidebar and update related components
     void loadFolder(const QString &path);
+    void loadFolders(const QStringList &paths);
 
     /// Handle view changes from the activity bar
-    void onActivityViewChanged(QalamActivityBar::ViewType view, const QString &folderPath);
+    void onActivityViewChanged(QalamActivityBar::ViewType view,
+                               const QStringList &folderPaths);
 
 signals:
     /// Emitted when the sidebar file explorer requests opening a folder

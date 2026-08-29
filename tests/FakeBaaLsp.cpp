@@ -360,6 +360,10 @@ int main(int argc, char *argv[])
                     {"sortText", "2الرئيسية"},
                     {"kind", 3},
                     {"insertTextFormat", 1},
+                    {"data", QJsonObject{
+                        {"baaContext", "call-argument"},
+                        {"baaStableKey", "function:الرئيسية"}
+                    }},
                     {"textEdit", QJsonObject{
                         {"range", range}, {"newText", "الرئيسية"}
                     }}
@@ -371,6 +375,10 @@ int main(int argc, char *argv[])
                     {"sortText", "0قيمة_محلية"},
                     {"kind", 6},
                     {"insertTextFormat", 1},
+                    {"data", QJsonObject{
+                        {"baaContext", "call-argument"},
+                        {"baaStableKey", "variable:قيمة_محلية"}
+                    }},
                     {"textEdit", QJsonObject{
                         {"range", range}, {"newText", "قيمة_محلية"}
                     }}
@@ -382,6 +390,10 @@ int main(int argc, char *argv[])
                     {"sortText", "1من_واجهة"},
                     {"kind", 3},
                     {"insertTextFormat", 1},
+                    {"data", QJsonObject{
+                        {"baaContext", "call-argument"},
+                        {"baaStableKey", "function:من_واجهة"}
+                    }},
                     {"textEdit", QJsonObject{
                         {"range", range}, {"newText", "من_واجهة"}
                     }}

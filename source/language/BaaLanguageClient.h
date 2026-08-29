@@ -45,6 +45,8 @@ public:
     explicit BaaLanguageClient(QObject *parent = nullptr);
     ~BaaLanguageClient() override;
 
+    void setWorkspaceRoots(const QStringList &workspaceRoots);
+
     int synchronizeDocument(const QString &filePath,
                             const QString &text,
                             int editorRevision,
@@ -323,6 +325,7 @@ private:
     LspMessageFramer m_framer;
     QHash<QString, Document> m_documents;
     QHash<QString, int> m_workspaceRootReferences;
+    QSet<QString> m_configuredWorkspaceRoots;
     QSet<QString> m_serverWorkspaceRoots;
     QHash<QString, bool> m_watchedFileExistence;
     QHash<QString, int> m_pendingWatchedFileChanges;

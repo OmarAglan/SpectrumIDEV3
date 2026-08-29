@@ -1,6 +1,7 @@
 #include "QalamSettings.h"
 #include "../../qalam/Constants.h"
 #include "ToolchainDiscovery.h"
+#include "texteditor/autocomplete/QalamCompletionHistory.h"
 
 #include <QFileDialog>
 #include <QFileInfo>
@@ -10,7 +11,9 @@ QalamSettings::QalamSettings(QWidget* parent) : QWidget(parent) {
     setWindowTitle("الإعدادات");
     setWindowFlags(Qt::Window | Qt::WindowCloseButtonHint);
     setMinimumSize(800, 600);
-    setStyleSheet("color: #dddddd; background-color: #1e202e;");
+    setStyleSheet(QStringLiteral("color: %1; background-color: %2;")
+                      .arg(Constants::Colors::TextPrimary,
+                           Constants::Colors::WindowBackground));
 
     // Layout setup
     QHBoxLayout* mainLayout = new QHBoxLayout();
@@ -27,7 +30,9 @@ QalamSettings::QalamSettings(QWidget* parent) : QWidget(parent) {
     optionsLayout->setSpacing(0);
 
     QWidget* optionsWidget = new QWidget();
-    optionsWidget->setStyleSheet(".QWidget { border-left-width: 3px; border-left-style: ridge; border-left-color: #1e202f; }");
+    optionsWidget->setStyleSheet(QStringLiteral(
+        ".QWidget { border-left: 1px solid %1; }")
+        .arg(Constants::Colors::BorderSubtle));
     optionsWidget->setLayout(optionsLayout);
     optionsWidget->setMinimumWidth(200);
     optionsWidget->setMaximumWidth(300);
@@ -319,11 +324,31 @@ void QalamSettings::createAppearancePage(QVBoxLayout* layout) {
 
     themeLayout->addLayout(comboLayout);
 
+    auto *completionGroup = new QGroupBox(QStringLiteral("ترتيب الإكمال"));
+    auto *completionLayout = new QVBoxLayout(completionGroup);
+    auto *completionHint = new QLabel(QStringLiteral(
+        "يرتب قلم النتائج المتساوية دلالياً بحسب الاقتراحات التي اخترتها "
+        "فعلياً داخل السياق نفسه. لا تُرسل هذه البيانات خارج الجهاز."));
+    completionHint->setWordWrap(true);
+    completionHint->setStyleSheet(QStringLiteral("color: #aaaaaa;"));
+    auto *clearCompletionHistory = new QPushButton(
+        QStringLiteral("مسح سجل ترتيب الاقتراحات"));
+    clearCompletionHistory->setMinimumHeight(36);
+    connect(clearCompletionHistory, &QPushButton::clicked, this,
+            [clearCompletionHistory]() {
+        QSettings settings(Constants::OrgName, Constants::AppName);
+        QalamCompletionHistory::clear(settings);
+        clearCompletionHistory->setText(QStringLiteral("تم مسح السجل"));
+    });
+    completionLayout->addWidget(completionHint);
+    completionLayout->addWidget(clearCompletionHistory, 0, Qt::AlignRight);
+
 
 
 
     layout->addWidget(fontGroup);
     layout->addWidget(themeGroup);
+    layout->addWidget(completionGroup);
 }
 
 QComboBox *QalamSettings::getThemeCombo() const {

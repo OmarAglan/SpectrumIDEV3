@@ -1,9 +1,9 @@
 #include "QalamWindow.h"
 #include <QVBoxLayout>
 #include <QApplication>
+#include <QAbstractButton>
 #include <QWindow>
 #include <QMenuBar>
-#include <QPushButton>
 
 #if defined(Q_OS_WIN)
 #include <dwmapi.h>
@@ -11,6 +11,23 @@
 #include <windowsx.h>
 // Note: Libraries are linked via CMakeLists.txt (dwmapi, user32)
 #endif
+
+namespace {
+
+bool isInteractiveTitleBarWidget(QWidget *widget, QWidget *titleBar)
+{
+    for (QWidget *candidate = widget;
+         candidate and candidate != titleBar;
+         candidate = candidate->parentWidget()) {
+        if (qobject_cast<QAbstractButton*>(candidate) or
+            qobject_cast<QMenuBar*>(candidate)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+}
 
 QalamWindow::QalamWindow(QWidget *parent) : QMainWindow(parent) {
     // 1. Setup Title Bar
@@ -51,6 +68,38 @@ bool QalamWindow::nativeEvent(const QByteArray &eventType, void *message, qintpt
         HWND hwnd = msg->hwnd;
 
         switch (msg->message) {
+            case WM_GETMINMAXINFO: {
+                // Respect the usable rectangle of the monitor selected by
+                // Windows.  Without this, a frameless window can retain stale
+                // geometry after Snap or a monitor/DPI transition.
+                auto *limits = reinterpret_cast<MINMAXINFO*>(msg->lParam);
+                const HMONITOR monitor = MonitorFromWindow(
+                    hwnd, MONITOR_DEFAULTTONEAREST);
+                MONITORINFO monitorInfo{};
+                monitorInfo.cbSize = sizeof(monitorInfo);
+                if (monitor and GetMonitorInfoW(monitor, &monitorInfo)) {
+                    const RECT work = monitorInfo.rcWork;
+                    const RECT bounds = monitorInfo.rcMonitor;
+                    limits->ptMaxPosition.x = work.left - bounds.left;
+                    limits->ptMaxPosition.y = work.top - bounds.top;
+                    limits->ptMaxSize.x = work.right - work.left;
+                    limits->ptMaxSize.y = work.bottom - work.top;
+                    // Qt reports widget sizes in device-independent pixels,
+                    // while MINMAXINFO uses native pixels.  Supplying the
+                    // minimum here keeps Windows Snap/resize responsive on
+                    // mixed-DPI monitors instead of oscillating around Qt's
+                    // minimum-size correction.
+                    const UINT dpi = GetDpiForWindow(hwnd);
+                    const int scaleDpi = dpi > 0 ? static_cast<int>(dpi) : 96;
+                    limits->ptMinTrackSize.x = MulDiv(
+                        minimumWidth(), scaleDpi, 96);
+                    limits->ptMinTrackSize.y = MulDiv(
+                        minimumHeight(), scaleDpi, 96);
+                    *result = 0;
+                    return true;
+                }
+                break;
+            }
             case WM_NCCALCSIZE: {
                 if (msg->wParam == TRUE) {
                     *result = 0;
@@ -85,12 +134,11 @@ bool QalamWindow::nativeEvent(const QByteArray &eventType, void *message, qintpt
                 if (top) { *result = HTTOP; return true; }
                 
                 if (m_titleBar && m_titleBar->geometry().contains(QPoint(pt.x, pt.y))) {
-                    QWidget *child = m_titleBar->childAt(pt.x, pt.y);
-                    if (child) {
-                        bool isButton = qobject_cast<QPushButton*>(child);
-                        bool isMenuBar = qobject_cast<QMenuBar*>(child) || (child->parent() && qobject_cast<QMenuBar*>(child->parentWidget()));
-                        if (isButton || isMenuBar) return false;
-                    }
+                    const QPoint titlePoint = m_titleBar->mapFrom(this,
+                                                                  QPoint(pt.x, pt.y));
+                    QWidget *child = m_titleBar->childAt(titlePoint);
+                    if (isInteractiveTitleBarWidget(child, m_titleBar))
+                        return false;
                     *result = HTCAPTION;
                     return true;
                 }

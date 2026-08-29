@@ -68,10 +68,13 @@ $runtimeTempRoot = Join-Path $hostTempRoot (
 [IO.Directory]::CreateDirectory($runtimeTempRoot) | Out-Null
 $hadPlatform = Test-Path Env:QT_QPA_PLATFORM
 $previousPlatform = $env:QT_QPA_PLATFORM
+$hadSessionDirectory = Test-Path Env:QALAM_SESSION_DIR
+$previousSessionDirectory = $env:QALAM_SESSION_DIR
 $windowsDirectory = if ($env:SystemRoot) { $env:SystemRoot } else { 'C:\Windows' }
 $env:Path = "$windowsDirectory\System32;$windowsDirectory"
 $env:TEMP = $runtimeTempRoot
 $env:TMP = $runtimeTempRoot
+$env:QALAM_SESSION_DIR = Join-Path $runtimeTempRoot 'session'
 Remove-Item Env:QT_QPA_PLATFORM -ErrorAction SilentlyContinue
 $process = $null
 try {
@@ -333,6 +336,11 @@ public static class QalamRuntimeWindowProbe
     $env:TMP = $previousTmp
     if ($hadPlatform) { $env:QT_QPA_PLATFORM = $previousPlatform }
     else { Remove-Item Env:QT_QPA_PLATFORM -ErrorAction SilentlyContinue }
+    if ($hadSessionDirectory) {
+        $env:QALAM_SESSION_DIR = $previousSessionDirectory
+    } else {
+        Remove-Item Env:QALAM_SESSION_DIR -ErrorAction SilentlyContinue
+    }
     if (Test-Path -LiteralPath $runtimeTempRoot) {
         $resolvedRuntimeTemp = [IO.Path]::GetFullPath($runtimeTempRoot)
         if (!$resolvedRuntimeTemp.StartsWith(

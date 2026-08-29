@@ -323,18 +323,18 @@ void QalamWelcomePage::applyStyles()
             border-radius: 0px;
             padding: 3px 0px;
             text-align: right;
-            color: #3794ff; /* VS Code link blue */
+            color: %8;
             font-size: 13px;
         }
 
         QPushButton#welcomeActionButton:hover {
             background: transparent;
-            color: #1177bb;
+            color: %9;
             text-decoration: underline;
         }
 
         QPushButton#welcomeActionButton:pressed {
-            color: #1177bb;
+            color: %9;
         }
 
         QPushButton#welcomeClearRecents {
@@ -392,16 +392,16 @@ void QalamWelcomePage::applyStyles()
         }
 
         #welcomeCard {
-            background-color: #252526;
-            border: 1px solid #2d2d2d;
+            background-color: %11;
+            border: 1px solid %5;
             border-radius: 6px;
             min-width: 200px;
             max-width: 235px;
         }
 
         #welcomeCard:hover {
-            background-color: #2a2d2e;
-            border-color: #3c3c3c;
+            background-color: %6;
+            border-color: %12;
         }
 
         #welcomeCardTitle {
@@ -436,7 +436,9 @@ void QalamWelcomePage::applyStyles()
                       .arg(Colors::ButtonPressed)             // %7
                       .arg(Colors::Accent)                    // %8
                       .arg(Colors::AccentHover)               // %9
-                      .arg(Colors::ListSelectionBackground)); // %10
+                      .arg(Colors::ListSelectionBackground)   // %10
+                      .arg(Colors::MenuBackground)            // %11
+                      .arg(Colors::Border));                  // %12
 }
 
 QPushButton *QalamWelcomePage::createActionButton(const QString &iconPath, const QString &text)

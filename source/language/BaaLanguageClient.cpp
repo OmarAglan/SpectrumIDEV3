@@ -878,9 +878,12 @@ void BaaLanguageClient::retainWorkspaceRoot(const QString &workspaceRoot)
         return;
     }
 
+    const bool alreadyConfigured =
+        m_configuredWorkspaceRoots.contains(workspaceRoot);
     m_workspaceRootReferences.insert(workspaceRoot, 1);
-    watchWorkspaceRoot(workspaceRoot);
-    if (m_state == State::Ready and m_workspaceFoldersSupported) {
+    if (not alreadyConfigured) watchWorkspaceRoot(workspaceRoot);
+    if (not alreadyConfigured and m_state == State::Ready and
+        m_workspaceFoldersSupported) {
         sendWorkspaceFolderChanges({workspaceRoot}, {});
     }
 }
@@ -892,6 +895,7 @@ void BaaLanguageClient::releaseWorkspaceRoot(const QString &workspaceRoot)
     if (--existing.value() > 0) return;
 
     m_workspaceRootReferences.erase(existing);
+    if (m_configuredWorkspaceRoots.contains(workspaceRoot)) return;
     unwatchWorkspaceRoot(workspaceRoot);
     if (m_state == State::Ready and m_workspaceFoldersSupported and
         m_serverWorkspaceRoots.contains(workspaceRoot)) {
@@ -904,6 +908,9 @@ void BaaLanguageClient::releaseWorkspaceRoot(const QString &workspaceRoot)
 QStringList BaaLanguageClient::workspaceRoots() const
 {
     QStringList roots = m_workspaceRootReferences.keys();
+    for (const QString &root : m_configuredWorkspaceRoots) {
+        if (not roots.contains(root, Qt::CaseInsensitive)) roots.push_back(root);
+    }
     std::sort(roots.begin(), roots.end(), [](const QString &left,
                                              const QString &right) {
         const int insensitive = QString::compare(
@@ -911,6 +918,38 @@ QStringList BaaLanguageClient::workspaceRoots() const
         return insensitive == 0 ? left < right : insensitive < 0;
     });
     return roots;
+}
+
+void BaaLanguageClient::setWorkspaceRoots(const QStringList &workspaceRoots)
+{
+    QSet<QString> configured;
+    for (const QString &workspaceRoot : workspaceRoots) {
+        if (workspaceRoot.trimmed().isEmpty()) continue;
+        const QString normalized = normalizedFilePath(workspaceRoot);
+        if (QFileInfo(normalized).isDir()) configured.insert(normalized);
+    }
+    if (configured == m_configuredWorkspaceRoots) return;
+
+    const QSet<QString> previous = m_configuredWorkspaceRoots;
+    m_configuredWorkspaceRoots = configured;
+    QStringList added;
+    QStringList removed;
+    for (const QString &root : configured) {
+        if (previous.contains(root)) continue;
+        if (m_workspaceRootReferences.contains(root)) continue;
+        watchWorkspaceRoot(root);
+        added.push_back(root);
+    }
+    for (const QString &root : previous) {
+        if (configured.contains(root)) continue;
+        if (m_workspaceRootReferences.contains(root)) continue;
+        unwatchWorkspaceRoot(root);
+        removed.push_back(root);
+    }
+    if (m_state == State::Ready and m_workspaceFoldersSupported and
+        (not added.isEmpty() or not removed.isEmpty())) {
+        sendWorkspaceFolderChanges(added, removed);
+    }
 }
 
 QJsonObject BaaLanguageClient::workspaceFolder(
@@ -988,7 +1027,7 @@ void BaaLanguageClient::unwatchWorkspaceRoot(const QString &workspaceRoot)
 void BaaLanguageClient::handleWorkspaceWatchPath(const QString &changedPath)
 {
     const QString path = normalizedFilePath(changedPath);
-    if (m_workspaceRootReferences.contains(path)) {
+    if (workspaceRoots().contains(path, Qt::CaseInsensitive)) {
         const QStringList names{
             QStringLiteral("مشروع.تكوين"),
             QStringLiteral("تكوين.قفل")
@@ -1060,7 +1099,7 @@ void BaaLanguageClient::sendInitialize()
         {QStringLiteral("processId"), static_cast<qint64>(QCoreApplication::applicationPid())},
         {QStringLiteral("clientInfo"), QJsonObject{
             {QStringLiteral("name"), QStringLiteral("Qalam")},
-            {QStringLiteral("version"), QStringLiteral("3.5.0")}
+                {QStringLiteral("version"), Constants::AppVersion}
         }},
         {QStringLiteral("initializationOptions"), QJsonObject{
             {QStringLiteral("baaStructuredLogs"), QJsonObject{
@@ -2262,6 +2301,9 @@ QVector<BaaCompletionItem> BaaLanguageClient::parseCompletionItems(
         item.detail = source.value(QStringLiteral("detail")).toString().trimmed();
         item.filterText = source.value(QStringLiteral("filterText")).toString(item.label);
         item.sortText = source.value(QStringLiteral("sortText")).toString(item.filterText);
+        const QJsonObject data = source.value(QStringLiteral("data")).toObject();
+        item.context = data.value(QStringLiteral("baaContext")).toString();
+        item.stableKey = data.value(QStringLiteral("baaStableKey")).toString();
         item.kind = source.value(QStringLiteral("kind")).toInt(1);
         item.insertTextFormat = source.value(QStringLiteral("insertTextFormat")).toInt(1);
 

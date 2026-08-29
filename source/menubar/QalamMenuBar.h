@@ -17,6 +17,7 @@ public:
     QAction* newAction;
     QAction* openFileAction;
     QAction* openFolderAction;
+    QAction* addFolderAction;
     QAction* reopenLastProjectAction;
     QAction* saveAction;
     QAction* saveAsAction;
@@ -47,6 +48,7 @@ signals:
     void newRequested();
     void openFileRequested();
     void openFolderRequested();
+    void addFolderRequested();
     void reopenLastProjectRequested();
     void saveRequested();
     void saveAsRequested();
@@ -75,6 +77,7 @@ private slots:
     void onNewAction();
     void onOpenFileAction();
     void onOpenFolderAction();
+    void onAddFolderAction();
     void onReopenLastProjectAction();
     void onSaveAction();
     void onSaveAsAction();

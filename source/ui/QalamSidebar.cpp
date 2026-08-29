@@ -75,6 +75,8 @@ void QalamSidebar::setupUi()
             this, &QalamSidebar::renameEntryRequested);
     connect(m_explorerView, &QalamExplorerView::deleteEntryRequested,
             this, &QalamSidebar::deleteEntryRequested);
+    connect(m_explorerView, &QalamExplorerView::removeRootRequested,
+            this, &QalamSidebar::removeRootRequested);
     connect(m_searchView, &QalamSearchView::searchRequested, this, &QalamSidebar::searchRequested);
     connect(m_searchView, &QalamSearchView::searchCancelled,
             this, &QalamSidebar::searchCancelled);

@@ -52,6 +52,8 @@ add_library(qalam_core STATIC
     texteditor/highlighter/QalamSyntaxDefinition.cpp
     texteditor/highlighter/QalamSyntaxHighlighter.cpp
     texteditor/autocomplete/AutoCompleteUI.cpp
+    texteditor/autocomplete/QalamCompletionHistory.cpp
+    texteditor/autocomplete/QalamCompletionHistory.h
     # Components
     components/QalamFlatButton.cpp
     components/QalamSearchPanel.cpp
@@ -87,6 +89,8 @@ add_library(qalam_core STATIC
     managers/FileManager.cpp
     managers/BuildManager.cpp
     managers/SessionManager.cpp
+    managers/SessionSlot.cpp
+    managers/SessionSlot.h
     managers/LayoutManager.cpp
 )
 

@@ -15,7 +15,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: OmarAglan/Baa-LSP
-          ref: 162ef31afd6decf1fdce23f3352d948ca2240122
+          ref: 9be322fdadbd68a816ef1133094955544ee55a70
           path: ecosystem/Baa-LSP
       - uses: actions/setup-python@v5
         with:
@@ -28,17 +28,18 @@ jobs:
         run: .\scripts\bootstrap-windows.ps1 -SkipWinget -BuildTests -SkipCompiler -BaaLspSourceDir ecosystem/Baa-LSP
       - name: Build standalone installer
         shell: pwsh
-        run: .\scripts\build_installer.ps1 -Version 3.3.0 -BuildDir build/windows-release -BaaLspExecutable ecosystem/Baa-LSP/build/windows-release/baa-lsp.exe -SkipBuild
+        run: .\scripts\build_installer.ps1 -Version 3.6.0 -BuildDir build/windows-release -BaaLspExecutable ecosystem/Baa-LSP/build/windows-release/baa-lsp.exe -SkipBuild
       - name: Verify install, launch, and uninstall
         shell: powershell
-        run: .\scripts\test_installer.ps1 -Version 3.3.0
+        run: .\scripts\test_installer.ps1 -Version 3.6.0
       - uses: actions/upload-artifact@v4
         with:
-          name: qalam-setup-3.3.0-x64
+          name: qalam-setup-3.6.0-x64
           path: |
             dist/Qalam-win64.zip
-            dist/installer/qalam-setup-3.3.0-x64.exe
-            dist/installer/qalam-setup-3.3.0-x64.exe.sha256
+            dist/Qalam-win64.zip.sha256
+            dist/installer/qalam-setup-3.6.0-x64.exe
+            dist/installer/qalam-setup-3.6.0-x64.exe.sha256
 
   linux:
     name: Linux build
@@ -48,12 +49,12 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: OmarAglan/Baa-LSP
-          ref: 162ef31afd6decf1fdce23f3352d948ca2240122
+          ref: 9be322fdadbd68a816ef1133094955544ee55a70
           path: ecosystem/Baa-LSP
       - uses: actions/checkout@v4
         with:
           repository: OmarAglan/Baa
-          ref: ccf37c534f88a83598536c483f7c8afbbdd6f073
+          ref: 4d7bb2f90d042b7bd238d7addd031cbf04424f75
           path: ecosystem/Baa
       - uses: actions/checkout@v4
         with:

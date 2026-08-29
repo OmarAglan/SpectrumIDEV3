@@ -36,9 +36,11 @@ class Qalam : public QalamWindow
     Q_OBJECT
 
 public:
-    Qalam(const QString &filePath = "", QWidget *parent = nullptr);
+    Qalam(const QString &filePath = "", QWidget *parent = nullptr,
+          const QString &sessionSettingsPath = QString());
     ~Qalam();
     void loadFolder(const QString &folderPath);
+    void loadFolders(const QStringList &folderPaths);
 
 protected:
     void closeEvent(QCloseEvent *event) override;
@@ -46,6 +48,7 @@ protected:
 
 private slots:
     void handleOpenFolderMenu();
+    void handleAddFolderMenu();
     void reopenLastProject();
     void openSettings();
     void exitApp();
@@ -96,6 +99,7 @@ private slots:
     void createWorkspaceFolder(const QString &directoryPath);
     void renameWorkspaceEntry(const QString &entryPath);
     void deleteWorkspaceEntry(const QString &entryPath);
+    void removeWorkspaceRoot(const QString &rootPath);
     void closeOtherEditorsByPath(const QString &filePath);
 
 private:
@@ -149,6 +153,8 @@ private:
     void scheduleSessionSave();
     void saveSessionCheckpoint();
     void openFolderFromPath(const QString &path);
+    QString workspaceRootForPath(const QString &path) const;
+    QString workspaceRelativePath(const QString &path) const;
     bool ensureToolOperationAvailable(const QString &operation,
                                       const QString &filePath);
 
@@ -157,6 +163,7 @@ private:
     QalamMenuBar *menuBar{};
     QalamSettings *setting{};
     QString folderPath{};
+    QStringList folderPaths;
 
     FileManager *m_fileManager{};
     BuildManager *m_buildManager{};

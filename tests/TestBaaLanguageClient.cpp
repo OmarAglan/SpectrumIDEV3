@@ -79,6 +79,7 @@ private slots:
     void restartsAfterUnexpectedExitAndReopensDocuments();
     void stopsRestartingAfterTheConfiguredLimit();
     void publishesWorkspaceFolderAndManifestChanges();
+    void publishesConfiguredWorkspaceRootsBeforeDocumentsOpen();
     void rejectsNonBaaDocuments();
 };
 
@@ -340,6 +341,9 @@ void TestBaaLanguageClient::synchronizesDocumentsAndRejectsStaleDiagnostics()
     QCOMPARE(mainCompletion->startCharacter, 5);
     QCOMPARE(mainCompletion->endCharacter, 7);
     QCOMPARE(mainCompletion->kind, 3);
+    QCOMPARE(mainCompletion->context, QStringLiteral("call-argument"));
+    QCOMPARE(mainCompletion->stableKey,
+             QStringLiteral("function:الرئيسية"));
     const auto localCompletion =
         completionByLabel(QStringLiteral("قيمة_محلية"));
     QVERIFY(localCompletion != lastCompletions.cend());
@@ -641,7 +645,6 @@ void TestBaaLanguageClient::publishesWorkspaceFolderAndManifestChanges()
         QStringLiteral("مشروع ثان"));
     QVERIFY(QDir().mkpath(firstRoot));
     QVERIFY(QDir().mkpath(secondRoot));
-
     const QString firstSource = QDir(firstRoot).filePath(
         QStringLiteral("الأول.baa"));
     const QString secondSource = QDir(secondRoot).filePath(
@@ -738,6 +741,52 @@ void TestBaaLanguageClient::publishesWorkspaceFolderAndManifestChanges()
     QTRY_COMPARE_WITH_TIMEOUT(client.state(),
                               BaaLanguageClient::State::Stopped,
                               5000);
+}
+
+void TestBaaLanguageClient::publishesConfiguredWorkspaceRootsBeforeDocumentsOpen()
+{
+    QTemporaryDir temporary(QStringLiteral("qalam-lsp-configured-roots-XXXXXX"));
+    QVERIFY(temporary.isValid());
+    const QString firstRoot = QDir(temporary.path()).filePath(
+        QStringLiteral("جذر أول"));
+    const QString secondRoot = QDir(temporary.path()).filePath(
+        QStringLiteral("جذر ثان"));
+    QVERIFY(QDir().mkpath(firstRoot));
+    QVERIFY(QDir().mkpath(secondRoot));
+    const QString firstSource = QDir(firstRoot).filePath(
+        QStringLiteral("رئيسي.باء"));
+
+    const QString logPath = QDir(temporary.path()).filePath(
+        QStringLiteral("configured-workspaces.jsonl"));
+    QVERIFY(qputenv("QALAM_FAKE_LSP_WORKSPACE_LOG", logPath.toUtf8()));
+    const auto clearEnvironment = qScopeGuard([]() {
+        qunsetenv("QALAM_FAKE_LSP_WORKSPACE_LOG");
+    });
+
+    BaaLanguageClient client;
+    client.setServerProgram(QString::fromUtf8(QALAM_FAKE_BAA_LSP_PATH));
+    client.setWorkspaceRoots({firstRoot, secondRoot, firstRoot});
+    QCOMPARE(client.synchronizeDocument(
+                 firstSource,
+                 QStringLiteral("صحيح الرئيسية() { إرجع ٠. }\n"),
+                 1,
+                 firstRoot),
+             1);
+    QTRY_COMPARE_WITH_TIMEOUT(client.state(),
+                              BaaLanguageClient::State::Ready, 5000);
+    QTRY_VERIFY_WITH_TIMEOUT(not workspaceMessages(logPath).isEmpty(), 5000);
+
+    const QJsonArray initializedRoots = workspaceMessages(logPath).first()
+        .value(QStringLiteral("params")).toObject()
+        .value(QStringLiteral("workspaceFolders")).toArray();
+    QCOMPARE(initializedRoots.size(), 2);
+
+    const QString secondUri = QUrl::fromLocalFile(
+        QDir::cleanPath(secondRoot)).toString();
+    client.setWorkspaceRoots({firstRoot});
+    QTRY_VERIFY_WITH_TIMEOUT(hasWorkspaceFolderChange(
+        logPath, QStringLiteral("removed"), secondUri), 5000);
+    client.stop();
 }
 
 QTEST_MAIN(TestBaaLanguageClient)

@@ -34,6 +34,16 @@ void SessionManager::saveSession(const QString &folderPath,
                                  const QByteArray &windowGeometry,
                                  bool cleanShutdown)
 {
+    saveSession(folderPath.isEmpty()
+                    ? QStringList{}
+                    : QStringList{folderPath},
+                windowGeometry, cleanShutdown);
+}
+
+void SessionManager::saveSession(const QStringList &folderPaths,
+                                 const QByteArray &windowGeometry,
+                                 bool cleanShutdown)
+{
     const std::unique_ptr<QSettings> settings = createSettings();
 
     QStringList openFiles;
@@ -133,7 +143,9 @@ void SessionManager::saveSession(const QString &folderPath,
     settings->setValue(Constants::SessionKeyEditorSplitSizes, splitSizes);
     settings->setValue(Constants::SessionKeyActiveEditorGroup,
                        m_editorWorkspace->activeGroupIndex());
-    settings->setValue(Constants::SessionKeyFolderPath, folderPath);
+    settings->setValue(Constants::SessionKeyFolderPaths, folderPaths);
+    settings->setValue(Constants::SessionKeyFolderPath,
+                       folderPaths.value(0));
     settings->setValue(Constants::SessionKeyWindowGeometry, windowGeometry);
     settings->setValue(Constants::SessionKeyCleanShutdown, cleanShutdown);
     settings->sync();
@@ -158,7 +170,14 @@ SessionManager::SessionData SessionManager::restoreSession() const
     for (const QVariant &size : savedSplitSizes) {
         data.splitSizes.append(size.toInt());
     }
-    data.folderPath = settings->value(Constants::SessionKeyFolderPath).toString();
+    data.folderPaths = settings->value(
+        Constants::SessionKeyFolderPaths).toStringList();
+    data.folderPath = settings->value(
+        Constants::SessionKeyFolderPath).toString();
+    if (data.folderPaths.isEmpty() and not data.folderPath.isEmpty()) {
+        data.folderPaths.push_back(data.folderPath);
+    }
+    if (data.folderPath.isEmpty()) data.folderPath = data.folderPaths.value(0);
     data.windowGeometry = settings->value(Constants::SessionKeyWindowGeometry).toByteArray();
     const bool cleanShutdown = settings->value(
         Constants::SessionKeyCleanShutdown, true).toBool();

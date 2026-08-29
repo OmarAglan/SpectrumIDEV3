@@ -16,6 +16,8 @@ private slots:
     void appliesNestedGitignoreAnchorsGlobsAndNegation();
     void refreshesAfterExternalWorkspaceChanges();
     void rejectsStaleIndexWhenSwitchingRoots();
+    void indexesMultipleWorkspaceRootsWithoutDuplicates();
+    void ignoresGeneratedDirectoriesPerWorkspaceRoot();
 };
 
 namespace {
@@ -194,6 +196,66 @@ void TestWorkspaceIndexer::rejectsStaleIndexWhenSwitchingRoots()
     QTest::qWait(200);
     QVERIFY(not indexer.files().contains(QDir::cleanPath(firstPath)));
     QVERIFY(updates.count() >= 1);
+}
+
+void TestWorkspaceIndexer::indexesMultipleWorkspaceRootsWithoutDuplicates()
+{
+    QTemporaryDir firstDirectory;
+    QTemporaryDir secondDirectory;
+    QVERIFY(firstDirectory.isValid());
+    QVERIFY(secondDirectory.isValid());
+
+    const QString firstPath = firstDirectory.filePath(
+        QStringLiteral("الأول.باء"));
+    const QString secondPath = secondDirectory.filePath(
+        QStringLiteral("الثاني.باء"));
+    writeUtf8File(firstPath, QStringLiteral("الأول\n"));
+    writeUtf8File(secondPath, QStringLiteral("الثاني\n"));
+
+    WorkspaceIndexer indexer;
+    indexer.setRootPaths({firstDirectory.path(), secondDirectory.path(),
+                          firstDirectory.path()});
+    QTRY_VERIFY_WITH_TIMEOUT(
+        indexer.files().contains(QDir::cleanPath(firstPath)) and
+        indexer.files().contains(QDir::cleanPath(secondPath)), 5000);
+    QCOMPARE(indexer.rootPaths().size(), 2);
+    QCOMPARE(indexer.files().count(QDir::cleanPath(firstPath)), 1);
+    QCOMPARE(indexer.files().count(QDir::cleanPath(secondPath)), 1);
+}
+
+void TestWorkspaceIndexer::ignoresGeneratedDirectoriesPerWorkspaceRoot()
+{
+    QTemporaryDir firstDirectory;
+    QTemporaryDir secondDirectory;
+    QVERIFY(firstDirectory.isValid());
+    QVERIFY(secondDirectory.isValid());
+
+    const QString firstSource = firstDirectory.filePath(
+        QStringLiteral("مصدر/الأول.باء"));
+    const QString ignoredFirst = firstDirectory.filePath(
+        QStringLiteral("build/مولد.باء"));
+    const QString secondSource = secondDirectory.filePath(
+        QStringLiteral("مصدر/الثاني.باء"));
+    const QString ignoredSecond = secondDirectory.filePath(
+        QStringLiteral("dist/حزمة.باء"));
+    QVERIFY(QDir().mkpath(QFileInfo(firstSource).absolutePath()));
+    QVERIFY(QDir().mkpath(QFileInfo(ignoredFirst).absolutePath()));
+    QVERIFY(QDir().mkpath(QFileInfo(secondSource).absolutePath()));
+    QVERIFY(QDir().mkpath(QFileInfo(ignoredSecond).absolutePath()));
+    writeUtf8File(firstSource, QStringLiteral("الأول\n"));
+    writeUtf8File(ignoredFirst, QStringLiteral("مولد\n"));
+    writeUtf8File(secondSource, QStringLiteral("الثاني\n"));
+    writeUtf8File(ignoredSecond, QStringLiteral("حزمة\n"));
+
+    WorkspaceIndexer indexer;
+    indexer.setRootPaths({firstDirectory.path(), secondDirectory.path()});
+    QTRY_VERIFY_WITH_TIMEOUT(
+        indexer.files().contains(QDir::cleanPath(firstSource)) and
+        indexer.files().contains(QDir::cleanPath(secondSource)), 5000);
+    QVERIFY(not indexer.files().contains(QDir::cleanPath(ignoredFirst)));
+    QVERIFY(not indexer.files().contains(QDir::cleanPath(ignoredSecond)));
+    QVERIFY(indexer.isIgnoredPath(ignoredFirst));
+    QVERIFY(indexer.isIgnoredPath(ignoredSecond));
 }
 
 QTEST_MAIN(TestWorkspaceIndexer)

@@ -353,6 +353,12 @@ if (!$SkipArchive) {
     if (Test-Path $ZipPath) { Remove-Item $ZipPath -Force }
     Compress-Archive -Path (Join-Path $PackageDir '*') -DestinationPath $ZipPath
 
+    $archiveHash = (Get-FileHash -LiteralPath $ZipPath -Algorithm SHA256).Hash
+    [IO.File]::WriteAllText(
+        "$ZipPath.sha256",
+        "$archiveHash *$([IO.Path]::GetFileName($ZipPath))`n",
+        [Text.Encoding]::ASCII)
+
     $archiveTestRoot = Join-Path ([IO.Path]::GetTempPath()) (
         'قلم حزمة مستخرجة - ' + [Guid]::NewGuid().ToString('N'))
     try {

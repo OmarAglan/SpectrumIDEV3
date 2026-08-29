@@ -27,6 +27,7 @@ private slots:
     void restoresSharedSplitWorkspaceLayout();
     void restoresActiveDocumentInEachEditorGroup();
     void cleanShutdownDoesNotRestoreDiscardedUntitledBuffer();
+    void persistsMultipleWorkspaceRoots();
 
 private:
     QTemporaryDir m_settingsDirectory;
@@ -112,6 +113,22 @@ void TestSessionManager::cleanShutdownDoesNotRestoreDiscardedUntitledBuffer()
     const SessionManager::SessionData restored = manager.restoreSession();
     QVERIFY(restored.documents.isEmpty());
     QVERIFY(not restored.recoveredAfterInterruption);
+}
+
+void TestSessionManager::persistsMultipleWorkspaceRoots()
+{
+    QalamEditorWorkspace workspace;
+    SessionManager manager(
+        &workspace, nullptr,
+        m_settingsDirectory.filePath(QStringLiteral("multi-root.ini")));
+    const QStringList roots{
+        QStringLiteral("C:/مشروع أول"),
+        QStringLiteral("D:/مشروع ثان")};
+    manager.saveSession(roots, QByteArray("geometry"), true);
+
+    const SessionManager::SessionData restored = manager.restoreSession();
+    QCOMPARE(restored.folderPaths, roots);
+    QCOMPARE(restored.folderPath, roots.constFirst());
 }
 
 void TestSessionManager::restoresInterruptedWorkbenchThroughFileManager()

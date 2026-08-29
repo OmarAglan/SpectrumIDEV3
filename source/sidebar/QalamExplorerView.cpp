@@ -3,6 +3,7 @@
 #include "../ui/QalamTheme.h"
 #include "Constants.h"
 #include <QScrollArea>
+#include <QDir>
 #include <QFileInfo>
 #include <QFileIconProvider>
 #include <QMenu>
@@ -66,38 +67,22 @@ void QalamExplorerView::setupUi()
     m_folderHeader = createSectionHeader(NoFolderOpenLabel, true);
     m_folderNameLabel = m_folderHeader->findChild<QLabel*>("sectionTitle");
     
-    // Tree view for folder contents
+    // One shared filesystem model backs one tree per workspace root.  Separate
+    // trees keep unrelated folders as first-class roots without exposing their
+    // common drive or filesystem ancestors.
     m_fileSystemModel = new QFileSystemModel(this);
     m_fileSystemModel->setIconProvider(new QalamFileIconProvider());
     m_fileSystemModel->setRootPath("");
     m_fileSystemModel->setFilter(QDir::AllDirs | QDir::Files | QDir::NoDotAndDotDot);
     
-    m_treeView = new QTreeView();
-    m_treeView->setModel(m_fileSystemModel);
-    m_treeView->setHeaderHidden(true);
-    m_treeView->setAnimated(true);
-    m_treeView->setIndentation(12);
-    m_treeView->setExpandsOnDoubleClick(true);
-    m_treeView->setContextMenuPolicy(Qt::CustomContextMenu);
-    
-    // Hide size, type, date columns
-    m_treeView->hideColumn(1);
-    m_treeView->hideColumn(2);
-    m_treeView->hideColumn(3);
-    
-    // Connect double-click
-    connect(m_treeView, &QTreeView::doubleClicked, this, [this](const QModelIndex &index) {
-        QString filePath = m_fileSystemModel->filePath(index);
-        QFileInfo info(filePath);
-        if (info.isFile()) {
-            emit fileDoubleClicked(filePath);
-        }
-    });
-    connect(m_treeView, &QTreeView::customContextMenuRequested,
-            this, &QalamExplorerView::showTreeContextMenu);
+    m_rootsContainer = new QWidget(this);
+    m_rootsContainer->setObjectName(QStringLiteral("workspaceRootsContainer"));
+    m_rootsLayout = new QVBoxLayout(m_rootsContainer);
+    m_rootsLayout->setContentsMargins(0, 0, 0, 0);
+    m_rootsLayout->setSpacing(0);
     
     m_mainLayout->addWidget(m_folderHeader);
-    m_mainLayout->addWidget(m_treeView, 2);
+    m_mainLayout->addWidget(m_rootsContainer, 2);
     
     // ========== No Folder Open State ==========
     m_noFolderWidget = new QWidget();
@@ -138,7 +123,7 @@ void QalamExplorerView::setupUi()
         &QalamExplorerView::outlineSymbolActivated);
     
     // Initially show no folder state
-    m_treeView->hide();
+    m_rootsContainer->hide();
     m_noFolderWidget->show();
 }
 
@@ -177,23 +162,87 @@ QWidget* QalamExplorerView::createSectionHeader(const QString &title, bool expan
 
 void QalamExplorerView::setRootPath(const QString &path)
 {
-    m_rootPath = path;
-    
-    if (path.isEmpty()) {
-        m_treeView->hide();
+    setRootPaths(path.isEmpty() ? QStringList{} : QStringList{path});
+}
+
+QTreeView *QalamExplorerView::createRootTree(const QString &rootPath)
+{
+    auto *treeView = new QTreeView(m_rootsContainer);
+    treeView->setProperty("workspaceRoot", rootPath);
+    treeView->setModel(m_fileSystemModel);
+    treeView->setRootIndex(m_fileSystemModel->index(rootPath));
+    treeView->setHeaderHidden(true);
+    treeView->setAnimated(true);
+    treeView->setIndentation(12);
+    treeView->setExpandsOnDoubleClick(true);
+    treeView->setContextMenuPolicy(Qt::CustomContextMenu);
+    for (int column = 1; column <= 3; ++column) treeView->hideColumn(column);
+
+    connect(treeView, &QTreeView::doubleClicked, this,
+            [this](const QModelIndex &index) {
+        const QString filePath = m_fileSystemModel->filePath(index);
+        if (QFileInfo(filePath).isFile()) emit fileDoubleClicked(filePath);
+    });
+    connect(treeView, &QTreeView::customContextMenuRequested, this,
+            [this, treeView, rootPath](const QPoint &position) {
+        showTreeContextMenu(treeView, rootPath, position);
+    });
+    return treeView;
+}
+
+void QalamExplorerView::clearRootTrees()
+{
+    while (QLayoutItem *item = m_rootsLayout->takeAt(0)) {
+        if (item->widget()) item->widget()->deleteLater();
+        delete item;
+    }
+    m_treeViews.clear();
+}
+
+void QalamExplorerView::setRootPaths(const QStringList &paths)
+{
+    QStringList roots;
+    for (const QString &path : paths) {
+        const QFileInfo info(path);
+        if (not info.isDir()) continue;
+        const QString canonical = info.canonicalFilePath();
+        const QString clean = QDir::cleanPath(
+            canonical.isEmpty() ? info.absoluteFilePath() : canonical);
+        if (not roots.contains(clean, Qt::CaseInsensitive)) roots.push_back(clean);
+    }
+    if (m_rootPaths == roots) return;
+    m_rootPaths = roots;
+    clearRootTrees();
+
+    if (m_rootPaths.isEmpty()) {
+        m_rootsContainer->hide();
         m_noFolderWidget->show();
         if (m_folderNameLabel) {
             m_folderNameLabel->setText(Constants::NoFolderOpenLabel.toUpper());
         }
     } else {
-        QFileInfo info(path);
-        m_fileSystemModel->setRootPath(path);
-        m_treeView->setRootIndex(m_fileSystemModel->index(path));
-        m_treeView->show();
+        m_fileSystemModel->setRootPath(QString());
+        const bool showRootLabels = m_rootPaths.size() > 1;
+        for (const QString &rootPath : m_rootPaths) {
+            if (showRootLabels) {
+                auto *label = new QLabel(QFileInfo(rootPath).fileName().toUpper(),
+                                         m_rootsContainer);
+                label->setObjectName(QStringLiteral("workspaceRootLabel"));
+                label->setToolTip(QDir::toNativeSeparators(rootPath));
+                label->setProperty("workspaceRoot", rootPath);
+                m_rootsLayout->addWidget(label);
+            }
+            QTreeView *treeView = createRootTree(rootPath);
+            m_treeViews.push_back(treeView);
+            m_rootsLayout->addWidget(treeView, 1);
+        }
+        m_rootsContainer->setVisible(m_folderExpanded);
         m_noFolderWidget->hide();
-        
         if (m_folderNameLabel) {
-            m_folderNameLabel->setText(info.fileName().toUpper());
+            const QString title = m_rootPaths.size() == 1
+                ? QFileInfo(m_rootPaths.constFirst()).fileName().toUpper()
+                : QStringLiteral("مساحة العمل (%1)").arg(m_rootPaths.size());
+            m_folderNameLabel->setText(title);
         }
     }
 }
@@ -306,16 +355,19 @@ void QalamExplorerView::clearOutlineSymbols()
     if (m_outlineView) m_outlineView->clearSymbols();
 }
 
-void QalamExplorerView::showTreeContextMenu(const QPoint &position)
+void QalamExplorerView::showTreeContextMenu(
+    QTreeView *treeView,
+    const QString &rootPath,
+    const QPoint &position)
 {
-    if (m_rootPath.isEmpty()) return;
+    if (not treeView or rootPath.isEmpty()) return;
 
-    const QModelIndex index = m_treeView->indexAt(position);
-    if (index.isValid()) m_treeView->setCurrentIndex(index);
+    const QModelIndex index = treeView->indexAt(position);
+    if (index.isValid()) treeView->setCurrentIndex(index);
 
     const QString selectedPath = index.isValid()
         ? m_fileSystemModel->filePath(index)
-        : m_rootPath;
+        : rootPath;
     const QFileInfo selectedInfo(selectedPath);
     const QString directoryPath = selectedInfo.isDir()
         ? selectedInfo.absoluteFilePath()
@@ -339,8 +391,11 @@ void QalamExplorerView::showTreeContextMenu(const QPoint &position)
             style()->standardIcon(QStyle::SP_TrashIcon),
             QStringLiteral("حذف"));
     }
+    menu.addSeparator();
+    QAction *removeRootAction = menu.addAction(
+        QStringLiteral("إزالة المجلد من مساحة العمل"));
 
-    QAction *chosen = menu.exec(m_treeView->viewport()->mapToGlobal(position));
+    QAction *chosen = menu.exec(treeView->viewport()->mapToGlobal(position));
     if (chosen == newFileAction) {
         emit createFileRequested(directoryPath);
     } else if (chosen == newFolderAction) {
@@ -349,6 +404,8 @@ void QalamExplorerView::showTreeContextMenu(const QPoint &position)
         emit renameEntryRequested(selectedInfo.absoluteFilePath());
     } else if (chosen == deleteAction) {
         emit deleteEntryRequested(selectedInfo.absoluteFilePath());
+    } else if (chosen == removeRootAction) {
+        emit removeRootRequested(rootPath);
     }
 }
 
@@ -404,8 +461,10 @@ bool QalamExplorerView::eventFilter(QObject *watched, QEvent *event)
 
         if (watched == m_folderHeader) {
             m_folderExpanded = !m_folderExpanded;
-            m_treeView->setVisible(m_folderExpanded && !m_rootPath.isEmpty());
-            m_noFolderWidget->setVisible(m_folderExpanded && m_rootPath.isEmpty());
+            m_rootsContainer->setVisible(
+                m_folderExpanded && not m_rootPaths.isEmpty());
+            m_noFolderWidget->setVisible(
+                m_folderExpanded && m_rootPaths.isEmpty());
             if (auto *arrow = m_folderHeader->findChild<QLabel*>("sectionArrow")) {
                 arrow->setText(m_folderExpanded ? "▾" : "▸");
             }
@@ -464,6 +523,15 @@ void QalamExplorerView::applyStyles()
         #sectionArrow {
             color: %4;
             font-size: 10px;
+        }
+
+        #workspaceRootLabel {
+            color: %4;
+            background-color: %2;
+            border-top: 1px solid %17;
+            padding: 5px 10px;
+            font-size: %5px;
+            font-weight: 600;
         }
         
         /* Tree view */
@@ -571,7 +639,8 @@ void QalamExplorerView::applyStyles()
     .arg(Colors::AccentHover)                    // %13
     .arg(Layout::ScrollbarWidth)                 // %14
     .arg(Colors::ScrollbarThumb)                 // %15
-    .arg(Colors::ScrollbarThumbHover);           // %16
+    .arg(Colors::ScrollbarThumbHover)            // %16
+    .arg(Colors::BorderSubtle);                  // %17
     
     setStyleSheet(styles);
 }

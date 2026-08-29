@@ -18,6 +18,9 @@ struct CompletionItem {
     QString label;
     QString completion;
     QString description;
+    QString serverSortText;
+    QString context;
+    QString stableKey;
     CompletionType type{CompletionType::Value};
     bool snippet{};
     int startLine{};

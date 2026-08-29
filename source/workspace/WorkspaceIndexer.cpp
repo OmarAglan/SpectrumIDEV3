@@ -116,14 +116,29 @@ WorkspaceIndexer::~WorkspaceIndexer()
 
 void WorkspaceIndexer::setRootPath(const QString &rootPath)
 {
-    const QString clean = rootPath.isEmpty()
-        ? QString()
-        : normalizedAbsolutePath(rootPath);
-    if (m_rootPath == clean) return;
+    setRootPaths(rootPath.isEmpty() ? QStringList{} : QStringList{rootPath});
+}
+
+void WorkspaceIndexer::setRootPaths(const QStringList &rootPaths)
+{
+    QStringList cleanRoots;
+    QSet<QString> seen;
+    for (const QString &rootPath : rootPaths) {
+        if (rootPath.trimmed().isEmpty()) continue;
+        const QString clean = normalizedAbsolutePath(rootPath);
+        QString key = QDir::fromNativeSeparators(clean);
+#ifdef Q_OS_WIN
+        key = key.toCaseFolded();
+#endif
+        if (seen.contains(key)) continue;
+        seen.insert(key);
+        cleanRoots.push_back(clean);
+    }
+    if (m_rootPaths == cleanRoots) return;
 
     ++m_generation;
     m_threadPool.clear();
-    m_rootPath = clean;
+    m_rootPaths = cleanRoots;
     m_files.clear();
     m_ignoreRules.clear();
     m_indexing = false;
@@ -136,7 +151,12 @@ void WorkspaceIndexer::setRootPath(const QString &rootPath)
 
 QString WorkspaceIndexer::rootPath() const
 {
-    return m_rootPath;
+    return m_rootPaths.value(0);
+}
+
+QStringList WorkspaceIndexer::rootPaths() const
+{
+    return m_rootPaths;
 }
 
 void WorkspaceIndexer::refresh()
@@ -155,22 +175,25 @@ bool WorkspaceIndexer::isIndexing() const
 
 void WorkspaceIndexer::startRefresh()
 {
-    if (m_rootPath.isEmpty() or not QDir(m_rootPath).exists()) {
+    const bool hasExistingRoot = std::any_of(
+        m_rootPaths.cbegin(), m_rootPaths.cend(),
+        [](const QString &root) { return QDir(root).exists(); });
+    if (not hasExistingRoot) {
         ++m_generation;
         m_files.clear();
         m_ignoreRules.clear();
         clearWatchers();
-        if (not m_rootPath.isEmpty()) m_fallbackRefreshTimer.start();
+        if (not m_rootPaths.isEmpty()) m_fallbackRefreshTimer.start();
         emit indexUpdated();
         return;
     }
 
     const int requestId = ++m_generation;
-    const QString rootPath = m_rootPath;
+    const QStringList rootPaths = m_rootPaths;
     m_indexing = true;
-    m_threadPool.start([this, rootPath, requestId]() {
+    m_threadPool.start([this, rootPaths, requestId]() {
         const IndexSnapshot snapshot = buildSnapshot(
-            rootPath, requestId, m_generation);
+            rootPaths, requestId, m_generation);
         if (m_generation.load() != requestId) return;
         QMetaObject::invokeMethod(
             this,
@@ -184,7 +207,7 @@ void WorkspaceIndexer::startRefresh()
 
 void WorkspaceIndexer::scheduleRefresh()
 {
-    if (not m_rootPath.isEmpty()) m_refreshDebounce.start();
+    if (not m_rootPaths.isEmpty()) m_refreshDebounce.start();
 }
 
 void WorkspaceIndexer::applySnapshot(
@@ -208,7 +231,9 @@ void WorkspaceIndexer::configureWatchers(const IndexSnapshot &snapshot)
     m_updatingWatchers = true;
 
     QStringList candidates;
-    if (QDir(m_rootPath).exists()) candidates.push_back(m_rootPath);
+    for (const QString &root : m_rootPaths) {
+        if (QDir(root).exists()) candidates.push_back(root);
+    }
     candidates.append(snapshot.ignoreFiles);
     candidates.append(snapshot.watchDirectories);
     candidates.append(snapshot.watchFiles);
@@ -277,41 +302,46 @@ void WorkspaceIndexer::clearWatchers()
 }
 
 WorkspaceIndexer::IndexSnapshot WorkspaceIndexer::buildSnapshot(
-    const QString &rootPath,
+    const QStringList &rootPaths,
     int requestId,
     const std::atomic_int &generation)
 {
     IndexSnapshot snapshot;
     QStringList candidateFiles;
-    QStringList pendingDirectories{rootPath};
-
-    while (not pendingDirectories.isEmpty()) {
-        if (generation.load() != requestId) return {};
-        const QString directoryPath = pendingDirectories.takeLast();
-        snapshot.watchDirectories.push_back(directoryPath);
-
-        const QFileInfoList entries = QDir(directoryPath).entryInfoList(
-            QDir::Dirs | QDir::Files | QDir::Hidden | QDir::System |
-                QDir::NoDotAndDotDot | QDir::NoSymLinks,
-            QDir::NoSort);
-        for (const QFileInfo &entry : entries) {
+    for (const QString &rootPath : rootPaths) {
+        if (not QDir(rootPath).exists()) continue;
+        QStringList rootIgnoreFiles;
+        QStringList pendingDirectories{rootPath};
+        while (not pendingDirectories.isEmpty()) {
             if (generation.load() != requestId) return {};
-            const QString path = QDir::cleanPath(entry.absoluteFilePath());
-            if (entry.isSymLink()) continue;
-            if (entry.isDir()) {
-                if (not isAlwaysIgnored(rootPath, path))
-                    pendingDirectories.push_back(path);
-                continue;
-            }
-            if (not entry.isFile()) continue;
-            if (entry.fileName() == QStringLiteral(".gitignore"))
-                snapshot.ignoreFiles.push_back(path);
-            if (hasIndexedExtension(path)) candidateFiles.push_back(path);
-        }
-    }
+            const QString directoryPath = pendingDirectories.takeLast();
+            snapshot.watchDirectories.push_back(directoryPath);
 
-    snapshot.ignoreRules = parseIgnoreRules(
-        rootPath, snapshot.ignoreFiles);
+            const QFileInfoList entries = QDir(directoryPath).entryInfoList(
+                QDir::Dirs | QDir::Files | QDir::Hidden | QDir::System |
+                    QDir::NoDotAndDotDot | QDir::NoSymLinks,
+                QDir::NoSort);
+            for (const QFileInfo &entry : entries) {
+                if (generation.load() != requestId) return {};
+                const QString path = QDir::cleanPath(entry.absoluteFilePath());
+                if (entry.isSymLink()) continue;
+                if (entry.isDir()) {
+                    if (not isAlwaysIgnored(rootPath, path))
+                        pendingDirectories.push_back(path);
+                    continue;
+                }
+                if (not entry.isFile()) continue;
+                if (entry.fileName() == QStringLiteral(".gitignore")) {
+                    rootIgnoreFiles.push_back(path);
+                    snapshot.ignoreFiles.push_back(path);
+                }
+                if (hasIndexedExtension(path)) candidateFiles.push_back(path);
+            }
+        }
+        const QVector<IgnoreRule> rootRules = parseIgnoreRules(
+            rootPath, rootIgnoreFiles);
+        snapshot.ignoreRules.append(rootRules);
+    }
     for (const QString &filePath : candidateFiles) {
         if (generation.load() != requestId) return {};
         const QFileInfo info(filePath);
@@ -323,9 +353,13 @@ WorkspaceIndexer::IndexSnapshot WorkspaceIndexer::buildSnapshot(
         snapshot.files.push_back(filePath);
     }
     snapshot.files.sort(Qt::CaseInsensitive);
+    snapshot.files.removeDuplicates();
     snapshot.ignoreFiles.sort(Qt::CaseInsensitive);
+    snapshot.ignoreFiles.removeDuplicates();
     snapshot.watchDirectories.sort(Qt::CaseInsensitive);
+    snapshot.watchDirectories.removeDuplicates();
     snapshot.watchFiles.sort(Qt::CaseInsensitive);
+    snapshot.watchFiles.removeDuplicates();
     return snapshot;
 }
 
@@ -433,7 +467,10 @@ bool WorkspaceIndexer::isIgnoredPath(const QString &filePath) const
 
 bool WorkspaceIndexer::isAlwaysIgnoredPath(const QString &filePath) const
 {
-    return isAlwaysIgnored(m_rootPath, filePath);
+    for (const QString &rootPath : m_rootPaths) {
+        if (not isAlwaysIgnored(rootPath, filePath)) return false;
+    }
+    return true;
 }
 
 bool WorkspaceIndexer::isIgnoredByWorkspaceRules(

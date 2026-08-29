@@ -1,5 +1,5 @@
 param(
-    [string]$Version = '3.5.0',
+    [string]$Version = '3.6.0',
     [string]$InstallerPath = '',
     [int]$StartupSeconds = 2
 )

@@ -1,5 +1,6 @@
 #include "Qalam.h"
 #include "QalamTheme.h"
+#include "SessionSlot.h"
 
 #include <QApplication>
 #include <QMessageBox>
@@ -8,8 +9,6 @@
 #include <QIcon>
 
 #include <QFileDialog>
-#include <QLockFile>
-#include <QDir>
 #include "Constants.h"
 
 int main(int argc, char *argv[])
@@ -21,16 +20,6 @@ int main(int argc, char *argv[])
     app.setWindowIcon(QIcon(":/icons/resources/QalamLogo.png"));
     app.setLayoutDirection(Qt::RightToLeft);
 
-
-    QString lockPath = QDir::tempPath() + "/qalam_ide.lock";
-    QLockFile lockFile(lockPath);
-    lockFile.setStaleLockTime(0);
-
-    if (!lockFile.tryLock(100)) {
-        QMessageBox::warning(nullptr, "قلم",
-                             "البرنامج يعمل بالفعل!\nلا يمكن تشغيل أكثر من نسخة في نفس الوقت.");
-        return 0;
-    }
 
     const int tajawalFontId = QFontDatabase::addApplicationFont(":/fonts/resources/fonts/Tajawal/Tajawal-Regular.ttf");
     const int kawkabMonoFontId = QFontDatabase::addApplicationFont(":/fonts/resources/fonts/KawkabMono-Regular.ttf");
@@ -70,7 +59,16 @@ int main(int argc, char *argv[])
 
     app.setQuitOnLastWindowClosed(true);
 
-    Qalam *editor = new Qalam(filePath);
+    std::unique_ptr<SessionSlot> sessionSlot = SessionSlot::acquire();
+    if (not sessionSlot) {
+        QMessageBox::critical(
+            nullptr, QStringLiteral("قلم"),
+            QStringLiteral("تعذر حجز ملف جلسة مستقل لهذه النافذة."));
+        return 1;
+    }
+
+    Qalam *editor = new Qalam(
+        filePath, nullptr, sessionSlot->settingsFilePath());
     editor->setWindowTitle(QStringLiteral("قلم"));
     editor->show();
 #ifdef Q_OS_WIN

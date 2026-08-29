@@ -10,6 +10,8 @@ struct BaaCompletionItem
     QString filterText;
     QString newText;
     QString sortText;
+    QString context;
+    QString stableKey;
     int kind{};
     int insertTextFormat{1};
     int startLine{};

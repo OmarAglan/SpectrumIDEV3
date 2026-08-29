@@ -47,6 +47,7 @@ public:
         Qt::Orientation splitOrientation{Qt::Horizontal};
         QList<int> splitSizes;
         QString folderPath;
+        QStringList folderPaths;
         QByteArray windowGeometry;
         bool recoveredAfterInterruption{};
     };
@@ -57,6 +58,9 @@ public:
 
     /// Save the current session state (open files, active tab, folder, geometry)
     void saveSession(const QString &folderPath,
+                     const QByteArray &windowGeometry,
+                     bool cleanShutdown = false);
+    void saveSession(const QStringList &folderPaths,
                      const QByteArray &windowGeometry,
                      bool cleanShutdown = false);
 
