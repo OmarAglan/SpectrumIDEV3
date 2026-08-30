@@ -6,10 +6,9 @@
 #include <QMenuBar>
 
 #if defined(Q_OS_WIN)
-#include <dwmapi.h>
 #include <windows.h>
 #include <windowsx.h>
-// Note: Libraries are linked via CMakeLists.txt (dwmapi, user32)
+// Note: user32 is linked via CMakeLists.txt.
 #endif
 
 namespace {
@@ -100,20 +99,6 @@ bool QalamWindow::nativeEvent(const QByteArray &eventType, void *message, qintpt
         eventType == "windows_dispatcher_MSG") {
         MSG *msg = static_cast<MSG *>(message);
         HWND hwnd = msg->hwnd;
-
-        // Microsoft requires custom frames to offer non-client hit testing to
-        // DWM first. This preserves native caption-button hover behavior and
-        // the Windows 11 Snap-layout flyout; Qalam handles only regions that
-        // DWM leaves unresolved.
-        if (msg->message == WM_NCHITTEST
-            or msg->message == WM_NCMOUSELEAVE) {
-            LRESULT dwmResult = 0;
-            if (DwmDefWindowProc(hwnd, msg->message, msg->wParam,
-                                 msg->lParam, &dwmResult)) {
-                *result = static_cast<qintptr>(dwmResult);
-                return true;
-            }
-        }
 
         switch (msg->message) {
             case WM_GETMINMAXINFO: {
