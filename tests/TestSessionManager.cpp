@@ -18,6 +18,7 @@ class TestSessionManager final : public QObject
 private slots:
     void initTestCase();
     void acceptsReachableDesktopGeometry();
+    void acceptsCompactSnapGeometry();
     void acceptsGeometryOnSecondaryMonitor();
     void rejectsTinyGeometry();
     void rejectsOffscreenGeometry();
@@ -43,6 +44,15 @@ void TestSessionManager::acceptsReachableDesktopGeometry()
 {
     QVERIFY(SessionManager::isUsableWindowGeometry(
         QRect(100, 100, 1280, 720), {QRect(0, 0, 1920, 1040)}));
+}
+
+void TestSessionManager::acceptsCompactSnapGeometry()
+{
+    QVERIFY(SessionManager::isUsableWindowGeometry(
+        QRect(0, 0,
+              Constants::Layout::WindowMinWidth,
+              Constants::Layout::WindowMinHeight),
+        {QRect(0, 0, 1366, 728)}));
 }
 
 void TestSessionManager::acceptsGeometryOnSecondaryMonitor()

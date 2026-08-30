@@ -27,6 +27,30 @@ bool isInteractiveTitleBarWidget(QWidget *widget, QWidget *titleBar)
     return false;
 }
 
+bool isMaximizeButtonWidget(QWidget *widget, QWidget *titleBar)
+{
+    for (QWidget *candidate = widget;
+         candidate and candidate != titleBar;
+         candidate = candidate->parentWidget()) {
+        if (candidate->objectName() == QStringLiteral("maximizeButton"))
+            return true;
+    }
+    return false;
+}
+
+#if defined(Q_OS_WIN)
+int nativeResizeBorderWidth(HWND hwnd)
+{
+    UINT dpi = GetDpiForWindow(hwnd);
+    if (dpi == 0) dpi = USER_DEFAULT_SCREEN_DPI;
+    const int frame = GetSystemMetricsForDpi(SM_CXSIZEFRAME, dpi);
+    const int padding = GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi);
+    // Preserve an approachable edge even with themes that report a very
+    // narrow padded frame.
+    return qMax(MulDiv(10, static_cast<int>(dpi), 96), frame + padding);
+}
+#endif
+
 }
 
 QalamWindow::QalamWindow(QWidget *parent) : QMainWindow(parent) {
@@ -48,11 +72,20 @@ QalamWindow::QalamWindow(QWidget *parent) : QMainWindow(parent) {
     connect(this, &QWidget::windowTitleChanged, m_titleBar, &QalamTitleBar::setTitle);
     
     // 2. Window Flags for Custom Frame
-    setWindowFlags(Qt::Window
-                   | Qt::FramelessWindowHint
-                   | Qt::WindowSystemMenuHint
-                   | Qt::WindowMinimizeButtonHint
-                   | Qt::WindowMaximizeButtonHint);
+    Qt::WindowFlags flags = Qt::Window
+        | Qt::WindowTitleHint
+        | Qt::WindowSystemMenuHint
+        | Qt::WindowMinimizeButtonHint
+        | Qt::WindowMaximizeButtonHint
+        | Qt::WindowCloseButtonHint;
+#if not defined(Q_OS_WIN)
+    // Windows retains its real resizable frame and caption behavior below;
+    // WM_NCCALCSIZE turns that frame into client space for Qalam's own title
+    // bar.  Qt::FramelessWindowHint removes WS_THICKFRAME and consequently
+    // disables native resize/Snap behavior on some Windows builds.
+    flags |= Qt::FramelessWindowHint;
+#endif
+    setWindowFlags(flags);
 }
 
 void QalamWindow::setCustomMenuBar(QWidget *menu) {
@@ -63,9 +96,24 @@ void QalamWindow::setCustomMenuBar(QWidget *menu) {
 
 bool QalamWindow::nativeEvent(const QByteArray &eventType, void *message, qintptr *result) {
 #if defined(Q_OS_WIN)
-    if (eventType == "windows_generic_MSG") {
+    if (eventType == "windows_generic_MSG" or
+        eventType == "windows_dispatcher_MSG") {
         MSG *msg = static_cast<MSG *>(message);
         HWND hwnd = msg->hwnd;
+
+        // Microsoft requires custom frames to offer non-client hit testing to
+        // DWM first. This preserves native caption-button hover behavior and
+        // the Windows 11 Snap-layout flyout; Qalam handles only regions that
+        // DWM leaves unresolved.
+        if (msg->message == WM_NCHITTEST
+            or msg->message == WM_NCMOUSELEAVE) {
+            LRESULT dwmResult = 0;
+            if (DwmDefWindowProc(hwnd, msg->message, msg->wParam,
+                                 msg->lParam, &dwmResult)) {
+                *result = static_cast<qintptr>(dwmResult);
+                return true;
+            }
+        }
 
         switch (msg->message) {
             case WM_GETMINMAXINFO: {
@@ -114,15 +162,16 @@ bool QalamWindow::nativeEvent(const QByteArray &eventType, void *message, qintpt
                 POINT pt = {x, y};
                 ScreenToClient(hwnd, &pt);
 
-                const int borderWidth = 8;
+                const int borderWidth = nativeResizeBorderWidth(hwnd);
                 
                 RECT rw;
                 GetClientRect(hwnd, &rw);
                 
-                bool left = pt.x < borderWidth;
-                bool right = pt.x >= rw.right - borderWidth;
-                bool top = pt.y < borderWidth;
-                bool bottom = pt.y >= rw.bottom - borderWidth;
+                const bool resizable = not IsZoomed(hwnd);
+                bool left = resizable and pt.x < borderWidth;
+                bool right = resizable and pt.x >= rw.right - borderWidth;
+                bool top = resizable and pt.y < borderWidth;
+                bool bottom = resizable and pt.y >= rw.bottom - borderWidth;
                 
                 if (top && left) { *result = HTTOPLEFT; return true; }
                 if (top && right) { *result = HTTOPRIGHT; return true; }
@@ -133,13 +182,30 @@ bool QalamWindow::nativeEvent(const QByteArray &eventType, void *message, qintpt
                 if (bottom) { *result = HTBOTTOM; return true; }
                 if (top) { *result = HTTOP; return true; }
                 
-                if (m_titleBar && m_titleBar->geometry().contains(QPoint(pt.x, pt.y))) {
-                    const QPoint titlePoint = m_titleBar->mapFrom(this,
-                                                                  QPoint(pt.x, pt.y));
+                if (m_titleBar
+                    and m_titleBar->geometry().contains(QPoint(pt.x, pt.y))) {
+                    const QPoint titlePoint = m_titleBar->mapFrom(
+                        this, QPoint(pt.x, pt.y));
                     QWidget *child = m_titleBar->childAt(titlePoint);
+                    if (isMaximizeButtonWidget(child, m_titleBar)) {
+                        // Windows 11 uses HTMAXBUTTON for the native Snap
+                        // layout flyout.  WM_NCLBUTTONUP below performs the
+                        // actual maximize/restore action.
+                        *result = HTMAXBUTTON;
+                        return true;
+                    }
                     if (isInteractiveTitleBarWidget(child, m_titleBar))
                         return false;
                     *result = HTCAPTION;
+                    return true;
+                }
+                break;
+            }
+            case WM_NCLBUTTONUP: {
+                if (msg->wParam == HTMAXBUTTON) {
+                    if (IsZoomed(hwnd)) showNormal();
+                    else showMaximized();
+                    *result = 0;
                     return true;
                 }
                 break;

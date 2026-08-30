@@ -10,6 +10,65 @@
 #include <QResizeEvent>
 #include <QMouseEvent>
 #include <QWindow>
+#include <QApplication>
+
+namespace {
+
+// The command centre occupies most of the useful title-bar area on laptop
+// screens.  Keeping it as a normal button made that whole area impossible to
+// drag, while treating it as a native caption made the command palette
+// impossible to open.  Defer the choice until the pointer actually moves:
+// a click remains a click, and a deliberate drag becomes an OS-owned system
+// move (including drag-to-restore and Windows Snap).
+class DraggableCommandCenterButton final : public QPushButton
+{
+public:
+    using QPushButton::QPushButton;
+
+protected:
+    void mousePressEvent(QMouseEvent *event) override
+    {
+        m_moveStarted = false;
+        if (event->button() == Qt::LeftButton)
+            m_pressPosition = event->globalPosition().toPoint();
+        QPushButton::mousePressEvent(event);
+    }
+
+    void mouseMoveEvent(QMouseEvent *event) override
+    {
+        if (not m_moveStarted
+            and event->buttons().testFlag(Qt::LeftButton)
+            and (event->globalPosition().toPoint() - m_pressPosition)
+                    .manhattanLength() >= QApplication::startDragDistance()) {
+            QWidget *topLevel = window();
+            if (topLevel and topLevel->windowHandle()
+                and topLevel->windowHandle()->startSystemMove()) {
+                m_moveStarted = true;
+                setDown(false);
+                event->accept();
+                return;
+            }
+        }
+        QPushButton::mouseMoveEvent(event);
+    }
+
+    void mouseReleaseEvent(QMouseEvent *event) override
+    {
+        if (m_moveStarted and event->button() == Qt::LeftButton) {
+            m_moveStarted = false;
+            setDown(false);
+            event->accept();
+            return;
+        }
+        QPushButton::mouseReleaseEvent(event);
+    }
+
+private:
+    QPoint m_pressPosition;
+    bool m_moveStarted{};
+};
+
+}
 
 QalamTitleBar::QalamTitleBar(QWidget *parent) : QWidget(parent) {
     setLayoutDirection(Qt::LeftToRight);
@@ -33,7 +92,8 @@ void QalamTitleBar::setupUi() {
     m_titleLabel->setAlignment(Qt::AlignCenter);
     m_titleLabel->hide();
 
-    m_commandCenterBtn = new QPushButton("قلم  —  ابحث أو نفّذ أمرًا", this);
+    m_commandCenterBtn = new DraggableCommandCenterButton(
+        "قلم  —  ابحث أو نفّذ أمرًا", this);
     m_commandCenterBtn->setObjectName("commandCenterButton");
     m_commandCenterBtn->setIcon(QIcon(QStringLiteral(":/icons/resources/search.svg")));
     m_commandCenterBtn->setIconSize(QSize(14, 14));
@@ -50,7 +110,7 @@ void QalamTitleBar::setupUi() {
     
     // Window Controls
     m_minimizeBtn = createCaptionButton(":/icons/resources/minimize.svg", "captionButton");
-    m_maximizeBtn = createCaptionButton(":/icons/resources/maximize.svg", "captionButton");
+    m_maximizeBtn = createCaptionButton(":/icons/resources/maximize.svg", "maximizeButton");
     m_closeBtn = createCaptionButton(":/icons/resources/close.svg", "closeButton");
 
     connect(m_minimizeBtn, &QPushButton::clicked, this, &QalamTitleBar::minimizeClicked);
@@ -134,11 +194,9 @@ bool QalamTitleBar::eventFilter(QObject *watched, QEvent *event)
             auto *mouseEvent = static_cast<QMouseEvent*>(event);
             if (mouseEvent->button() == Qt::LeftButton) {
 #if defined(Q_OS_WIN)
-                // QalamWindow returns HTCAPTION for passive title-bar areas,
-                // so Windows owns moving, Snap, drag-to-restore and DPI
-                // transitions.  Calling startSystemMove() as well created two
-                // competing native move loops and made repeated drags appear
-                // intermittently stuck.
+                // QalamWindow exposes passive title-bar areas as HTCAPTION on
+                // Windows.  The OS then owns movement, Snap and
+                // drag-to-restore.  Do not start a second Qt move loop here.
                 return QWidget::eventFilter(watched, event);
 #else
                 QWidget *topLevel = window();

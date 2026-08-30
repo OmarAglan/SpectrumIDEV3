@@ -370,8 +370,8 @@ bool SessionManager::isUsableWindowGeometry(
     const QRect &windowGeometry,
     const QList<QRect> &availableScreens)
 {
-    constexpr int minimumWidth = 640;
-    constexpr int minimumHeight = 480;
+    constexpr int minimumWidth = Constants::Layout::WindowMinWidth;
+    constexpr int minimumHeight = Constants::Layout::WindowMinHeight;
     constexpr int minimumVisibleWidth = 160;
     constexpr int minimumVisibleHeight = 80;
 

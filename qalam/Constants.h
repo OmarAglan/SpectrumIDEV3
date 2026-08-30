@@ -193,6 +193,12 @@ namespace Constants {
     // Layout Dimensions
     // ==========================================================================
     namespace Layout {
+        // Keep the workbench eligible for Windows 11 Snap zones on common
+        // laptop displays. Microsoft recommends a minimum width no larger
+        // than 500 effective pixels for custom desktop windows.
+        constexpr int WindowMinWidth = 480;
+        constexpr int WindowMinHeight = 360;
+
         // Title Bar
         constexpr int TitleBarHeight = 30;
         constexpr int CaptionButtonWidth = 46;

@@ -12,6 +12,7 @@ class TestTitleBar final : public QObject
 
 private slots:
     void adaptsCommandCenterToAvailableWidth();
+    void commandCenterStillOpensOnClick();
     void doubleClickRequestsMaximizeRestore();
 };
 
@@ -42,6 +43,23 @@ void TestTitleBar::adaptsCommandCenterToAvailableWidth()
                             .arg(titleBar.width())
                             .arg(commandCenter->geometry().width())));
     QVERIFY(menuBar->width() < 500);
+}
+
+void TestTitleBar::commandCenterStillOpensOnClick()
+{
+    QalamTitleBar titleBar;
+    titleBar.resize(1400, titleBar.height());
+    titleBar.show();
+    QApplication::processEvents();
+
+    auto *commandCenter = titleBar.findChild<QPushButton*>(
+        QStringLiteral("commandCenterButton"));
+    QVERIFY(commandCenter);
+    QVERIFY(commandCenter->isVisible());
+    QSignalSpy requested(&titleBar, &QalamTitleBar::commandCenterClicked);
+
+    QTest::mouseClick(commandCenter, Qt::LeftButton);
+    QCOMPARE(requested.count(), 1);
 }
 
 void TestTitleBar::doubleClickRequestsMaximizeRestore()

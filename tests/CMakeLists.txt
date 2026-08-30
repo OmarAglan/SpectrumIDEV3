@@ -23,13 +23,17 @@ function(add_qalam_test test_name source_file)
         string(REPLACE ";" "\\;" qalam_host_path "$ENV{Path}")
         set(qalam_test_path
             "$<TARGET_FILE_DIR:Qt6::Core>\\;${qalam_compiler_runtime_dir}\\;${qalam_host_path}")
+        set(qalam_test_platform "offscreen")
+        if(ARGC GREATER 2)
+            set(qalam_test_platform "${ARGV2}")
+        endif()
         add_test(
             NAME ${test_name}
             COMMAND ${CMAKE_COMMAND} -E env
                 --unset=Path
                 --unset=PATH
                 "Path=${qalam_test_path}"
-                "QT_QPA_PLATFORM=offscreen"
+                "QT_QPA_PLATFORM=${qalam_test_platform}"
                 $<TARGET_FILE:${test_name}>
         )
     else()
@@ -57,6 +61,13 @@ add_qalam_test(test_explorer_workspace_roots TestExplorerWorkspaceRoots.cpp)
 target_sources(test_explorer_workspace_roots PRIVATE ../qalam/resources.qrc)
 add_qalam_test(test_title_bar TestTitleBar.cpp)
 target_sources(test_title_bar PRIVATE ../qalam/resources.qrc)
+if(WIN32)
+    # This test deliberately uses the real Windows QPA plugin. The offscreen
+    # backend cannot expose HWND styles or non-client hit-test behavior, which
+    # is exactly where frameless resize, maximize and Snap regressions occur.
+    add_qalam_test(test_windows_frame TestWindowsFrame.cpp windows)
+    target_sources(test_windows_frame PRIVATE ../qalam/resources.qrc)
+endif()
 add_qalam_test(test_workspace_file_service TestWorkspaceFileService.cpp)
 add_qalam_test(test_project_search_service TestProjectSearchService.cpp)
 add_qalam_test(test_command_registry TestCommandRegistry.cpp)

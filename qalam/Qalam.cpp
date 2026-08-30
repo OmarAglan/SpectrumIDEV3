@@ -142,7 +142,8 @@ Qalam::Qalam(const QString& filePath, QWidget *parent,
                               screenGeo.size().height());
     const int x = screenGeo.left() + qMax(0, (screenGeo.width() - width) / 2);
     const int y = screenGeo.top() + qMax(0, (screenGeo.height() - height) / 2);
-    this->setMinimumSize(640, 480);
+    this->setMinimumSize(Constants::Layout::WindowMinWidth,
+                         Constants::Layout::WindowMinHeight);
     this->setGeometry(x, y, width, height);
     const QRect defaultWindowGeometry = this->geometry();
     this->setCustomMenuBar(menuBar);
