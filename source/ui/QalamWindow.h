@@ -3,6 +3,8 @@
 #include <QMainWindow>
 #include "QalamTitleBar.h"
 
+class QShowEvent;
+
 class QalamWindow : public QMainWindow {
     Q_OBJECT
 public:
@@ -13,6 +15,8 @@ signals:
     void commandCenterClicked();
 
 protected:
+    void showEvent(QShowEvent *event) override;
+
     // Native event handling for Windows
     bool nativeEvent(const QByteArray &eventType, void *message, qintptr *result) override;
     

@@ -43,8 +43,8 @@ void TestWindowsFrame::exposesNativeMoveResizeAndSnapContracts()
     const LONG_PTR style = GetWindowLongPtrW(hwnd, GWL_STYLE);
     QVERIFY2(style & WS_THICKFRAME,
              "Qalam must retain the native resizable frame on Windows");
-    QVERIFY2(style & WS_CAPTION,
-             "Qalam must retain the native caption contract on Windows");
+    QVERIFY2(not (style & WS_CAPTION),
+             "DWM must not draw a second caption over Qalam's title bar");
     QVERIFY2(style & WS_MAXIMIZEBOX,
              "Qalam must retain the native maximize/Snap contract");
     QVERIFY(style & WS_MINIMIZEBOX);
@@ -106,6 +106,7 @@ void TestWindowsFrame::nativeMaximizeButtonTogglesWindowState()
 
     SendMessageW(hwnd, WM_NCLBUTTONUP, HTMAXBUTTON, 0);
     QTRY_VERIFY(not window.isMaximized());
+    QVERIFY(not (GetWindowLongPtrW(hwnd, GWL_STYLE) & WS_CAPTION));
 }
 
 QTEST_MAIN(TestWindowsFrame)

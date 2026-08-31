@@ -4,6 +4,7 @@
 #include <QAbstractButton>
 #include <QWindow>
 #include <QMenuBar>
+#include <QShowEvent>
 
 #if defined(Q_OS_WIN)
 #include <windows.h>
@@ -91,6 +92,29 @@ void QalamWindow::setCustomMenuBar(QWidget *menu) {
     if (m_titleBar) {
         m_titleBar->addMenuBar(menu);
     }
+}
+
+void QalamWindow::showEvent(QShowEvent *event)
+{
+    QMainWindow::showEvent(event);
+#if defined(Q_OS_WIN)
+    const HWND hwnd = reinterpret_cast<HWND>(winId());
+    if (not hwnd) return;
+
+    // Keep the native contracts used by resize and Snap, but remove the
+    // standard caption itself. Leaving WS_CAPTION enabled makes DWM paint a
+    // second restore/maximize glyph beside Qalam's custom caption buttons.
+    const LONG_PTR currentStyle = GetWindowLongPtrW(hwnd, GWL_STYLE);
+    LONG_PTR desiredStyle = currentStyle
+        | WS_THICKFRAME | WS_MAXIMIZEBOX | WS_MINIMIZEBOX | WS_SYSMENU;
+    desiredStyle &= ~static_cast<LONG_PTR>(WS_CAPTION);
+    if (desiredStyle != currentStyle) {
+        SetWindowLongPtrW(hwnd, GWL_STYLE, desiredStyle);
+        SetWindowPos(hwnd, nullptr, 0, 0, 0, 0,
+                     SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE
+                         | SWP_NOZORDER | SWP_NOACTIVATE);
+    }
+#endif
 }
 
 bool QalamWindow::nativeEvent(const QByteArray &eventType, void *message, qintptr *result) {
